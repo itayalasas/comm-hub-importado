@@ -708,10 +708,50 @@ Content-Type: application/json`}
         </div>
       </div>
 
-      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Flujo Completo: Email con PDF Generado</h3>
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 mb-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Opción 1: Envío Automático con PDF (Recomendado)</h3>
         <p className="text-slate-300 text-sm mb-4">
-          Este flujo muestra cómo enviar un email que espera un PDF generado dinámicamente.
+          Cuando asocias un template de PDF con un template de email, el sistema automáticamente genera y adjunta el PDF. Solo necesitas una llamada:
+        </p>
+        <div className="bg-green-500/10 border border-green-500/30 rounded p-4 mb-4">
+          <p className="text-green-400 text-sm">
+            ✓ El sistema detecta el template de PDF asociado<br/>
+            ✓ Genera el PDF con los datos proporcionados<br/>
+            ✓ Lo adjunta automáticamente al email<br/>
+            ✓ Envía el email completo en una sola operación
+          </p>
+        </div>
+        <div className="border-l-4 border-green-500 pl-4">
+          <h4 className="font-semibold text-white mb-2">Enviar email con PDF automático</h4>
+          <p className="text-slate-300 text-sm mb-3">Una sola llamada hace todo el trabajo</p>
+          <div className="relative">
+            <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
+{`curl -X POST ${supabaseUrl}/functions/v1/send-email \\
+  -H "x-api-key: tu_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "template_name": "invoice_email",
+    "recipient_email": "cliente@example.com",
+    "data": {
+      "client_name": "Juan Pérez",
+      "invoice_number": "FAC-2025-001",
+      "invoice_date": "2025-10-21",
+      "items": "Consulta veterinaria",
+      "total": "$150.00"
+    }
+  }'`}
+            </pre>
+          </div>
+          <p className="text-xs text-slate-400 mt-2">
+            El sistema generará automáticamente el PDF "factura_FAC-2025-001.pdf" y lo adjuntará al email.
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Opción 2: Flujo con Comunicaciones Pendientes</h3>
+        <p className="text-slate-300 text-sm mb-4">
+          Para casos donde necesitas esperar datos de múltiples sistemas antes de enviar:
         </p>
         <div className="space-y-4">
           {[
