@@ -177,6 +177,8 @@ export const Templates = () => {
     if (!selectedApp || !formData.name || !formData.html_content) return;
 
     try {
+      console.log('Saving template with template_type:', formData.template_type);
+      console.log('Full formData:', formData);
       const variables = extractVariables(formData.html_content);
 
       if (editingTemplate) {
