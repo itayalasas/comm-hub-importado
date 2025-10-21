@@ -201,7 +201,10 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
                 </label>
                 <select
                   value={formData.template_type || 'email'}
-                  onChange={(e) => setFormData({ ...formData, template_type: e.target.value })}
+                  onChange={(e) => {
+                    console.log('Template type changed to:', e.target.value);
+                    setFormData({ ...formData, template_type: e.target.value });
+                  }}
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
                 >
                   <option value="email">Email</option>
