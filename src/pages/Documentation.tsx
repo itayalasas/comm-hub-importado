@@ -1,445 +1,714 @@
 import { useState } from 'react';
-import { Book, Code, Zap, Mail, Clock, CheckCircle, Copy, Check } from 'lucide-react';
+import { Book, Code, Copy, Check, ChevronDown, ChevronRight, Info, AlertCircle } from 'lucide-react';
 import { Layout } from '../components/Layout';
 
+interface EndpointSection {
+  id: string;
+  title: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  path: string;
+  description: string;
+  authentication: string;
+  headers?: { name: string; type: string; required: boolean; description: string }[];
+  parameters?: { name: string; type: string; required: boolean; description: string }[];
+  requestBody?: {
+    contentType: string;
+    schema: any;
+    example: any;
+  };
+  responses: {
+    code: string;
+    description: string;
+    example: any;
+  }[];
+}
+
 export default function Documentation() {
-  const [copiedEndpoint, setCopiedEndpoint] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState('introduction');
+  const [expandedEndpoints, setExpandedEndpoints] = useState<string[]>(['send-email']);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
-    setCopiedEndpoint(id);
-    setTimeout(() => setCopiedEndpoint(null), 2000);
+    setCopiedCode(id);
+    setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const endpoints = [
+  const toggleEndpoint = (id: string) => {
+    setExpandedEndpoints(prev =>
+      prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
+    );
+  };
+
+  const sections = [
+    { id: 'introduction', title: 'Introducción', icon: Book },
+    { id: 'authentication', title: 'Autenticación', icon: Code },
+    { id: 'endpoints', title: 'Endpoints', icon: Code },
+    { id: 'templates', title: 'Variables de Template', icon: Code },
+    { id: 'examples', title: 'Ejemplos de Integración', icon: Code },
+  ];
+
+  const endpoints: EndpointSection[] = [
     {
       id: 'send-email',
-      title: 'Enviar Email Directo',
-      icon: Mail,
+      title: 'Enviar Email',
       method: 'POST',
-      endpoint: `${supabaseUrl}/functions/v1/send-email`,
-      description: 'Envía un email inmediatamente usando un template.',
+      path: '/functions/v1/send-email',
+      description: 'Envía un email inmediatamente usando un template configurado.',
+      authentication: 'API Key (x-api-key header)',
       headers: [
-        { key: 'x-api-key', value: 'tu_api_key', required: true },
-        { key: 'Content-Type', value: 'application/json', required: true },
+        { name: 'x-api-key', type: 'string', required: true, description: 'Tu API key de la aplicación' },
+        { name: 'Content-Type', type: 'string', required: true, description: 'application/json' },
       ],
-      body: {
-        template_name: 'welcome',
-        recipient_email: 'cliente@example.com',
-        data: {
-          client_name: 'Juan Pérez',
-          appointment_date: '2025-10-25',
-          cta_url: 'https://dogcatify.com/confirmar',
+      requestBody: {
+        contentType: 'application/json',
+        schema: {
+          template_name: 'string (required)',
+          recipient_email: 'string (required)',
+          data: 'object (required)',
+        },
+        example: {
+          template_name: 'welcome',
+          recipient_email: 'cliente@example.com',
+          data: {
+            client_name: 'Juan Pérez',
+            appointment_date: '2025-10-25',
+            cta_url: 'https://dogcatify.com/confirmar',
+          },
         },
       },
-      response: {
-        success: true,
-        message: 'Email sent successfully',
-        log_id: 'uuid-123',
-        features: {
-          has_attachment: false,
-          has_logo: true,
-          has_qr: false,
+      responses: [
+        {
+          code: '200',
+          description: 'Email enviado exitosamente',
+          example: {
+            success: true,
+            message: 'Email sent successfully',
+            log_id: 'uuid-123',
+            features: {
+              has_attachment: false,
+              has_logo: true,
+              has_qr: false,
+            },
+            processing_time_ms: 1234,
+          },
         },
-        processing_time_ms: 1234,
-      },
-      useCases: [
-        'Confirmaciones de citas',
-        'Emails de bienvenida',
-        'Notificaciones urgentes',
-        'Recordatorios simples',
+        {
+          code: '401',
+          description: 'API key inválida',
+          example: {
+            success: false,
+            error: 'Invalid API key',
+          },
+        },
+        {
+          code: '404',
+          description: 'Template no encontrado',
+          example: {
+            success: false,
+            error: 'Template not found or inactive',
+          },
+        },
       ],
     },
     {
       id: 'pending-create',
       title: 'Crear Comunicación Pendiente',
-      icon: Clock,
       method: 'POST',
-      endpoint: `${supabaseUrl}/functions/v1/pending-communication/create`,
-      description: 'Crea una comunicación que espera datos externos (ej: PDF de facturación).',
+      path: '/functions/v1/pending-communication/create',
+      description: 'Crea una comunicación que espera datos externos antes de ser enviada.',
+      authentication: 'API Key (x-api-key header)',
       headers: [
-        { key: 'x-api-key', value: 'tu_api_key', required: true },
-        { key: 'Content-Type', value: 'application/json', required: true },
+        { name: 'x-api-key', type: 'string', required: true, description: 'Tu API key de la aplicación' },
+        { name: 'Content-Type', type: 'string', required: true, description: 'application/json' },
       ],
-      body: {
-        template_name: 'invoice_confirmation',
-        recipient_email: 'cliente@example.com',
-        base_data: {
-          client_name: 'Juan Pérez',
-          appointment_date: '2025-10-25',
-          service: 'Consulta veterinaria',
+      requestBody: {
+        contentType: 'application/json',
+        schema: {
+          template_name: 'string (required)',
+          recipient_email: 'string (required)',
+          base_data: 'object (optional)',
+          pending_fields: 'array (optional)',
+          external_reference_id: 'string (required)',
+          external_system: 'string (required)',
+          webhook_url: 'string (optional)',
+          expires_at: 'string ISO 8601 (optional)',
         },
-        pending_fields: ['invoice_pdf', 'invoice_number'],
-        external_reference_id: 'INVOICE-12345',
-        external_system: 'billing_system',
-        webhook_url: 'https://tu-crm.com/webhooks/email-sent',
-        expires_at: '2025-10-25T23:59:59Z',
-      },
-      response: {
-        success: true,
-        message: 'Pending communication created',
-        data: {
-          id: 'uuid-123',
+        example: {
+          template_name: 'invoice_confirmation',
+          recipient_email: 'cliente@example.com',
+          base_data: {
+            client_name: 'Juan Pérez',
+            appointment_date: '2025-10-25',
+            service: 'Consulta veterinaria',
+          },
+          pending_fields: ['invoice_pdf', 'invoice_number'],
           external_reference_id: 'INVOICE-12345',
-          status: 'waiting_data',
-          complete_url: `${supabaseUrl}/functions/v1/pending-communication/complete`,
+          external_system: 'billing_system',
+          webhook_url: 'https://tu-crm.com/webhooks/email-sent',
+          expires_at: '2025-10-25T23:59:59Z',
         },
       },
-      useCases: [
-        'Facturas con PDF adjunto',
-        'Reportes que requieren procesamiento',
-        'Certificados personalizados',
-        'Documentos legales',
+      responses: [
+        {
+          code: '201',
+          description: 'Comunicación pendiente creada',
+          example: {
+            success: true,
+            message: 'Pending communication created',
+            data: {
+              id: 'uuid-123',
+              external_reference_id: 'INVOICE-12345',
+              status: 'waiting_data',
+              complete_url: `${supabaseUrl}/functions/v1/pending-communication/complete`,
+            },
+          },
+        },
       ],
     },
     {
       id: 'pending-complete',
       title: 'Completar Comunicación Pendiente',
-      icon: CheckCircle,
       method: 'POST',
-      endpoint: `${supabaseUrl}/functions/v1/pending-communication/complete`,
+      path: '/functions/v1/pending-communication/complete',
       description: 'Completa una comunicación pendiente con los datos faltantes y envía el email automáticamente.',
-      headers: [
-        { key: 'Content-Type', value: 'application/json', required: true },
-      ],
-      body: {
-        external_reference_id: 'INVOICE-12345',
-        data: {
-          invoice_pdf: 'JVBERi0xLjQKJeLjz9MKMyAwIG9iago8PC...',
-          invoice_number: 'FAC-2025-001',
-          total_amount: '$150.00',
+      authentication: 'No requiere (usa external_reference_id)',
+      requestBody: {
+        contentType: 'application/json',
+        schema: {
+          external_reference_id: 'string (required)',
+          data: 'object (required)',
+        },
+        example: {
+          external_reference_id: 'INVOICE-12345',
+          data: {
+            invoice_pdf: 'JVBERi0xLjQKJeLjz9MKMyAwIG9iago8PC...',
+            invoice_number: 'FAC-2025-001',
+            total_amount: '$150.00',
+          },
         },
       },
-      response: {
-        success: true,
-        message: 'Communication completed and sent',
-        log_id: 'uuid-456',
-      },
-      useCases: [
-        'Sistema de facturación envía PDF generado',
-        'CRM completa información del cliente',
-        'Sistema de reportes agrega gráficos',
-        'Procesador de pagos agrega recibo',
+      responses: [
+        {
+          code: '200',
+          description: 'Comunicación completada y enviada',
+          example: {
+            success: true,
+            message: 'Communication completed and sent',
+            log_id: 'uuid-456',
+          },
+        },
+        {
+          code: '404',
+          description: 'Comunicación no encontrada',
+          example: {
+            success: false,
+            error: 'Pending communication not found or already processed',
+          },
+        },
       ],
     },
     {
       id: 'pending-status',
-      title: 'Consultar Estado de Comunicación',
-      icon: Zap,
+      title: 'Consultar Estado',
       method: 'GET',
-      endpoint: `${supabaseUrl}/functions/v1/pending-communication/status?external_reference_id=INVOICE-12345`,
-      description: 'Consulta el estado actual de una comunicación pendiente.',
-      headers: [],
-      response: {
-        success: true,
-        data: {
-          id: 'uuid-123',
-          status: 'sent',
-          created_at: '2025-10-21T10:00:00Z',
-          completed_at: '2025-10-21T10:05:00Z',
-          sent_at: '2025-10-21T10:05:02Z',
-          pending_fields: ['invoice_pdf', 'invoice_number'],
+      path: '/functions/v1/pending-communication/status',
+      description: 'Consulta el estado de una comunicación pendiente.',
+      authentication: 'No requiere',
+      parameters: [
+        { name: 'external_reference_id', type: 'string', required: true, description: 'ID de referencia externo' },
+      ],
+      responses: [
+        {
+          code: '200',
+          description: 'Estado de la comunicación',
+          example: {
+            success: true,
+            data: {
+              id: 'uuid-123',
+              status: 'sent',
+              created_at: '2025-10-21T10:00:00Z',
+              completed_at: '2025-10-21T10:05:00Z',
+              sent_at: '2025-10-21T10:05:02Z',
+              pending_fields: ['invoice_pdf', 'invoice_number'],
+            },
+          },
         },
-      },
-      useCases: [
-        'Monitorear progreso de envío',
-        'Debugging de problemas',
-        'Dashboard de estado',
-        'Auditoría de comunicaciones',
       ],
     },
   ];
 
-  const flowExample = {
-    title: 'Flujo Completo: Email con Factura',
-    steps: [
-      {
-        step: 1,
-        title: 'Usuario completa cita en tu app',
-        code: null,
-        description: 'El cliente termina su cita veterinaria.',
-      },
-      {
-        step: 2,
-        title: 'Tu app crea comunicación pendiente',
-        code: `POST ${supabaseUrl}/functions/v1/pending-communication/create
-{
-  "template_name": "invoice_email",
-  "recipient_email": "cliente@example.com",
-  "base_data": {
-    "client_name": "Juan Pérez",
-    "pet_name": "Max",
-    "service": "Consulta veterinaria"
-  },
-  "pending_fields": ["invoice_pdf"],
-  "external_reference_id": "VET-INVOICE-001",
-  "external_system": "billing"
-}`,
-        description: 'Creas el registro inmediatamente, sin esperar el PDF.',
-      },
-      {
-        step: 3,
-        title: 'Sistema de facturación genera PDF',
-        code: null,
-        description: 'Tu sistema de facturación procesa y genera el PDF (puede tomar minutos).',
-      },
-      {
-        step: 4,
-        title: 'Sistema de facturación completa comunicación',
-        code: `POST ${supabaseUrl}/functions/v1/pending-communication/complete
-{
-  "external_reference_id": "VET-INVOICE-001",
-  "data": {
-    "invoice_pdf": "JVBERi0xLjQKJeLjz9...",
-    "invoice_number": "FAC-2025-001",
-    "total": "$150.00"
-  }
-}`,
-        description: 'El sistema envía el PDF y el email se envía automáticamente.',
-      },
-      {
-        step: 5,
-        title: 'Cliente recibe email con factura',
-        code: null,
-        description: 'El email llega con todos los datos + PDF adjunto.',
-      },
-      {
-        step: 6,
-        title: 'Webhook notifica a tu sistema',
-        code: `POST https://tu-crm.com/webhooks/email-sent
-{
-  "event": "communication_sent",
-  "external_reference_id": "VET-INVOICE-001",
-  "log_id": "uuid-789",
-  "sent_at": "2025-10-21T10:05:02Z"
-}`,
-        description: 'Tu sistema recibe confirmación de envío exitoso.',
-      },
-    ],
+  const renderMethodBadge = (method: string) => {
+    const colors = {
+      GET: 'bg-blue-500',
+      POST: 'bg-green-500',
+      PUT: 'bg-amber-500',
+      DELETE: 'bg-red-500',
+    };
+    return (
+      <span className={`${colors[method as keyof typeof colors]} text-white px-2 py-1 rounded text-xs font-bold`}>
+        {method}
+      </span>
+    );
   };
 
-  const templateVariables = [
-    {
-      type: 'Texto Simple',
-      example: '{{client_name}}',
-      description: 'Reemplazado por el valor en data.client_name',
-      usage: '<h1>Hola {{client_name}}</h1>',
-    },
-    {
-      type: 'Logo (Base64 o URL)',
-      example: '{{company_logo}}',
-      description: 'Convertido automáticamente a imagen',
-      usage: 'Se configura en el template como has_logo=true',
-    },
-    {
-      type: 'Código QR',
-      example: '{{appointment_code_qr}}',
-      description: 'Genera QR automáticamente del valor',
-      usage: 'Se configura en el template como has_qr=true',
-    },
-    {
-      type: 'PDF Adjunto',
-      example: 'invoice_pdf en pending_fields',
-      description: 'PDF en base64 que se adjunta al email',
-      usage: 'Enviado via pending communication',
-    },
-  ];
+  const renderIntroduction = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-4">Documentación de API</h2>
+        <p className="text-slate-300 mb-4">
+          Bienvenido a la documentación de la API de CommHub. Esta guía te ayudará a integrar nuestro
+          servicio de comunicaciones en tu sistema.
+        </p>
+      </div>
 
-  return (
-    <Layout currentPage="documentation">
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Documentación de API</h1>
-          <p className="text-slate-300">
-            Guía completa para integrar tu sistema con nuestro servicio de comunicaciones.
-          </p>
-        </div>
-
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <div className="flex items-start gap-3">
-          <Book className="w-6 h-6 text-blue-600 mt-1 flex-shrink-0" />
-          <div>
-            <h3 className="font-semibold text-blue-900 mb-2">Antes de comenzar</h3>
-            <p className="text-blue-800 mb-3">
-              Necesitas tu API Key. La encuentras en la sección de Settings.
-            </p>
-            <div className="bg-white border border-blue-200 rounded p-3 font-mono text-sm">
-              x-api-key: ak_production_xxxxxxxxxxxxx
-            </div>
-          </div>
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-3">Base URL</h3>
+        <div className="bg-slate-900 border border-slate-700 rounded p-3 font-mono text-sm text-cyan-400 flex items-center justify-between">
+          <span>{supabaseUrl}</span>
+          <button
+            onClick={() => copyToClipboard(supabaseUrl, 'base-url')}
+            className="p-1 text-slate-400 hover:text-white transition-colors"
+          >
+            {copiedCode === 'base-url' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          </button>
         </div>
       </div>
 
-      <div className="bg-slate-800/50 rounded-lg border border-slate-700">
-        <div className="border-b border-slate-700 p-4">
-          <h2 className="text-xl font-semibold text-white">Endpoints Disponibles</h2>
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-6">
+        <div className="flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="text-blue-400 font-semibold mb-2">Características principales</h3>
+            <ul className="text-slate-300 space-y-2 text-sm">
+              <li>• Envío de emails con templates personalizados</li>
+              <li>• Soporte para comunicaciones pendientes con datos externos</li>
+              <li>• Adjuntar PDFs en base64</li>
+              <li>• Logos y códigos QR automáticos</li>
+              <li>• Webhooks para notificaciones</li>
+              <li>• Tracking de emails enviados</li>
+            </ul>
+          </div>
         </div>
+      </div>
+    </div>
+  );
 
-        <div className="divide-y divide-slate-700">
-          {endpoints.map((endpoint) => {
-            const Icon = endpoint.icon;
-            return (
-              <div key={endpoint.id} className="p-6">
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <Icon className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-white mb-1">
-                      {endpoint.title}
-                    </h3>
-                    <p className="text-slate-300 mb-3">{endpoint.description}</p>
+  const renderAuthentication = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-4">Autenticación</h2>
+        <p className="text-slate-300 mb-4">
+          La API utiliza API Keys para autenticar las solicitudes. Debes incluir tu API key en el header
+          de cada solicitud.
+        </p>
+      </div>
 
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded">
-                        {endpoint.method}
-                      </span>
-                      <code className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded text-sm text-slate-200 overflow-x-auto">
-                        {endpoint.endpoint}
-                      </code>
-                      <button
-                        onClick={() => copyToClipboard(endpoint.endpoint, endpoint.id)}
-                        className="p-2 text-slate-400 hover:text-slate-300 hover:bg-slate-700 rounded transition-colors"
-                        title="Copiar endpoint"
-                      >
-                        {copiedEndpoint === endpoint.id ? (
-                          <Check className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </button>
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-3">Obtener tu API Key</h3>
+        <p className="text-slate-300 mb-4">
+          Puedes encontrar tu API key en la sección de <strong>Configuración</strong> de tu aplicación.
+        </p>
+      </div>
+
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-3">Uso</h3>
+        <p className="text-slate-300 mb-4">Incluye tu API key en el header de la solicitud:</p>
+        <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
+{`x-api-key: ak_production_xxxxxxxxxxxxx
+Content-Type: application/json`}
+        </pre>
+      </div>
+
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-6">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="text-amber-400 font-semibold mb-2">Seguridad</h3>
+            <p className="text-slate-300 text-sm">
+              Nunca expongas tu API key en código del lado del cliente. Todas las llamadas a la API deben
+              hacerse desde tu backend o servidor.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderEndpoints = () => (
+    <div className="space-y-4">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-white mb-2">Endpoints</h2>
+        <p className="text-slate-300">
+          Lista completa de endpoints disponibles en la API.
+        </p>
+      </div>
+
+      {endpoints.map((endpoint) => (
+        <div key={endpoint.id} className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+          <button
+            onClick={() => toggleEndpoint(endpoint.id)}
+            className="w-full p-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              {expandedEndpoints.includes(endpoint.id) ? (
+                <ChevronDown className="w-5 h-5 text-slate-400" />
+              ) : (
+                <ChevronRight className="w-5 h-5 text-slate-400" />
+              )}
+              {renderMethodBadge(endpoint.method)}
+              <span className="text-white font-semibold">{endpoint.title}</span>
+            </div>
+            <code className="text-sm text-slate-400 font-mono">{endpoint.path}</code>
+          </button>
+
+          {expandedEndpoints.includes(endpoint.id) && (
+            <div className="border-t border-slate-700 p-6 space-y-6">
+              <div>
+                <p className="text-slate-300">{endpoint.description}</p>
+              </div>
+
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-slate-400">Autenticación:</span>
+                <code className="bg-slate-900 px-2 py-1 rounded text-cyan-400">{endpoint.authentication}</code>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-white uppercase tracking-wider">Request</h4>
+
+                  {endpoint.headers && (
+                    <div>
+                      <h5 className="text-sm font-medium text-slate-300 mb-2">Headers</h5>
+                      <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-800">
+                            <tr>
+                              <th className="text-left p-2 text-slate-300 font-medium">Nombre</th>
+                              <th className="text-left p-2 text-slate-300 font-medium">Tipo</th>
+                              <th className="text-left p-2 text-slate-300 font-medium">Requerido</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-700">
+                            {endpoint.headers.map((header, idx) => (
+                              <tr key={idx}>
+                                <td className="p-2 text-cyan-400 font-mono">{header.name}</td>
+                                <td className="p-2 text-slate-400">{header.type}</td>
+                                <td className="p-2">
+                                  {header.required ? (
+                                    <span className="text-red-400 text-xs">✓ Requerido</span>
+                                  ) : (
+                                    <span className="text-slate-500 text-xs">Opcional</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
+                  )}
 
-                    {endpoint.headers.length > 0 && (
-                      <div className="mb-4">
-                        <h4 className="text-sm font-semibold text-slate-200 mb-2">Headers</h4>
-                        <div className="space-y-1">
-                          {endpoint.headers.map((header, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-center gap-2 text-sm font-mono text-slate-300"
-                            >
-                              <span className="font-semibold">{header.key}:</span>
-                              <span>{header.value}</span>
-                              {header.required && (
-                                <span className="text-xs text-red-600">(requerido)</span>
-                              )}
+                  {endpoint.parameters && (
+                    <div>
+                      <h5 className="text-sm font-medium text-slate-300 mb-2">Parámetros</h5>
+                      <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-800">
+                            <tr>
+                              <th className="text-left p-2 text-slate-300 font-medium">Nombre</th>
+                              <th className="text-left p-2 text-slate-300 font-medium">Tipo</th>
+                              <th className="text-left p-2 text-slate-300 font-medium">Requerido</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-700">
+                            {endpoint.parameters.map((param, idx) => (
+                              <tr key={idx}>
+                                <td className="p-2 text-cyan-400 font-mono">{param.name}</td>
+                                <td className="p-2 text-slate-400">{param.type}</td>
+                                <td className="p-2">
+                                  {param.required ? (
+                                    <span className="text-red-400 text-xs">✓ Requerido</span>
+                                  ) : (
+                                    <span className="text-slate-500 text-xs">Opcional</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {endpoint.requestBody && (
+                    <div>
+                      <h5 className="text-sm font-medium text-slate-300 mb-2">Body</h5>
+                      <div className="space-y-2">
+                        <div className="bg-slate-900 border border-slate-700 rounded-lg p-3">
+                          <p className="text-xs text-slate-400 mb-2">Schema:</p>
+                          {Object.entries(endpoint.requestBody.schema).map(([key, value]) => (
+                            <div key={key} className="text-sm font-mono text-slate-300 mb-1">
+                              <span className="text-cyan-400">{key}</span>:{' '}
+                              <span className="text-amber-400">{String(value)}</span>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
-
-                    {endpoint.body && (
-                      <div className="mb-4">
-                        <h4 className="text-sm font-semibold text-slate-200 mb-2">Body</h4>
-                        <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
-                          {JSON.stringify(endpoint.body, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-
-                    <div className="mb-4">
-                      <h4 className="text-sm font-semibold text-slate-200 mb-2">Respuesta</h4>
-                      <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
-                        {JSON.stringify(endpoint.response, null, 2)}
-                      </pre>
-                    </div>
-
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-200 mb-2">Casos de uso</h4>
-                      <ul className="grid grid-cols-2 gap-2">
-                        {endpoint.useCases.map((useCase, idx) => (
-                          <li
-                            key={idx}
-                            className="flex items-center gap-2 text-sm text-slate-300"
+                        <div className="relative">
+                          <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
+                            {JSON.stringify(endpoint.requestBody.example, null, 2)}
+                          </pre>
+                          <button
+                            onClick={() =>
+                              copyToClipboard(
+                                JSON.stringify(endpoint.requestBody.example, null, 2),
+                                `${endpoint.id}-request`
+                              )
+                            }
+                            className="absolute top-2 right-2 p-2 bg-slate-800 hover:bg-slate-700 rounded transition-colors"
                           >
-                            <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
-                            {useCase}
-                          </li>
-                        ))}
-                      </ul>
+                            {copiedCode === `${endpoint.id}-request` ? (
+                              <Check className="w-4 h-4 text-green-400" />
+                            ) : (
+                              <Copy className="w-4 h-4 text-slate-400" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="bg-slate-800/50 rounded-lg border border-slate-700">
-        <div className="border-b border-slate-700 p-4">
-          <h2 className="text-xl font-semibold text-white">
-            {flowExample.title}
-          </h2>
-        </div>
-        <div className="p-6">
-          <div className="space-y-6">
-            {flowExample.steps.map((step) => (
-              <div key={step.step} className="flex gap-4">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-semibold">
-                    {step.step}
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-white mb-1">{step.title}</h4>
-                  <p className="text-slate-300 mb-2">{step.description}</p>
-                  {step.code && (
-                    <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
-                      {step.code}
-                    </pre>
                   )}
                 </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-white uppercase tracking-wider">Responses</h4>
+                  {endpoint.responses.map((response, idx) => (
+                    <div key={idx}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-bold ${
+                            response.code.startsWith('2')
+                              ? 'bg-green-500 text-white'
+                              : response.code.startsWith('4')
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-red-500 text-white'
+                          }`}
+                        >
+                          {response.code}
+                        </span>
+                        <span className="text-sm text-slate-300">{response.description}</span>
+                      </div>
+                      <div className="relative">
+                        <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
+                          {JSON.stringify(response.example, null, 2)}
+                        </pre>
+                        <button
+                          onClick={() =>
+                            copyToClipboard(
+                              JSON.stringify(response.example, null, 2),
+                              `${endpoint.id}-response-${idx}`
+                            )
+                          }
+                          className="absolute top-2 right-2 p-2 bg-slate-800 hover:bg-slate-700 rounded transition-colors"
+                        >
+                          {copiedCode === `${endpoint.id}-response-${idx}` ? (
+                            <Check className="w-4 h-4 text-green-400" />
+                          ) : (
+                            <Copy className="w-4 h-4 text-slate-400" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
+      ))}
+    </div>
+  );
+
+  const renderTemplates = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">Variables de Template</h2>
+        <p className="text-slate-300 mb-4">
+          Los templates soportan diferentes tipos de variables que se reemplazan automáticamente.
+        </p>
       </div>
 
-      <div className="bg-slate-800/50 rounded-lg border border-slate-700">
-        <div className="border-b border-slate-700 p-4">
-          <h2 className="text-xl font-semibold text-white">Variables de Template</h2>
-        </div>
-        <div className="p-6">
-          <div className="space-y-4">
-            {templateVariables.map((variable, idx) => (
-              <div
-                key={idx}
-                className="border border-slate-700 rounded-lg p-4"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <h4 className="font-semibold text-white">{variable.type}</h4>
-                  <code className="text-sm bg-slate-900 px-2 py-1 rounded text-cyan-400">
-                    {variable.example}
-                  </code>
-                </div>
-                <p className="text-slate-300 text-sm mb-2">{variable.description}</p>
-                <div className="bg-slate-900 border border-slate-700 rounded p-3">
-                  <p className="text-xs text-slate-400 mb-1">Uso:</p>
-                  <code className="text-sm text-slate-200">{variable.usage}</code>
-                </div>
-              </div>
-            ))}
+      <div className="grid gap-4">
+        {[
+          {
+            type: 'Texto Simple',
+            syntax: '{{variable_name}}',
+            description: 'Reemplaza el placeholder con el valor proporcionado en data',
+            example: '<h1>Hola {{client_name}}</h1>',
+          },
+          {
+            type: 'Logo (Base64 o URL)',
+            syntax: '{{company_logo}}',
+            description: 'Convierte automáticamente a imagen embebida',
+            example: 'Configurar has_logo=true en el template',
+          },
+          {
+            type: 'Código QR',
+            syntax: '{{appointment_code_qr}}',
+            description: 'Genera un código QR automáticamente del valor',
+            example: 'Configurar has_qr=true en el template',
+          },
+          {
+            type: 'PDF Adjunto',
+            syntax: 'pending_fields: ["invoice_pdf"]',
+            description: 'PDF en base64 que se adjunta al email',
+            example: 'Enviar via pending communication',
+          },
+        ].map((variable, idx) => (
+          <div key={idx} className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="font-semibold text-white">{variable.type}</h3>
+              <code className="text-sm bg-slate-900 px-2 py-1 rounded text-cyan-400">{variable.syntax}</code>
+            </div>
+            <p className="text-slate-300 text-sm mb-3">{variable.description}</p>
+            <div className="bg-slate-900 border border-slate-700 rounded p-3">
+              <p className="text-xs text-slate-400 mb-1">Ejemplo:</p>
+              <code className="text-sm text-slate-200">{variable.example}</code>
+            </div>
           </div>
-        </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderExamples = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">Ejemplos de Integración</h2>
+        <p className="text-slate-300 mb-4">
+          Ejemplos prácticos de cómo integrar la API en diferentes escenarios.
+        </p>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
-        <div className="flex items-start gap-3">
-          <Code className="w-6 h-6 text-amber-600 mt-1 flex-shrink-0" />
-          <div>
-            <h3 className="font-semibold text-amber-900 mb-2">Soporte y Ayuda</h3>
-            <p className="text-amber-800">
-              Si tienes dudas o necesitas ayuda con la integración, contacta con el equipo de
-              soporte técnico.
-            </p>
-          </div>
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Flujo: Email con Factura PDF</h3>
+        <div className="space-y-4">
+          {[
+            {
+              step: 1,
+              title: 'Crear comunicación pendiente',
+              description: 'Tu app crea el registro inmediatamente después de la cita',
+              code: `curl -X POST ${supabaseUrl}/functions/v1/pending-communication/create \\
+  -H "x-api-key: tu_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "template_name": "invoice_email",
+    "recipient_email": "cliente@example.com",
+    "base_data": {
+      "client_name": "Juan Pérez",
+      "service": "Consulta"
+    },
+    "pending_fields": ["invoice_pdf"],
+    "external_reference_id": "INV-001",
+    "external_system": "billing"
+  }'`,
+            },
+            {
+              step: 2,
+              title: 'Sistema de facturación completa',
+              description: 'Cuando el PDF está listo, tu sistema lo envía',
+              code: `curl -X POST ${supabaseUrl}/functions/v1/pending-communication/complete \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "external_reference_id": "INV-001",
+    "data": {
+      "invoice_pdf": "JVBERi0xLjQK...",
+      "invoice_number": "FAC-2025-001"
+    }
+  }'`,
+            },
+          ].map((step) => (
+            <div key={step.step} className="border-l-4 border-blue-500 pl-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                  {step.step}
+                </div>
+                <h4 className="font-semibold text-white">{step.title}</h4>
+              </div>
+              <p className="text-slate-300 text-sm mb-3">{step.description}</p>
+              <div className="relative">
+                <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
+                  {step.code}
+                </pre>
+                <button
+                  onClick={() => copyToClipboard(step.code, `example-${step.step}`)}
+                  className="absolute top-2 right-2 p-2 bg-slate-800 hover:bg-slate-700 rounded transition-colors"
+                >
+                  {copiedCode === `example-${step.step}` ? (
+                    <Check className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-slate-400" />
+                  )}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
+    </div>
+  );
+
+  const renderContent = () => {
+    switch (activeSection) {
+      case 'introduction':
+        return renderIntroduction();
+      case 'authentication':
+        return renderAuthentication();
+      case 'endpoints':
+        return renderEndpoints();
+      case 'templates':
+        return renderTemplates();
+      case 'examples':
+        return renderExamples();
+      default:
+        return renderIntroduction();
+    }
+  };
+
+  return (
+    <Layout currentPage="documentation">
+      <div className="flex gap-6 -mt-8 -mx-8 h-[calc(100vh-8rem)]">
+        <aside className="w-64 bg-slate-800/30 border-r border-slate-700 overflow-y-auto">
+          <div className="p-4">
+            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+              Documentación
+            </h2>
+            <nav className="space-y-1">
+              {sections.map((section) => {
+                const Icon = section.icon;
+                return (
+                  <button
+                    key={section.id}
+                    onClick={() => setActiveSection(section.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      activeSection === section.id
+                        ? 'bg-cyan-500/10 text-cyan-400'
+                        : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {section.title}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </aside>
+
+        <main className="flex-1 overflow-y-auto p-8">
+          {renderContent()}
+        </main>
       </div>
     </Layout>
   );
