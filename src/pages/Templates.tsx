@@ -29,6 +29,9 @@ interface Template {
   has_qr: boolean;
   qr_variable: string | null;
   qr_position: string | null;
+  template_type?: string;
+  pdf_template_id?: string | null;
+  pdf_filename_pattern?: string | null;
 }
 
 export const Templates = () => {
@@ -177,8 +180,6 @@ export const Templates = () => {
     if (!selectedApp || !formData.name || !formData.html_content) return;
 
     try {
-      console.log('Saving template with template_type:', formData.template_type);
-      console.log('Full formData:', formData);
       const variables = extractVariables(formData.html_content);
 
       if (editingTemplate) {
@@ -354,8 +355,12 @@ export const Templates = () => {
                           <p className="text-slate-400 mb-3">{template.description}</p>
                         )}
                         <div className="flex items-center space-x-4 text-sm">
-                          <span className="px-3 py-1 bg-cyan-500/10 text-cyan-400 rounded-full">
-                            {template.channel}
+                          <span className={`px-3 py-1 rounded-full ${
+                            template.template_type === 'pdf'
+                              ? 'bg-amber-500/10 text-amber-400'
+                              : 'bg-cyan-500/10 text-cyan-400'
+                          }`}>
+                            {template.template_type === 'pdf' ? 'PDF' : 'Email'}
                           </span>
                           {template.has_attachment && (
                             <span className="flex items-center space-x-1 text-emerald-400" title="Genera PDF adjunto">
