@@ -52,6 +52,61 @@ export default function Documentation() {
 
   const endpoints: EndpointSection[] = [
     {
+      id: 'generate-pdf',
+      title: 'Generar PDF',
+      method: 'POST',
+      path: '/functions/v1/generate-pdf',
+      description: 'Genera un PDF desde un template HTML. El PDF se guarda y puede usarse en comunicaciones pendientes.',
+      authentication: 'API Key (x-api-key header)',
+      headers: [
+        { name: 'x-api-key', type: 'string', required: true, description: 'Tu API key de la aplicación' },
+        { name: 'Content-Type', type: 'string', required: true, description: 'application/json' },
+      ],
+      requestBody: {
+        contentType: 'application/json',
+        schema: {
+          pdf_template_name: 'string (required)',
+          data: 'object (required)',
+          external_reference_id: 'string (optional)',
+        },
+        example: {
+          pdf_template_name: 'invoice_pdf',
+          data: {
+            client_name: 'Juan Pérez',
+            invoice_number: 'FAC-2025-001',
+            invoice_date: '2025-10-21',
+            items: 'Consulta veterinaria',
+            total: '$150.00',
+          },
+          external_reference_id: 'INVOICE-12345',
+        },
+      },
+      responses: [
+        {
+          code: '200',
+          description: 'PDF generado exitosamente',
+          example: {
+            success: true,
+            message: 'PDF generated successfully',
+            data: {
+              pdf_id: 'uuid-pdf-123',
+              pdf_base64: 'JVBERi0xLjQKJeLjz9MK...',
+              filename: 'factura_FAC-2025-001.pdf',
+              size_bytes: 45678,
+            },
+          },
+        },
+        {
+          code: '404',
+          description: 'Template de PDF no encontrado',
+          example: {
+            success: false,
+            error: 'PDF template not found or inactive',
+          },
+        },
+      ],
+    },
+    {
       id: 'send-email',
       title: 'Enviar Email',
       method: 'POST',
@@ -533,12 +588,47 @@ Content-Type: application/json`}
   const renderTemplates = () => (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-white mb-2">Variables de Template</h2>
+        <h2 className="text-2xl font-bold text-white mb-2">Templates y Variables</h2>
         <p className="text-slate-300 mb-4">
-          Los templates soportan diferentes tipos de variables que se reemplazan automáticamente.
+          El sistema soporta dos tipos de templates que trabajan juntos para crear comunicaciones complejas.
         </p>
       </div>
 
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 mb-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Tipos de Templates</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-slate-900 border border-slate-700 rounded p-4">
+            <h4 className="text-cyan-400 font-semibold mb-2">Template de Email</h4>
+            <p className="text-slate-300 text-sm mb-3">
+              Define el contenido HTML del email que se envía al destinatario.
+            </p>
+            <ul className="text-slate-300 text-xs space-y-1">
+              <li>• Puede enviarse inmediatamente</li>
+              <li>• Puede esperar un PDF adjunto</li>
+              <li>• Soporta logos, QR codes y variables</li>
+            </ul>
+          </div>
+          <div className="bg-slate-900 border border-slate-700 rounded p-4">
+            <h4 className="text-amber-400 font-semibold mb-2">Template de PDF</h4>
+            <p className="text-slate-300 text-sm mb-3">
+              Define el contenido HTML que se convierte en PDF para adjuntar a emails.
+            </p>
+            <ul className="text-slate-300 text-xs space-y-1">
+              <li>• Genera PDFs dinámicos (facturas, recibos)</li>
+              <li>• Se asocia con templates de email</li>
+              <li>• Nombre de archivo personalizable</li>
+            </ul>
+          </div>
+        </div>
+        <div className="mt-4 bg-blue-500/10 border border-blue-500/30 rounded p-4">
+          <p className="text-blue-400 text-sm">
+            <strong>Ejemplo:</strong> Un template de PDF "Factura" genera el PDF, y un template de email
+            "Confirmación con Factura" espera ese PDF antes de enviarse. Así separas la lógica del PDF del email.
+          </p>
+        </div>
+      </div>
+
+      <h3 className="text-lg font-semibold text-white mb-4">Variables Dinámicas</h3>
       <div className="grid gap-4">
         {[
           {
@@ -591,8 +681,38 @@ Content-Type: application/json`}
         </p>
       </div>
 
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 mb-6">
+        <h3 className="text-lg font-semibold text-white mb-2">Configuración Previa</h3>
+        <p className="text-slate-300 text-sm mb-4">
+          Antes de usar el flujo con PDFs, necesitas crear dos templates en la plataforma:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-slate-900 border border-slate-700 rounded p-4">
+            <h4 className="text-cyan-400 font-semibold mb-2">1. Template de PDF</h4>
+            <ul className="text-slate-300 text-sm space-y-1">
+              <li>• <strong>Tipo:</strong> PDF</li>
+              <li>• <strong>Nombre:</strong> invoice_pdf</li>
+              <li>• <strong>Contenido:</strong> HTML de la factura</li>
+              <li>• <strong>Nombre archivo:</strong> factura_{`{{invoice_number}}`}.pdf</li>
+            </ul>
+          </div>
+          <div className="bg-slate-900 border border-slate-700 rounded p-4">
+            <h4 className="text-green-400 font-semibold mb-2">2. Template de Email</h4>
+            <ul className="text-slate-300 text-sm space-y-1">
+              <li>• <strong>Tipo:</strong> Email</li>
+              <li>• <strong>Nombre:</strong> invoice_email</li>
+              <li>• <strong>PDF Asociado:</strong> invoice_pdf</li>
+              <li>• <strong>Contenido:</strong> Email de confirmación</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Flujo: Email con Factura PDF</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">Flujo Completo: Email con PDF Generado</h3>
+        <p className="text-slate-300 text-sm mb-4">
+          Este flujo muestra cómo enviar un email que espera un PDF generado dinámicamente.
+        </p>
         <div className="space-y-4">
           {[
             {
@@ -616,8 +736,27 @@ Content-Type: application/json`}
             },
             {
               step: 2,
-              title: 'Sistema de facturación completa',
-              description: 'Cuando el PDF está listo, tu sistema lo envía',
+              title: 'Generar el PDF',
+              description: 'Tu sistema de facturación genera el PDF usando el template',
+              code: `curl -X POST ${supabaseUrl}/functions/v1/generate-pdf \\
+  -H "x-api-key: tu_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "pdf_template_name": "invoice_pdf",
+    "data": {
+      "client_name": "Juan Pérez",
+      "invoice_number": "FAC-2025-001",
+      "invoice_date": "2025-10-21",
+      "items": "Consulta veterinaria",
+      "total": "$150.00"
+    },
+    "external_reference_id": "INV-001"
+  }'`,
+            },
+            {
+              step: 3,
+              title: 'Completar la comunicación',
+              description: 'Envía el PDF generado para completar y enviar el email',
               code: `curl -X POST ${supabaseUrl}/functions/v1/pending-communication/complete \\
   -H "Content-Type: application/json" \\
   -d '{
