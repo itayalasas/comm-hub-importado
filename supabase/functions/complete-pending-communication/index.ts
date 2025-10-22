@@ -133,24 +133,6 @@ Deno.serve(async (req: Request) => {
 
     console.log('[complete-pending] Data completed, now sending email...');
 
-    await supabase.from('email_logs').insert({
-      application_id: application.id,
-      template_id: null,
-      recipient_email: pendingComm.recipient_email,
-      subject: `Completing pending communication for ${pendingComm.external_reference_id || pendingComm.id}`,
-      status: 'processing',
-      communication_type: pendingComm.communication_type || 'email',
-      metadata: {
-        pending_communication_id: pendingComm.id,
-        external_reference_id: pendingComm.external_reference_id,
-        order_id: pendingComm.order_id,
-        template_name: pendingComm.template_name,
-        action: 'completing_pending_communication',
-        message: 'Processing pending communication, preparing to send email',
-        has_pdf: !!pendingComm.completed_data?.pdf_attachment,
-      },
-    });
-
     const sendEmailUrl = `${supabaseUrl}/functions/v1/send-email`;
 
     try {
