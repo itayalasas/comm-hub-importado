@@ -7,9 +7,10 @@ const corsHeaders = {
 };
 
 interface GeneratePDFRequest {
-  pdf_template_name: string;
+  template_id?: string;
+  pdf_template_name?: string;
   data: Record<string, any>;
-  external_reference_id?: string;
+  pending_communication_id?: string;
 }
 
 function replacePlaceholders(html: string, data: Record<string, any>): string {
@@ -141,13 +142,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const requestData: GeneratePDFRequest = await req.json();
-    const { pdf_template_name, data, external_reference_id } = requestData;
+    const { template_id, pdf_template_name, data, pending_communication_id } = requestData;
 
-    if (!pdf_template_name || !data) {
+    if (!data) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Missing required fields: pdf_template_name, data',
+          error: 'Missing required field: data',
         }),
         {
           status: 400,
@@ -156,29 +157,70 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: pdfTemplate, error: templateError } = await supabase
-      .from('communication_templates')
-      .select('id, name, content, template_type, pdf_filename_pattern')
-      .eq('name', pdf_template_name)
-      .eq('application_id', application.id)
-      .eq('template_type', 'pdf')
-      .eq('is_active', true)
-      .maybeSingle();
+    let pdfTemplate;
 
-    if (templateError || !pdfTemplate) {
+    if (template_id) {
+      const { data: template, error: templateError } = await supabase
+        .from('communication_templates')
+        .select('id, name, html_content, template_type, pdf_filename_pattern')
+        .eq('id', template_id)
+        .eq('application_id', application.id)
+        .eq('template_type', 'pdf')
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (templateError || !template) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'PDF template not found or inactive',
+          }),
+          {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      pdfTemplate = template;
+    } else if (pdf_template_name) {
+      const { data: template, error: templateError } = await supabase
+        .from('communication_templates')
+        .select('id, name, html_content, template_type, pdf_filename_pattern')
+        .eq('name', pdf_template_name)
+        .eq('application_id', application.id)
+        .eq('template_type', 'pdf')
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (templateError || !template) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'PDF template not found or inactive',
+          }),
+          {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      pdfTemplate = template;
+    } else {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'PDF template not found or inactive',
+          error: 'Either template_id or pdf_template_name is required',
         }),
         {
-          status: 404,
+          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
 
-    const htmlContent = replacePlaceholders(pdfTemplate.content, data);
+    const htmlContent = replacePlaceholders(pdfTemplate.html_content, data);
     const pdfBase64 = htmlToPdfBase64(htmlContent);
     const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', data);
     const sizeBytes = pdfBase64.length;
@@ -192,7 +234,6 @@ Deno.serve(async (req: Request) => {
         pdf_base64: pdfBase64,
         filename,
         size_bytes: sizeBytes,
-        external_reference_id,
       })
       .select()
       .single();
@@ -209,6 +250,30 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
+    }
+
+    if (pending_communication_id) {
+      const { error: updateError } = await supabase
+        .from('pending_communications')
+        .update({
+          completed_data: {
+            pdf_attachment: {
+              filename,
+              content: pdfBase64,
+              encoding: 'base64',
+            },
+          },
+          status: 'data_received',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', pending_communication_id);
+
+      if (updateError) {
+        console.error('Error updating pending communication:', updateError);
+      } else {
+        console.log('Pending communication updated with PDF attachment');
+      }
     }
 
     return new Response(

@@ -158,94 +158,120 @@ Deno.serve(async (req: Request) => {
     let pdfAttachment = null;
 
     if (template.pdf_template_id) {
-      console.log('Template has associated PDF, generating...');
+      console.log('Template requires PDF attachment, creating pending communication...');
 
-      const { data: pdfTemplate, error: pdfTemplateError } = await supabase
-        .from('communication_templates')
-        .select('*')
-        .eq('id', template.pdf_template_id)
-        .eq('is_active', true)
-        .maybeSingle();
+      const externalRefId = `email_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-      if (pdfTemplate) {
-        let pdfHtmlContent = pdfTemplate.html_content;
-
-        Object.keys(data).forEach((key) => {
-          const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-          const value = data[key] !== undefined && data[key] !== null ? String(data[key]) : '';
-          pdfHtmlContent = pdfHtmlContent.replace(regex, value);
-        });
-
-        pdfHtmlContent = processLogoAndQR(pdfHtmlContent, data, pdfTemplate);
-
-        const pdfHeader = '%PDF-1.4\n';
-        const simpleContent = `
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /Resources 4 0 R /MediaBox [0 0 612 792] /Contents 5 0 R >>
-endobj
-4 0 obj
-<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>
-endobj
-5 0 obj
-<< /Length 100 >>
-stream
-BT
-/F1 12 Tf
-50 700 Td
-(${pdfHtmlContent.replace(/[<>]/g, '').substring(0, 100)}) Tj
-ET
-endstream
-endobj
-xref
-0 6
-0000000000 65535 f
-0000000009 00000 n
-0000000058 00000 n
-0000000115 00000 n
-0000000214 00000 n
-0000000304 00000 n
-trailer
-<< /Size 6 /Root 1 0 R >>
-startxref
-455
-%%EOF
-`;
-
-        const pdfContent = pdfHeader + simpleContent;
-        const encoder = new TextEncoder();
-        const pdfBytes = encoder.encode(pdfContent);
-        const pdfBase64 = btoa(String.fromCharCode(...pdfBytes));
-
-        let filename = pdfTemplate.pdf_filename_pattern || 'document.pdf';
-        Object.keys(data).forEach((key) => {
-          const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-          filename = filename.replace(regex, String(data[key] || ''));
-        });
-
-        pdfAttachment = {
-          filename,
-          content: pdfBase64,
-          encoding: 'base64',
-        };
-
-        await supabase.from('pdf_generation_logs').insert({
+      const { data: pendingComm, error: pendingError } = await supabase
+        .from('pending_communications')
+        .insert({
           application_id: application.id,
-          pdf_template_id: pdfTemplate.id,
-          data,
-          pdf_base64: pdfBase64,
-          filename,
-          size_bytes: pdfBase64.length,
+          template_name,
+          recipient_email,
+          base_data: data,
+          pending_fields: ['pdf_attachment'],
+          external_reference_id: externalRefId,
+          external_system: 'pdf_generator',
+          status: 'waiting_data',
+        })
+        .select()
+        .single();
+
+      if (pendingError) {
+        console.error('Error creating pending communication:', pendingError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Failed to create pending communication',
+            details: pendingError.message,
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      console.log('Pending communication created, calling generate-pdf function...');
+
+      const generatePdfUrl = `${supabaseUrl}/functions/v1/generate-pdf`;
+
+      try {
+        const pdfResponse = await fetch(generatePdfUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            template_id: template.pdf_template_id,
+            data,
+            pending_communication_id: pendingComm.id,
+          }),
         });
 
-        console.log('PDF generated successfully:', filename);
-      } else {
-        console.warn('PDF template not found, continuing without attachment');
+        const pdfResult = await pdfResponse.json();
+
+        if (!pdfResult.success) {
+          await supabase
+            .from('pending_communications')
+            .update({
+              status: 'failed',
+              error_message: pdfResult.error || 'PDF generation failed',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', pendingComm.id);
+
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'PDF generation failed',
+              details: pdfResult.error,
+            }),
+            {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        console.log('PDF generated successfully, retrieving attachment data...');
+
+        const { data: updatedPending, error: fetchError } = await supabase
+          .from('pending_communications')
+          .select('completed_data')
+          .eq('id', pendingComm.id)
+          .single();
+
+        if (fetchError || !updatedPending?.completed_data?.pdf_attachment) {
+          throw new Error('Failed to retrieve PDF attachment data');
+        }
+
+        pdfAttachment = updatedPending.completed_data.pdf_attachment;
+        console.log('PDF attachment retrieved:', pdfAttachment.filename);
+      } catch (pdfError: any) {
+        console.error('Error calling generate-pdf:', pdfError);
+
+        await supabase
+          .from('pending_communications')
+          .update({
+            status: 'failed',
+            error_message: pdfError.message,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', pendingComm.id);
+
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Error generating PDF',
+            details: pdfError.message,
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
       }
     }
 
