@@ -1,6 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 import { renderTemplate } from '../_shared/template-engine.ts';
-import { jsPDF } from 'npm:jspdf@2.5.2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,115 +19,35 @@ function generateFilename(pattern: string, data: Record<string, any>): string {
   return renderTemplate(pattern || 'document.pdf', data);
 }
 
-function stripHtmlTags(html: string): string {
-  return html
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+async function htmlToPdfBase64(html: string): Promise<string> {
+  const pdfshiftApiKey = Deno.env.get('PDFSHIFT_API_KEY');
+  const pdfshiftApiUrl = Deno.env.get('PDFSHIFT_API_URL') || 'https://api.pdfshift.io/v3/convert/pdf';
 
-function parseHtmlToPdfStructure(html: string): {
-  title: string;
-  sections: Array<{ heading?: string; content: string }>;
-} {
-  const titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/i) || html.match(/<h1[^>]*>(.*?)<\/h1>/i);
-  const title = titleMatch ? stripHtmlTags(titleMatch[1]) : 'Document';
-
-  const sections: Array<{ heading?: string; content: string }> = [];
-
-  const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
-  const parts = html.split(h2Regex);
-
-  if (parts.length === 1) {
-    sections.push({ content: stripHtmlTags(html) });
-  } else {
-    if (parts[0].trim()) {
-      sections.push({ content: stripHtmlTags(parts[0]) });
-    }
-
-    for (let i = 1; i < parts.length; i += 2) {
-      const heading = stripHtmlTags(parts[i]);
-      const content = i + 1 < parts.length ? stripHtmlTags(parts[i + 1]) : '';
-      sections.push({ heading, content });
-    }
+  if (!pdfshiftApiKey) {
+    throw new Error('PDFSHIFT_API_KEY environment variable is not set');
   }
 
-  return { title, sections };
-}
+  const credentials = btoa(`api:${pdfshiftApiKey}`);
 
-async function htmlToPdfBase64(html: string, filename: string): Promise<string> {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
+  const response = await fetch(pdfshiftApiUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source: html,
+      landscape: false,
+      use_print: false,
+    }),
   });
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-  const maxWidth = pageWidth - 2 * margin;
-  let yPosition = margin;
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`PDFShift API error: ${response.status} - ${errorText}`);
+  }
 
-  const { title, sections } = parseHtmlToPdfStructure(html);
-
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  const titleLines = doc.splitTextToSize(title, maxWidth);
-  titleLines.forEach((line: string) => {
-    if (yPosition + 10 > pageHeight - margin) {
-      doc.addPage();
-      yPosition = margin;
-    }
-    doc.text(line, margin, yPosition);
-    yPosition += 10;
-  });
-
-  yPosition += 5;
-
-  sections.forEach((section) => {
-    if (section.heading) {
-      if (yPosition + 8 > pageHeight - margin) {
-        doc.addPage();
-        yPosition = margin;
-      }
-
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      const headingLines = doc.splitTextToSize(section.heading, maxWidth);
-      headingLines.forEach((line: string) => {
-        doc.text(line, margin, yPosition);
-        yPosition += 7;
-      });
-      yPosition += 3;
-    }
-
-    if (section.content) {
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      const contentLines = doc.splitTextToSize(section.content, maxWidth);
-
-      contentLines.forEach((line: string) => {
-        if (yPosition + 6 > pageHeight - margin) {
-          doc.addPage();
-          yPosition = margin;
-        }
-        doc.text(line, margin, yPosition);
-        yPosition += 6;
-      });
-
-      yPosition += 4;
-    }
-  });
-
-  const pdfArrayBuffer = doc.output('arraybuffer');
+  const pdfArrayBuffer = await response.arrayBuffer();
   const uint8Array = new Uint8Array(pdfArrayBuffer);
   return btoa(String.fromCharCode(...uint8Array));
 }
@@ -451,8 +370,8 @@ Deno.serve(async (req: Request) => {
 
     const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', data);
 
-    console.log('Converting HTML to PDF with jsPDF...');
-    const pdfBase64 = await htmlToPdfBase64(htmlContent, filename);
+    console.log('Converting HTML to PDF with PDFShift API...');
+    const pdfBase64 = await htmlToPdfBase64(htmlContent);
 
     const sizeBytes = pdfBase64.length;
 
