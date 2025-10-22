@@ -23,12 +23,21 @@ Deno.serve(async (req: Request) => {
   const startTime = Date.now();
 
   try {
+    console.log('[pending-communication] Request received:', {
+      method: req.method,
+      url: req.url,
+      headers: Object.fromEntries(req.headers.entries()),
+    });
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const apiKey = req.headers.get('x-api-key');
+    console.log('[pending-communication] API Key present:', !!apiKey);
+
     if (!apiKey) {
+      console.error('[pending-communication] Missing API key');
       return new Response(
         JSON.stringify({
           success: false,
@@ -47,7 +56,13 @@ Deno.serve(async (req: Request) => {
       .eq('api_key', apiKey)
       .maybeSingle();
 
+    console.log('[pending-communication] Application lookup:', {
+      found: !!application,
+      error: appError,
+    });
+
     if (appError || !application) {
+      console.error('[pending-communication] Invalid API key or app not found');
       return new Response(
         JSON.stringify({
           success: false,
@@ -62,6 +77,12 @@ Deno.serve(async (req: Request) => {
 
     const requestData: SendCommunicationRequest = await req.json();
     const { template_name, recipient_email, data } = requestData;
+
+    console.log('[pending-communication] Request data:', {
+      template_name,
+      recipient_email,
+      hasData: !!data,
+    });
 
     if (!template_name || !recipient_email) {
       return new Response(
@@ -84,7 +105,13 @@ Deno.serve(async (req: Request) => {
       .eq('is_active', true)
       .maybeSingle();
 
+    console.log('[pending-communication] Template lookup:', {
+      found: !!template,
+      error: templateError,
+    });
+
     if (templateError || !template) {
+      console.error('[pending-communication] Template not found or inactive');
       return new Response(
         JSON.stringify({
           success: false,
@@ -98,6 +125,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const sendEmailUrl = `${supabaseUrl}/functions/v1/send-email`;
+
+    console.log('[pending-communication] Calling send-email function...');
 
     try {
       const emailResponse = await fetch(sendEmailUrl, {
@@ -116,6 +145,12 @@ Deno.serve(async (req: Request) => {
       const emailResult = await emailResponse.json();
       const endTime = Date.now();
       const processingTime = endTime - startTime;
+
+      console.log('[pending-communication] Email send result:', {
+        success: emailResult.success,
+        status: emailResponse.status,
+        processingTime,
+      });
 
       if (emailResult.success) {
         return new Response(
