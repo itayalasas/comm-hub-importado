@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 import { renderTemplate } from '../_shared/template-engine.ts';
+import { jsPDF } from 'npm:jspdf@2.5.2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,51 +19,117 @@ function generateFilename(pattern: string, data: Record<string, any>): string {
   return renderTemplate(pattern || 'document.pdf', data);
 }
 
-function htmlToPdfBase64(html: string): string {
-  const pdfHeader = '%PDF-1.4\n';
-  const simpleContent = `
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /Resources 4 0 R /MediaBox [0 0 612 792] /Contents 5 0 R >>
-endobj
-4 0 obj
-<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>
-endobj
-5 0 obj
-<< /Length 100 >>
-stream
-BT
-/F1 12 Tf
-50 700 Td
-(${html.replace(/[<>]/g, '').substring(0, 100)}) Tj
-ET
-endstream
-endobj
-xref
-0 6
-0000000000 65535 f
-0000000009 00000 n
-0000000058 00000 n
-0000000115 00000 n
-0000000214 00000 n
-0000000304 00000 n
-trailer
-<< /Size 6 /Root 1 0 R >>
-startxref
-455
-%%EOF
-`;
+function stripHtmlTags(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
-  const pdfContent = pdfHeader + simpleContent;
-  const encoder = new TextEncoder();
-  const pdfBytes = encoder.encode(pdfContent);
+function parseHtmlToPdfStructure(html: string): {
+  title: string;
+  sections: Array<{ heading?: string; content: string }>;
+} {
+  const titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/i) || html.match(/<h1[^>]*>(.*?)<\/h1>/i);
+  const title = titleMatch ? stripHtmlTags(titleMatch[1]) : 'Document';
 
-  return btoa(String.fromCharCode(...pdfBytes));
+  const sections: Array<{ heading?: string; content: string }> = [];
+
+  const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
+  const parts = html.split(h2Regex);
+
+  if (parts.length === 1) {
+    sections.push({ content: stripHtmlTags(html) });
+  } else {
+    if (parts[0].trim()) {
+      sections.push({ content: stripHtmlTags(parts[0]) });
+    }
+
+    for (let i = 1; i < parts.length; i += 2) {
+      const heading = stripHtmlTags(parts[i]);
+      const content = i + 1 < parts.length ? stripHtmlTags(parts[i + 1]) : '';
+      sections.push({ heading, content });
+    }
+  }
+
+  return { title, sections };
+}
+
+async function htmlToPdfBase64(html: string, filename: string): Promise<string> {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const maxWidth = pageWidth - 2 * margin;
+  let yPosition = margin;
+
+  const { title, sections } = parseHtmlToPdfStructure(html);
+
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  const titleLines = doc.splitTextToSize(title, maxWidth);
+  titleLines.forEach((line: string) => {
+    if (yPosition + 10 > pageHeight - margin) {
+      doc.addPage();
+      yPosition = margin;
+    }
+    doc.text(line, margin, yPosition);
+    yPosition += 10;
+  });
+
+  yPosition += 5;
+
+  sections.forEach((section) => {
+    if (section.heading) {
+      if (yPosition + 8 > pageHeight - margin) {
+        doc.addPage();
+        yPosition = margin;
+      }
+
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      const headingLines = doc.splitTextToSize(section.heading, maxWidth);
+      headingLines.forEach((line: string) => {
+        doc.text(line, margin, yPosition);
+        yPosition += 7;
+      });
+      yPosition += 3;
+    }
+
+    if (section.content) {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      const contentLines = doc.splitTextToSize(section.content, maxWidth);
+
+      contentLines.forEach((line: string) => {
+        if (yPosition + 6 > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+        doc.text(line, margin, yPosition);
+        yPosition += 6;
+      });
+
+      yPosition += 4;
+    }
+  });
+
+  const pdfArrayBuffer = doc.output('arraybuffer');
+  const uint8Array = new Uint8Array(pdfArrayBuffer);
+  return btoa(String.fromCharCode(...uint8Array));
 }
 
 Deno.serve(async (req: Request) => {
@@ -153,10 +220,12 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (templateError || !template) {
+        console.error('PDF template not found:', { template_id, error: templateError });
         return new Response(
           JSON.stringify({
             success: false,
             error: 'PDF template not found or inactive',
+            details: templateError?.message || 'Template not found',
           }),
           {
             status: 404,
@@ -177,10 +246,12 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (templateError || !template) {
+        console.error('PDF template not found:', { pdf_template_name, error: templateError });
         return new Response(
           JSON.stringify({
             success: false,
             error: 'PDF template not found or inactive',
+            details: templateError?.message || 'Template not found',
           }),
           {
             status: 404,
@@ -203,10 +274,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log('Rendering HTML template with data...');
     const htmlContent = renderTemplate(pdfTemplate.html_content, data);
-    const pdfBase64 = htmlToPdfBase64(htmlContent);
+
     const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', data);
+
+    console.log('Converting HTML to PDF with jsPDF...');
+    const pdfBase64 = await htmlToPdfBase64(htmlContent, filename);
+
     const sizeBytes = pdfBase64.length;
+
+    console.log('PDF generated successfully:', { filename, sizeBytes });
 
     const { data: pdfLog, error: logError } = await supabase
       .from('pdf_generation_logs')
@@ -227,6 +305,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           success: false,
           error: 'Failed to log PDF generation',
+          details: logError.message,
         }),
         {
           status: 500,
@@ -236,6 +315,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (pending_communication_id) {
+      console.log('Updating pending communication with PDF attachment...');
       const { error: updateError } = await supabase
         .from('pending_communications')
         .update({
@@ -255,7 +335,7 @@ Deno.serve(async (req: Request) => {
       if (updateError) {
         console.error('Error updating pending communication:', updateError);
       } else {
-        console.log('Pending communication updated with PDF attachment');
+        console.log('Pending communication updated successfully');
       }
     }
 
@@ -283,6 +363,7 @@ Deno.serve(async (req: Request) => {
         success: false,
         error: 'Internal server error',
         details: error.message || String(error),
+        stack: error.stack,
       }),
       {
         status: 500,
