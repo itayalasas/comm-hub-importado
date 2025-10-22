@@ -26,6 +26,7 @@ interface SendEmailRequest {
     pdf_filename?: string;
     pdf_size_bytes?: number;
   };
+  _pending_communication_id?: string;
 }
 
 const generateQRCode = (data: string): string => {
@@ -182,7 +183,7 @@ Deno.serve(async (req: Request) => {
     }
 
     application = app;
-    const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment, _pdf_info } = requestData;
+    const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment, _pdf_info, _pending_communication_id } = requestData;
 
     if (!template_name || !recipient_email) {
       await supabase.from('email_logs').insert({
@@ -616,28 +617,16 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', logEntry.id);
 
-      // Create child log for PDF generation if PDF was included
       if (pdfAttachment && _pdf_info?.pdf_log_id) {
+        console.log('[send-email] Linking PDF log to parent email log...');
         await supabase
           .from('email_logs')
-          .insert({
-            application_id: application.id,
-            template_id: _pdf_info.pdf_template_id || template.id,
-            recipient_email,
-            subject: `PDF Generado: ${_pdf_info.pdf_filename || 'documento.pdf'}`,
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-            communication_type: 'pdf_generation',
-            pdf_generated: true,
+          .update({
             parent_log_id: logEntry.id,
-            metadata: {
-              endpoint: 'send-email-child-log',
-              pdf_log_id: _pdf_info.pdf_log_id,
-              filename: _pdf_info.pdf_filename,
-              size_bytes: _pdf_info.pdf_size_bytes,
-              parent_email_log_id: logEntry.id,
-            },
-          });
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', _pdf_info.pdf_log_id);
+        console.log('[send-email] PDF log linked successfully');
       }
 
       if (pdfAttachment && template.pdf_template_id) {
