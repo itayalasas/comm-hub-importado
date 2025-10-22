@@ -21,6 +21,8 @@ interface EmailLog {
   subject: string;
   status: string;
   sent_at: string | null;
+  opened_at: string | null;
+  clicked_at: string | null;
   error_message: string | null;
   metadata: any;
   created_at: string;
@@ -139,30 +141,12 @@ export const Statistics = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'sent':
-        return 'text-emerald-400 bg-emerald-500/10';
-      case 'failed':
-        return 'text-red-400 bg-red-500/10';
-      case 'pending':
-        return 'text-amber-400 bg-amber-500/10';
-      default:
-        return 'text-slate-400 bg-slate-500/10';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'sent':
-        return <CheckCircle className="w-4 h-4" />;
-      case 'failed':
-        return <XCircle className="w-4 h-4" />;
-      case 'pending':
-        return <Clock className="w-4 h-4" />;
-      default:
-        return null;
-    }
+  const getEngagementStatus = (log: EmailLog) => {
+    if (log.clicked_at) return { label: 'Clicked', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' };
+    if (log.opened_at) return { label: 'Opened', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' };
+    if (log.sent_at && log.status === 'sent') return { label: 'Sent', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
+    if (log.status === 'failed') return { label: 'Failed', color: 'text-red-400 bg-red-500/10 border-red-500/20' };
+    return { label: 'Pending', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
   };
 
   const formatDate = (date: string) => {
@@ -173,6 +157,19 @@ export const Statistics = () => {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const calculateDeliveryTime = (created: string, sent: string | null) => {
+    if (!sent) return null;
+    const createdDate = new Date(created);
+    const sentDate = new Date(sent);
+    const diff = sentDate.getTime() - createdDate.getTime();
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m`;
   };
 
   if (loading) {
@@ -265,16 +262,16 @@ export const Statistics = () => {
                   </div>
                 ) : (
                   <table className="w-full">
-                    <thead className="bg-slate-900/50">
-                      <tr>
+                    <thead>
+                      <tr className="border-b border-slate-700">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                          Estado
+                        </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                           Destinatario
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                           Asunto
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                          Estado
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                           Fecha
@@ -284,41 +281,41 @@ export const Statistics = () => {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-700">
-                      {logs.map((log) => (
-                        <tr key={log.id} className="hover:bg-slate-900/30 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-white">{log.recipient_email}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-white max-w-xs truncate">{log.subject}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                log.status
-                              )}`}
-                            >
-                              {getStatusIcon(log.status)}
-                              <span className="capitalize">{log.status}</span>
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-slate-400">
-                              {formatDate(log.sent_at || log.created_at)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <button
-                              onClick={() => setSelectedLog(log)}
-                              className="p-2 text-slate-400 hover:text-cyan-400 transition-colors"
-                              title="Ver detalles"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                    <tbody className="divide-y divide-slate-700/50">
+                      {logs.map((log) => {
+                        const engagement = getEngagementStatus(log);
+                        return (
+                          <tr key={log.id} className="hover:bg-slate-700/20 transition-colors">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border ${engagement.color}`}
+                              >
+                                <span>{engagement.label}</span>
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-white">{log.recipient_email}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-slate-300 max-w-md truncate">{log.subject}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-slate-400">
+                                {formatDate(log.sent_at || log.created_at)}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <button
+                                onClick={() => setSelectedLog(log)}
+                                className="p-2 text-slate-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-slate-700/30"
+                                title="Ver detalles"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -342,16 +339,24 @@ export const Statistics = () => {
             </div>
 
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Estado</label>
-                <span
-                  className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded-lg text-sm font-medium ${getStatusColor(
-                    selectedLog.status
-                  )}`}
-                >
-                  {getStatusIcon(selectedLog.status)}
-                  <span className="capitalize">{selectedLog.status}</span>
-                </span>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">Estado</label>
+                  <span
+                    className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded-lg text-sm font-medium border ${getEngagementStatus(selectedLog).color}`}
+                  >
+                    <span>{getEngagementStatus(selectedLog).label}</span>
+                  </span>
+                </div>
+
+                {selectedLog.sent_at && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">Tiempo de Entrega</label>
+                    <div className="px-3 py-1.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white inline-block">
+                      {calculateDeliveryTime(selectedLog.created_at, selectedLog.sent_at) || 'N/A'}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -368,18 +373,38 @@ export const Statistics = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Fecha de Creación</label>
-                <div className="px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white">
-                  {formatDate(selectedLog.created_at)}
+              <div className="grid md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">Fecha de Creación</label>
+                  <div className="px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white text-sm">
+                    {formatDate(selectedLog.created_at)}
+                  </div>
                 </div>
+
+                {selectedLog.sent_at && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">Fecha de Envío</label>
+                    <div className="px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white text-sm">
+                      {formatDate(selectedLog.sent_at)}
+                    </div>
+                  </div>
+                )}
+
+                {selectedLog.opened_at && (
+                  <div>
+                    <label className="block text-sm font-medium text-cyan-400 mb-2">Fecha de Apertura</label>
+                    <div className="px-4 py-2 bg-cyan-900/20 border border-cyan-700/50 rounded-lg text-cyan-300 text-sm">
+                      {formatDate(selectedLog.opened_at)}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {selectedLog.sent_at && (
+              {selectedLog.clicked_at && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">Fecha de Envío</label>
-                  <div className="px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white">
-                    {formatDate(selectedLog.sent_at)}
+                  <label className="block text-sm font-medium text-blue-400 mb-2">Fecha de Click</label>
+                  <div className="px-4 py-2 bg-blue-900/20 border border-blue-700/50 rounded-lg text-blue-300">
+                    {formatDate(selectedLog.clicked_at)}
                   </div>
                 </div>
               )}
