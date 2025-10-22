@@ -272,6 +272,24 @@ Deno.serve(async (req: Request) => {
 
         console.log(`Pending communication created for order ${order_id}. Waiting for invoice...`);
 
+        await supabase.from('email_logs').insert({
+          application_id: application.id,
+          template_id: template.id,
+          recipient_email,
+          subject: renderTemplate(template.subject || '', data),
+          status: 'queued',
+          communication_type: 'email_with_pdf',
+          pdf_generated: false,
+          metadata: {
+            order_id,
+            pending_communication_id: pendingComm.id,
+            wait_for_invoice: true,
+            data,
+            action: 'email_queued',
+            message: 'Email queued, waiting for invoice PDF',
+          },
+        });
+
         return new Response(
           JSON.stringify({
             success: true,
