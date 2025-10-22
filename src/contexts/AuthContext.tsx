@@ -19,7 +19,7 @@ interface AuthContextType {
   login: () => void;
   register: () => void;
   logout: () => void;
-  handleCallback: (code: string) => Promise<void>;
+  handleCallback: (tokenOrCode: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -76,35 +76,43 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     window.location.href = '/';
   };
 
-  const handleCallback = async (code: string) => {
+  const handleCallback = async (tokenOrCode: string) => {
     try {
-      const tokenResponse = await fetch(`${AUTH_URL}/oauth/token`, {
-        method: 'POST',
+      let accessToken = tokenOrCode;
+
+      if (!tokenOrCode.startsWith('eyJ')) {
+        const tokenResponse = await fetch(`${AUTH_URL}/oauth/token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${AUTH_API_KEY}`,
+          },
+          body: JSON.stringify({
+            grant_type: 'authorization_code',
+            code: tokenOrCode,
+            redirect_uri: REDIRECT_URI,
+            client_id: AUTH_APP_ID,
+          }),
+        });
+
+        if (!tokenResponse.ok) {
+          throw new Error('Failed to exchange code for token');
+        }
+
+        const tokens = await tokenResponse.json();
+        accessToken = tokens.access_token;
+        if (tokens.refresh_token) {
+          localStorage.setItem('refresh_token', tokens.refresh_token);
+        }
+      }
+
+      localStorage.setItem('access_token', accessToken);
+
+      const userInfoResponse = await fetch(`${AUTH_URL}/api/user`, {
+        method: 'GET',
         headers: {
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${AUTH_API_KEY}`,
-        },
-        body: JSON.stringify({
-          grant_type: 'authorization_code',
-          code,
-          redirect_uri: REDIRECT_URI,
-          client_id: AUTH_APP_ID,
-        }),
-      });
-
-      if (!tokenResponse.ok) {
-        throw new Error('Failed to exchange code for token');
-      }
-
-      const tokens = await tokenResponse.json();
-      localStorage.setItem('access_token', tokens.access_token);
-      if (tokens.refresh_token) {
-        localStorage.setItem('refresh_token', tokens.refresh_token);
-      }
-
-      const userInfoResponse = await fetch(`${AUTH_URL}/oauth/userinfo`, {
-        headers: {
-          'Authorization': `Bearer ${tokens.access_token}`,
         },
       });
 
