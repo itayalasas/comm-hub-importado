@@ -193,9 +193,88 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    if (template.template_type === 'pdf') {
+      console.log('[pending-communication] Template is PDF-only, creating pending communication without sending email');
+
+      const externalRefId = requestData.external_reference_id || `pdf_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const externalSystem = requestData.external_system || 'manual';
+      const webhookUrl = requestData.webhook_url || null;
+      const expiresAt = requestData.expires_at || null;
+      const pendingFields = requestData.pending_fields || [];
+
+      const { data: pendingComm, error: pendingError } = await supabase
+        .from('pending_communications')
+        .insert({
+          application_id: application.id,
+          template_name,
+          recipient_email,
+          base_data: emailData,
+          pending_fields: pendingFields,
+          external_reference_id: externalRefId,
+          external_system: externalSystem,
+          status: 'waiting_data',
+          webhook_url: webhookUrl,
+          expires_at: expiresAt,
+          communication_type: 'pdf',
+          pdf_template_id: template.id,
+        })
+        .select()
+        .single();
+
+      if (pendingError) {
+        console.error('[pending-communication] Error creating pending communication:', pendingError);
+
+        await supabase.from('email_logs').insert({
+          application_id: application.id,
+          template_id: template.id,
+          recipient_email: recipient_email,
+          subject: `Error: Failed to create pending PDF`,
+          status: 'failed',
+          error_message: `Failed to create pending communication: ${pendingError.message}`,
+          communication_type: 'pdf',
+          metadata: {
+            template_name,
+            request_data: requestData,
+            endpoint: 'pending-communication',
+            error: pendingError,
+          },
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Failed to create pending communication',
+            details: pendingError.message,
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      console.log('[pending-communication] Pending PDF communication created:', pendingComm.id);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Pending PDF communication created successfully',
+          pending_communication_id: pendingComm.id,
+          external_reference_id: externalRefId,
+          status: 'waiting_data',
+          type: 'pdf',
+          note: 'PDF will be generated and email sent when all pending fields are completed',
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const sendEmailUrl = `${supabaseUrl}/functions/v1/send-email`;
 
-    console.log('[pending-communication] Calling send-email function...');
+    console.log('[pending-communication] Template is email type, calling send-email function...');
 
     try {
       const emailResponse = await fetch(sendEmailUrl, {

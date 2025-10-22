@@ -2,10 +2,31 @@
 
 ## Descripción General
 
-El sistema ahora soporta generación y envío de PDFs como parte de las comunicaciones. Los PDFs pueden:
-- Generarse standalone (solo PDF)
-- Adjuntarse automáticamente a emails
-- Rastrearse independientemente en las estadísticas
+El sistema soporta dos flujos distintos para PDFs:
+
+### Flujo A: PDF Pendiente (Recomendado para Facturas)
+1. Se crea una comunicación pendiente → **NO se envía email**
+2. El PDF queda en estado `waiting_data`
+3. Tu sistema externo completa los datos faltantes
+4. Llamas a `/complete-pending-communication` para enviar
+
+### Flujo B: Email con PDF Inmediato
+1. Template de email tiene un `pdf_template_id` asociado
+2. Se genera el PDF automáticamente
+3. Se envía el email con PDF adjunto inmediatamente
+
+## ¿Cuándo usar cada flujo?
+
+**Flujo A (PDF Pendiente):** Cuando necesitas:
+- ✅ Esperar datos de un sistema externo (DGI, facturación)
+- ✅ Generar el PDF solo cuando tengas **todos** los datos
+- ✅ Control manual sobre cuándo se envía el email
+- ✅ Template es tipo `'pdf'`
+
+**Flujo B (Email con PDF Inmediato):** Cuando:
+- ✅ Ya tienes todos los datos al momento del request
+- ✅ Quieres envío inmediato
+- ✅ Template es tipo `'email'` con `pdf_template_id`
 
 ## Tipos de Comunicación
 
@@ -18,9 +39,89 @@ PDF generado que queda pendiente hasta que se asocie a un email.
 ### 3. `email_with_pdf` - Email con PDF Adjunto
 Email que incluye un PDF generado automáticamente.
 
-## Flujo de Trabajo
+## Flujos Detallados
 
-### Caso 1: Email con PDF Adjunto
+### Flujo A: PDF Pendiente (invoice_email_service)
+
+**Paso 1: Crear Comunicación Pendiente**
+
+```bash
+POST /functions/v1/pending-communication
+Headers:
+  x-api-key: your_api_key
+  Content-Type: application/json
+
+Body:
+{
+  "template_name": "invoice_email_service",
+  "recipient_email": "cliente@example.com",
+  "base_data": {
+    "numero_cfe": "INV-001",
+    "cliente": "Juan Pérez",
+    "items": [...]
+  },
+  "external_reference_id": "INVOICE-12345",
+  "external_system": "billing_system"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Pending PDF communication created successfully",
+  "pending_communication_id": "uuid-here",
+  "external_reference_id": "INVOICE-12345",
+  "status": "waiting_data",
+  "type": "pdf",
+  "note": "PDF will be generated and email sent when all pending fields are completed"
+}
+```
+
+**✅ IMPORTANTE:** En este punto **NO se envía ningún email**. El registro queda en `pending_communications` con estado `waiting_data`.
+
+---
+
+**Paso 2: Completar y Enviar**
+
+Cuando tu sistema externo tenga todos los datos (ej: DGI aprobó la factura):
+
+```bash
+POST /functions/v1/complete-pending-communication
+Headers:
+  x-api-key: your_api_key
+  Content-Type: application/json
+
+Body:
+{
+  "external_reference_id": "INVOICE-12345",
+  "completed_data": {
+    "cae": "12345678901234",
+    "qr_code": "https://dgi.gub.uy/...",
+    "fecha_aprobacion": "2025-10-22"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Communication completed and email sent successfully",
+  "pending_communication_id": "uuid-here",
+  "log_id": "email-log-uuid",
+  "features": {
+    "has_pdf": true,
+    "has_qr": true
+  }
+}
+```
+
+**✅ Ahora sí:** El PDF se genera con todos los datos y el email se envía.
+
+---
+
+### Flujo B: Email con PDF Inmediato
 
 ```
 1. Request → /functions/v1/send-email
