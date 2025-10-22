@@ -13,6 +13,7 @@ interface GeneratePDFRequest {
   pdf_template_name?: string;
   data: Record<string, any>;
   pending_communication_id?: string;
+  order_id?: string;
 }
 
 function generateFilename(pattern: string, data: Record<string, any>): string {
@@ -192,7 +193,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const requestData: GeneratePDFRequest = await req.json();
-    const { template_id, pdf_template_name, data, pending_communication_id } = requestData;
+    const { template_id, pdf_template_name, data, pending_communication_id, order_id } = requestData;
 
     if (!data) {
       return new Response(
@@ -205,6 +206,29 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
+    }
+
+    let pendingComm = null;
+
+    if (order_id) {
+      console.log(`Looking for pending communication with order_id: ${order_id}`);
+
+      const { data: pending, error: pendingError } = await supabase
+        .from('pending_communications')
+        .select('*')
+        .eq('order_id', order_id)
+        .eq('application_id', application.id)
+        .eq('status', 'waiting_data')
+        .maybeSingle();
+
+      if (pendingError) {
+        console.error('Error finding pending communication:', pendingError);
+      } else if (pending) {
+        console.log(`Found pending communication for order ${order_id}:`, pending.id);
+        pendingComm = pending;
+      } else {
+        console.warn(`No pending communication found for order_id: ${order_id}`);
+      }
     }
 
     let pdfTemplate;
@@ -314,7 +338,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (pending_communication_id) {
+    const targetPendingId = pending_communication_id || (pendingComm ? pendingComm.id : null);
+
+    if (targetPendingId) {
       console.log('Updating pending communication with PDF attachment...');
       const { error: updateError } = await supabase
         .from('pending_communications')
@@ -330,12 +356,42 @@ Deno.serve(async (req: Request) => {
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
-        .eq('id', pending_communication_id);
+        .eq('id', targetPendingId);
 
       if (updateError) {
         console.error('Error updating pending communication:', updateError);
       } else {
         console.log('Pending communication updated successfully');
+
+        if (pendingComm && order_id) {
+          console.log(`Triggering email send for order ${order_id}...`);
+
+          try {
+            const completeUrl = `${supabaseUrl}/functions/v1/complete-pending-communication`;
+
+            const completeResponse = await fetch(completeUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseKey}`,
+                'x-api-key': apiKey,
+              },
+              body: JSON.stringify({
+                pending_communication_id: targetPendingId,
+              }),
+            });
+
+            const completeResult = await completeResponse.json();
+
+            if (completeResult.success) {
+              console.log(`Email sent successfully for order ${order_id}`);
+            } else {
+              console.error(`Failed to send email for order ${order_id}:`, completeResult);
+            }
+          } catch (emailError: any) {
+            console.error(`Error triggering email send for order ${order_id}:`, emailError);
+          }
+        }
       }
     }
 
