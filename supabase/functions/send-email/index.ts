@@ -12,6 +12,8 @@ interface SendEmailRequest {
   template_name: string;
   recipient_email: string;
   data: Record<string, any>;
+  order_id?: string;
+  wait_for_invoice?: boolean;
 }
 
 const generateQRCode = (data: string): string => {
@@ -168,7 +170,7 @@ Deno.serve(async (req: Request) => {
     }
 
     application = app;
-    const { template_name, recipient_email, data } = requestData;
+    const { template_name, recipient_email, data, order_id, wait_for_invoice } = requestData;
 
     if (!template_name || !recipient_email) {
       await supabase.from('email_logs').insert({
@@ -230,9 +232,65 @@ Deno.serve(async (req: Request) => {
     let pdfAttachment = null;
 
     if (template.pdf_template_id) {
+      if (wait_for_invoice && order_id) {
+        console.log(`Creating pending communication for order ${order_id}, waiting for invoice...`);
+
+        const externalRefId = order_id || `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+        const { data: pendingComm, error: pendingError } = await supabase
+          .from('pending_communications')
+          .insert({
+            application_id: application.id,
+            template_name,
+            recipient_email,
+            base_data: data,
+            pending_fields: ['invoice_pdf'],
+            external_reference_id: externalRefId,
+            external_system: 'billing_system',
+            order_id: order_id,
+            status: 'waiting_data',
+            communication_type: 'pdf',
+            pdf_template_id: template.pdf_template_id,
+          })
+          .select()
+          .single();
+
+        if (pendingError) {
+          console.error('Error creating pending communication:', pendingError);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Failed to create pending communication',
+              details: pendingError.message,
+            }),
+            {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        console.log(`Pending communication created for order ${order_id}. Waiting for invoice...`);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Email queued, waiting for invoice',
+            pending_communication_id: pendingComm.id,
+            order_id,
+            status: 'waiting_invoice',
+            instructions: `Call /generate-pdf with order_id: "${order_id}" when invoice is ready`,
+          }),
+          {
+            status: 202,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
       console.log('Template requires PDF attachment, creating pending communication...');
 
-      const externalRefId = `email_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const externalRefId = order_id || `email_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
       const { data: pendingComm, error: pendingError } = await supabase
         .from('pending_communications')
@@ -244,6 +302,7 @@ Deno.serve(async (req: Request) => {
           pending_fields: ['pdf_attachment'],
           external_reference_id: externalRefId,
           external_system: 'pdf_generator',
+          order_id: order_id || null,
           status: 'waiting_data',
           communication_type: 'pdf',
           pdf_template_id: template.pdf_template_id,

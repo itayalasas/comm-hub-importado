@@ -7,7 +7,8 @@ const corsHeaders = {
 };
 
 interface CompleteCommRequest {
-  external_reference_id: string;
+  external_reference_id?: string;
+  pending_communication_id?: string;
   completed_data?: Record<string, any>;
 }
 
@@ -61,13 +62,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const requestData: CompleteCommRequest = await req.json();
-    const { external_reference_id, completed_data } = requestData;
+    const { external_reference_id, pending_communication_id, completed_data } = requestData;
 
-    if (!external_reference_id) {
+    if (!external_reference_id && !pending_communication_id) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Missing required field: external_reference_id',
+          error: 'Missing required field: external_reference_id or pending_communication_id',
         }),
         {
           status: 400,
@@ -76,12 +77,18 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: pendingComm, error: fetchError } = await supabase
+    let query = supabase
       .from('pending_communications')
       .select('*')
-      .eq('external_reference_id', external_reference_id)
-      .eq('application_id', application.id)
-      .maybeSingle();
+      .eq('application_id', application.id);
+
+    if (pending_communication_id) {
+      query = query.eq('id', pending_communication_id);
+    } else {
+      query = query.eq('external_reference_id', external_reference_id);
+    }
+
+    const { data: pendingComm, error: fetchError } = await query.maybeSingle();
 
     if (fetchError || !pendingComm) {
       return new Response(
