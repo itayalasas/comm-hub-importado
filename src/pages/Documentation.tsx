@@ -643,14 +643,64 @@ Content-Type: application/json`}
         </div>
       </div>
 
-      <h3 className="text-lg font-semibold text-white mb-4">Variables Dinámicas</h3>
-      <div className="grid gap-4">
+      <h3 className="text-lg font-semibold text-white mb-4">Sistema de Templates Avanzado</h3>
+      <p className="text-slate-300 text-sm mb-4">
+        El sistema soporta un motor de templates completo con variables, loops y condicionales.
+      </p>
+
+      <div className="grid gap-4 mb-8">
         {[
           {
-            type: 'Texto Simple',
+            type: 'Variables Simples',
             syntax: '{{variable_name}}',
-            description: 'Reemplaza el placeholder con el valor proporcionado en data',
-            example: '<h1>Hola {{client_name}}</h1>',
+            description: 'Reemplaza el placeholder con el valor proporcionado',
+            example: '<h1>Hola {{client_name}}</h1>\n<p>Total: {{total}}</p>',
+          },
+          {
+            type: 'Variables Anidadas',
+            syntax: '{{object.property}}',
+            description: 'Accede a propiedades anidadas en objetos',
+            example: '<p>RUT: {{issuer.rut}}</p>\n<p>Razón Social: {{issuer.razon_social}}</p>',
+          },
+          {
+            type: 'Loops (Arrays)',
+            syntax: '{{#each array}} ... {{/each}}',
+            description: 'Itera sobre arrays de objetos o valores simples',
+            example: `{{#each items}}
+  <tr>
+    <td>{{descripcion}}</td>
+    <td>{{cantidad}}</td>
+    <td>{{precio_unitario}}</td>
+    <td>{{total}}</td>
+  </tr>
+{{/each}}`,
+          },
+          {
+            type: 'Variables Especiales en Loops',
+            syntax: '{{@index}} {{@number}}',
+            description: 'Variables automáticas dentro de loops',
+            example: `{{#each items}}
+  <div>Item #{{@number}}: {{this}}</div>
+  <!-- @index empieza en 0, @number empieza en 1 -->
+{{/each}}`,
+          },
+          {
+            type: 'Condicionales',
+            syntax: '{{#if condition}} ... {{/if}}',
+            description: 'Muestra contenido solo si la condición es verdadera',
+            example: `{{#if has_discount}}
+  <p>Descuento aplicado: {{discount_amount}}</p>
+{{/if}}`,
+          },
+          {
+            type: 'Condicionales con Else',
+            syntax: '{{#if condition}} ... {{else}} ... {{/if}}',
+            description: 'Muestra contenido alternativo si la condición es falsa',
+            example: `{{#if has_discount}}
+  <p class="text-green">Con descuento</p>
+{{else}}
+  <p class="text-gray">Sin descuento</p>
+{{/if}}`,
           },
           {
             type: 'Logo (Base64 o URL)',
@@ -664,12 +714,6 @@ Content-Type: application/json`}
             description: 'Genera un código QR automáticamente del valor',
             example: 'Configurar has_qr=true en el template',
           },
-          {
-            type: 'PDF Adjunto',
-            syntax: 'pending_fields: ["invoice_pdf"]',
-            description: 'PDF en base64 que se adjunta al email',
-            example: 'Enviar via pending communication',
-          },
         ].map((variable, idx) => (
           <div key={idx} className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
             <div className="flex items-start justify-between mb-2">
@@ -679,10 +723,91 @@ Content-Type: application/json`}
             <p className="text-slate-300 text-sm mb-3">{variable.description}</p>
             <div className="bg-slate-900 border border-slate-700 rounded p-3">
               <p className="text-xs text-slate-400 mb-1">Ejemplo:</p>
-              <code className="text-sm text-slate-200">{variable.example}</code>
+              <pre className="text-sm text-slate-200 whitespace-pre-wrap">{variable.example}</pre>
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-lg p-6">
+        <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <Info className="w-5 h-5 text-cyan-400" />
+          Ejemplo Completo: Factura con Items
+        </h4>
+        <p className="text-slate-300 text-sm mb-4">
+          Así se vería un template completo de factura usando variables anidadas y loops:
+        </p>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs text-slate-400 mb-2">Template HTML:</p>
+            <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-lg overflow-x-auto text-xs">
+{`<h1>Factura {{numero_cfe}}</h1>
+<p>Emisor: {{razon_social_emisor}}</p>
+<p>RUT: {{rut_emisor}}</p>
+<p>Fecha: {{fecha_emision}}</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Descripción</th>
+      <th>Cant.</th>
+      <th>P. Unit.</th>
+      <th>Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each items}}
+    <tr>
+      <td>{{descripcion}}</td>
+      <td>{{cantidad}}</td>
+      <td>\${{precio_unitario}}</td>
+      <td>\${{total}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+
+<p>Subtotal: \${{subtotal}}</p>
+<p>IVA: \${{iva}}</p>
+<p>Total: \${{total}}</p>
+
+{{#if datos_adicionales.observaciones}}
+<p>Obs: {{datos_adicionales.observaciones}}</p>
+{{/if}}`}
+            </pre>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400 mb-2">Datos JSON:</p>
+            <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-lg overflow-x-auto text-xs">
+{`{
+  "numero_cfe": "INV-001",
+  "razon_social_emisor": "Mi Empresa",
+  "rut_emisor": "211234560018",
+  "fecha_emision": "2025-10-22",
+  "items": [
+    {
+      "descripcion": "Servicio A",
+      "cantidad": 2,
+      "precio_unitario": 100,
+      "total": 200
+    },
+    {
+      "descripcion": "Servicio B",
+      "cantidad": 1,
+      "precio_unitario": 150,
+      "total": 150
+    }
+  ],
+  "subtotal": 350,
+  "iva": 77,
+  "total": 427,
+  "datos_adicionales": {
+    "observaciones": "Pago al contado"
+  }
+}`}
+            </pre>
+          </div>
+        </div>
       </div>
     </div>
   );

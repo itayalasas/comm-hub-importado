@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
+import { renderTemplate } from '../_shared/template-engine.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,26 +14,8 @@ interface GeneratePDFRequest {
   pending_communication_id?: string;
 }
 
-function replacePlaceholders(html: string, data: Record<string, any>): string {
-  let result = html;
-
-  for (const [key, value] of Object.entries(data)) {
-    const regex = new RegExp(`{{${key}}}`, 'g');
-    result = result.replace(regex, String(value || ''));
-  }
-
-  return result;
-}
-
 function generateFilename(pattern: string, data: Record<string, any>): string {
-  let filename = pattern || 'document.pdf';
-
-  for (const [key, value] of Object.entries(data)) {
-    const regex = new RegExp(`{{${key}}}`, 'g');
-    filename = filename.replace(regex, String(value || ''));
-  }
-
-  return filename;
+  return renderTemplate(pattern || 'document.pdf', data);
 }
 
 function htmlToPdfBase64(html: string): string {
@@ -220,7 +203,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const htmlContent = replacePlaceholders(pdfTemplate.html_content, data);
+    const htmlContent = renderTemplate(pdfTemplate.html_content, data);
     const pdfBase64 = htmlToPdfBase64(htmlContent);
     const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', data);
     const sizeBytes = pdfBase64.length;
