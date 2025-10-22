@@ -20,7 +20,12 @@ interface SendEmailRequest {
     content: string;
     encoding: string;
   };
-  _parent_log_id?: string;
+  _pdf_info?: {
+    pdf_log_id?: string;
+    pdf_template_id?: string;
+    pdf_filename?: string;
+    pdf_size_bytes?: number;
+  };
 }
 
 const generateQRCode = (data: string): string => {
@@ -177,7 +182,7 @@ Deno.serve(async (req: Request) => {
     }
 
     application = app;
-    const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment, _parent_log_id } = requestData;
+    const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment, _pdf_info } = requestData;
 
     if (!template_name || !recipient_email) {
       await supabase.from('email_logs').insert({
@@ -521,17 +526,13 @@ Deno.serve(async (req: Request) => {
         has_logo: template.has_logo,
         has_qr: template.has_qr,
         pdf_attachment: hasPdfAttachment,
+        pdf_info: _pdf_info,
         request_headers: {
           'user-agent': req.headers.get('user-agent'),
           'x-forwarded-for': req.headers.get('x-forwarded-for'),
         },
       },
     };
-
-    // Link to parent transaction if provided (e.g., PDF generation)
-    if (_parent_log_id) {
-      emailLog.parent_log_id = _parent_log_id;
-    }
 
     const { data: logData, error: logError } = await supabase
       .from('email_logs')
@@ -614,6 +615,30 @@ Deno.serve(async (req: Request) => {
           },
         })
         .eq('id', logEntry.id);
+
+      // Create child log for PDF generation if PDF was included
+      if (pdfAttachment && _pdf_info?.pdf_log_id) {
+        await supabase
+          .from('email_logs')
+          .insert({
+            application_id: application.id,
+            template_id: _pdf_info.pdf_template_id || template.id,
+            recipient_email,
+            subject: `PDF Generado: ${_pdf_info.pdf_filename || 'documento.pdf'}`,
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+            communication_type: 'pdf_generation',
+            pdf_generated: true,
+            parent_log_id: logEntry.id,
+            metadata: {
+              endpoint: 'send-email-child-log',
+              pdf_log_id: _pdf_info.pdf_log_id,
+              filename: _pdf_info.pdf_filename,
+              size_bytes: _pdf_info.pdf_size_bytes,
+              parent_email_log_id: logEntry.id,
+            },
+          });
+      }
 
       if (pdfAttachment && template.pdf_template_id) {
         await supabase
