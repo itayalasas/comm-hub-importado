@@ -80,13 +80,61 @@ Deno.serve(async (req: Request) => {
 
   const startTime = Date.now();
   let logEntry: any = null;
+  let application: any = null;
+  let supabase: any = null;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl, supabaseKey);
 
     const apiKey = req.headers.get('x-api-key');
+
+    let requestData: any = null;
+    let requestBody = '';
+
+    try {
+      requestBody = await req.text();
+      requestData = JSON.parse(requestBody);
+    } catch (parseError: any) {
+      console.error('JSON parse error:', parseError);
+
+      if (apiKey) {
+        const { data: app } = await supabase
+          .from('applications')
+          .select('id')
+          .eq('api_key', apiKey)
+          .maybeSingle();
+
+        if (app) {
+          await supabase.from('email_logs').insert({
+            application_id: app.id,
+            template_id: null,
+            recipient_email: 'unknown@error.com',
+            subject: 'Error: Invalid JSON',
+            status: 'failed',
+            error_message: `JSON parse error: ${parseError.message}`,
+            metadata: {
+              raw_body: requestBody.substring(0, 500),
+              parse_error: parseError.message,
+            },
+          });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Invalid JSON',
+          details: parseError.message,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     if (!apiKey) {
       return new Response(
         JSON.stringify({
@@ -100,13 +148,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: application, error: appError } = await supabase
+    const { data: app, error: appError } = await supabase
       .from('applications')
       .select('id, name')
       .eq('api_key', apiKey)
       .maybeSingle();
 
-    if (appError || !application) {
+    if (appError || !app) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -119,10 +167,20 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const requestData: SendEmailRequest = await req.json();
+    application = app;
     const { template_name, recipient_email, data } = requestData;
 
     if (!template_name || !recipient_email) {
+      await supabase.from('email_logs').insert({
+        application_id: application.id,
+        template_id: null,
+        recipient_email: recipient_email || 'unknown@error.com',
+        subject: 'Error: Missing required fields',
+        status: 'failed',
+        error_message: 'Missing required fields: template_name, recipient_email',
+        metadata: { request_data: requestData },
+      });
+
       return new Response(
         JSON.stringify({
           success: false,
@@ -144,6 +202,19 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (templateError || !template) {
+      await supabase.from('email_logs').insert({
+        application_id: application.id,
+        template_id: null,
+        recipient_email: recipient_email,
+        subject: `Error: Template '${template_name}' not found`,
+        status: 'failed',
+        error_message: 'Template not found or inactive',
+        metadata: {
+          template_name,
+          request_data: requestData,
+        },
+      });
+
       return new Response(
         JSON.stringify({
           success: false,
