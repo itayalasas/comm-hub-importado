@@ -14,6 +14,12 @@ interface SendEmailRequest {
   data: Record<string, any>;
   order_id?: string;
   wait_for_invoice?: boolean;
+  _skip_pdf_generation?: boolean;
+  _pdf_attachment?: {
+    filename: string;
+    content: string;
+    encoding: string;
+  };
 }
 
 const generateQRCode = (data: string): string => {
@@ -170,7 +176,7 @@ Deno.serve(async (req: Request) => {
     }
 
     application = app;
-    const { template_name, recipient_email, data, order_id, wait_for_invoice } = requestData;
+    const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment } = requestData;
 
     if (!template_name || !recipient_email) {
       await supabase.from('email_logs').insert({
@@ -231,7 +237,10 @@ Deno.serve(async (req: Request) => {
 
     let pdfAttachment = null;
 
-    if (template.pdf_template_id) {
+    if (_skip_pdf_generation && _pdf_attachment) {
+      console.log('Using pre-generated PDF attachment from pending communication...');
+      pdfAttachment = _pdf_attachment;
+    } else if (template.pdf_template_id) {
       if (wait_for_invoice && order_id) {
         console.log(`Creating pending communication for order ${order_id}, waiting for invoice...`);
 

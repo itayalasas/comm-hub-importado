@@ -154,17 +154,21 @@ Deno.serve(async (req: Request) => {
     const sendEmailUrl = `${supabaseUrl}/functions/v1/send-email`;
 
     try {
+      const requestBody: any = {
+        template_name: pendingComm.template_name,
+        recipient_email: pendingComm.recipient_email,
+        data: mergedData,
+        _skip_pdf_generation: true,
+        _pdf_attachment: pendingComm.completed_data?.pdf_attachment,
+      };
+
       const emailResponse = await fetch(sendEmailUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
         },
-        body: JSON.stringify({
-          template_name: pendingComm.template_name,
-          recipient_email: pendingComm.recipient_email,
-          data: mergedData,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const emailResult = await emailResponse.json();
