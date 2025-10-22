@@ -148,11 +148,31 @@ export const Statistics = () => {
   };
 
   const getEngagementStatus = (log: EmailLog) => {
-    if (log.clicked_at) return { label: 'Clicked', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' };
-    if (log.opened_at) return { label: 'Opened', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' };
-    if (log.sent_at && log.status === 'sent') return { label: 'Sent', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
-    if (log.status === 'failed') return { label: 'Failed', color: 'text-red-400 bg-red-500/10 border-red-500/20' };
-    return { label: 'Pending', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
+    if (log.clicked_at) return {
+      label: 'Clicked',
+      color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+      icon: <MousePointerClick className="w-4 h-4" />
+    };
+    if (log.opened_at) return {
+      label: 'Opened',
+      color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
+      icon: <Eye className="w-4 h-4" />
+    };
+    if (log.sent_at && log.status === 'sent') return {
+      label: 'Sent',
+      color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+      icon: <CheckCircle className="w-4 h-4" />
+    };
+    if (log.status === 'failed') return {
+      label: 'Failed',
+      color: 'text-red-400 bg-red-500/10 border-red-500/20',
+      icon: <XCircle className="w-4 h-4" />
+    };
+    return {
+      label: 'Pending',
+      color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+      icon: <Clock className="w-4 h-4" />
+    };
   };
 
   const formatDate = (date: string) => {
@@ -303,6 +323,7 @@ export const Statistics = () => {
                               <span
                                 className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border ${engagement.color}`}
                               >
+                                {engagement.icon}
                                 <span>{engagement.label}</span>
                               </span>
                             </td>
