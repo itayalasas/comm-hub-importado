@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck } from 'lucide-react';
+import { useToast } from '../components/Toast';
+import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2 } from 'lucide-react';
 
 interface Stats {
   totalSent: number;
@@ -46,6 +47,7 @@ interface PendingCommunication {
 
 export const Statistics = () => {
   const { user } = useAuth();
+  const toast = useToast();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({ totalSent: 0, totalFailed: 0, totalPending: 0, totalOpened: 0, totalClicked: 0, totalPdfs: 0, totalEmailsWithPdf: 0 });
@@ -54,6 +56,7 @@ export const Statistics = () => {
   const [logs, setLogs] = useState<EmailLog[]>([]);
   const [pendingComms, setPendingComms] = useState<PendingCommunication[]>([]);
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -169,7 +172,7 @@ export const Statistics = () => {
         .from('pending_communications')
         .select('status')
         .eq('application_id', appId)
-        .in('status', ['waiting_data', 'processing']);
+        .in('status', ['waiting_data', 'processing', 'pdf_generated']);
 
       const sent = logs?.filter((l) => l.status === 'sent').length || 0;
       const failed = logs?.filter((l) => l.status === 'failed').length || 0;
@@ -216,7 +219,7 @@ export const Statistics = () => {
         .from('pending_communications')
         .select('*')
         .eq('application_id', appId)
-        .in('status', ['waiting_data', 'processing'])
+        .in('status', ['waiting_data', 'processing', 'pdf_generated'])
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -276,6 +279,29 @@ export const Statistics = () => {
     if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
     const hours = Math.floor(minutes / 60);
     return `${hours}h ${minutes % 60}m`;
+  };
+
+  const deletePendingCommunication = async () => {
+    if (!deleteConfirm) return;
+
+    try {
+      const { error } = await supabase
+        .from('pending_communications')
+        .delete()
+        .eq('id', deleteConfirm);
+
+      if (error) throw error;
+
+      toast.success('Comunicación eliminada exitosamente');
+      setDeleteConfirm(null);
+      if (selectedApp) {
+        loadPendingCommunications(selectedApp);
+        loadStats(selectedApp);
+      }
+    } catch (error) {
+      console.error('Error deleting pending communication:', error);
+      toast.error('Error al eliminar la comunicación');
+    }
   };
 
   if (loading) {
@@ -413,6 +439,9 @@ export const Statistics = () => {
                         <th className="px-6 py-3 text-left text-xs font-medium text-amber-400 uppercase tracking-wider">
                           Fecha
                         </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-amber-400 uppercase tracking-wider">
+                          Acciones
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-amber-700/30">
@@ -451,6 +480,15 @@ export const Statistics = () => {
                             <div className="text-sm text-amber-400">
                               {formatDate(comm.created_at)}
                             </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <button
+                              onClick={() => setDeleteConfirm(comm.id)}
+                              className="p-2 text-amber-400 hover:text-red-400 transition-colors rounded-lg hover:bg-red-900/20"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -574,6 +612,31 @@ export const Statistics = () => {
           </>
         )}
       </div>
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-white mb-2">Eliminar Comunicación Pendiente</h3>
+            <p className="text-slate-300 text-sm mb-6">
+              ¿Estás seguro de que deseas eliminar esta comunicación pendiente? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deletePendingCommunication}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedLog && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
