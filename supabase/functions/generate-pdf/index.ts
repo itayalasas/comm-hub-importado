@@ -161,6 +161,26 @@ Deno.serve(async (req: Request) => {
 
     const apiKey = req.headers.get('x-api-key');
     if (!apiKey) {
+      console.error('[generate-pdf] Missing API key');
+
+      await supabase.from('email_logs').insert({
+        application_id: null,
+        template_id: null,
+        recipient_email: 'unknown@error.com',
+        subject: 'Error: Missing API key in /generate-pdf',
+        status: 'failed',
+        error_message: 'Missing API key in x-api-key header',
+        communication_type: 'pdf_generation',
+        metadata: {
+          endpoint: 'generate-pdf',
+          error_type: 'authentication',
+          headers: {
+            'user-agent': req.headers.get('user-agent'),
+            'x-forwarded-for': req.headers.get('x-forwarded-for'),
+          },
+        },
+      });
+
       return new Response(
         JSON.stringify({
           success: false,
@@ -180,6 +200,24 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (appError || !application) {
+      console.error('[generate-pdf] Invalid API key:', apiKey?.substring(0, 8) + '...');
+
+      await supabase.from('email_logs').insert({
+        application_id: null,
+        template_id: null,
+        recipient_email: 'unknown@error.com',
+        subject: 'Error: Invalid API key in /generate-pdf',
+        status: 'failed',
+        error_message: 'Invalid API key',
+        communication_type: 'pdf_generation',
+        metadata: {
+          endpoint: 'generate-pdf',
+          error_type: 'authentication',
+          api_key_prefix: apiKey?.substring(0, 8),
+          error_details: appError?.message,
+        },
+      });
+
       return new Response(
         JSON.stringify({
           success: false,
@@ -192,10 +230,64 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const requestData: GeneratePDFRequest = await req.json();
+    let requestData: GeneratePDFRequest;
+    let requestBody = '';
+
+    try {
+      requestBody = await req.text();
+      requestData = JSON.parse(requestBody);
+    } catch (parseError: any) {
+      console.error('[generate-pdf] JSON parse error:', parseError);
+
+      await supabase.from('email_logs').insert({
+        application_id: application.id,
+        template_id: null,
+        recipient_email: 'unknown@error.com',
+        subject: 'Error: Invalid JSON in /generate-pdf',
+        status: 'failed',
+        error_message: `JSON parse error: ${parseError.message}`,
+        communication_type: 'pdf_generation',
+        metadata: {
+          endpoint: 'generate-pdf',
+          error_type: 'validation',
+          raw_body: requestBody.substring(0, 500),
+          parse_error: parseError.message,
+        },
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Invalid JSON',
+          details: parseError.message,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const { template_id, pdf_template_name, data, pending_communication_id, order_id } = requestData;
 
     if (!data) {
+      console.error('[generate-pdf] Missing required field: data');
+
+      await supabase.from('email_logs').insert({
+        application_id: application.id,
+        template_id: null,
+        recipient_email: 'unknown@error.com',
+        subject: 'Error: Missing required field in /generate-pdf',
+        status: 'failed',
+        error_message: 'Missing required field: data',
+        communication_type: 'pdf_generation',
+        metadata: {
+          endpoint: 'generate-pdf',
+          error_type: 'validation',
+          request_data: requestData,
+        },
+      });
+
       return new Response(
         JSON.stringify({
           success: false,
@@ -245,6 +337,25 @@ Deno.serve(async (req: Request) => {
 
       if (templateError || !template) {
         console.error('PDF template not found:', { template_id, error: templateError });
+
+        await supabase.from('email_logs').insert({
+          application_id: application.id,
+          template_id: null,
+          recipient_email: 'unknown@error.com',
+          subject: `Error: PDF template '${template_id}' not found`,
+          status: 'failed',
+          error_message: 'PDF template not found or inactive',
+          communication_type: 'pdf_generation',
+          metadata: {
+            endpoint: 'generate-pdf',
+            error_type: 'template_not_found',
+            template_id,
+            order_id,
+            request_data: data,
+            error_details: templateError?.message,
+          },
+        });
+
         return new Response(
           JSON.stringify({
             success: false,
@@ -271,6 +382,25 @@ Deno.serve(async (req: Request) => {
 
       if (templateError || !template) {
         console.error('PDF template not found:', { pdf_template_name, error: templateError });
+
+        await supabase.from('email_logs').insert({
+          application_id: application.id,
+          template_id: null,
+          recipient_email: 'unknown@error.com',
+          subject: `Error: PDF template '${pdf_template_name}' not found`,
+          status: 'failed',
+          error_message: 'PDF template not found or inactive',
+          communication_type: 'pdf_generation',
+          metadata: {
+            endpoint: 'generate-pdf',
+            error_type: 'template_not_found',
+            pdf_template_name,
+            order_id,
+            request_data: data,
+            error_details: templateError?.message,
+          },
+        });
+
         return new Response(
           JSON.stringify({
             success: false,
@@ -286,6 +416,24 @@ Deno.serve(async (req: Request) => {
 
       pdfTemplate = template;
     } else {
+      console.error('[generate-pdf] Missing template identifier');
+
+      await supabase.from('email_logs').insert({
+        application_id: application.id,
+        template_id: null,
+        recipient_email: 'unknown@error.com',
+        subject: 'Error: Missing template identifier in /generate-pdf',
+        status: 'failed',
+        error_message: 'Either template_id or pdf_template_name is required',
+        communication_type: 'pdf_generation',
+        metadata: {
+          endpoint: 'generate-pdf',
+          error_type: 'validation',
+          order_id,
+          request_data: data,
+        },
+      });
+
       return new Response(
         JSON.stringify({
           success: false,
@@ -325,6 +473,24 @@ Deno.serve(async (req: Request) => {
 
     if (logError) {
       console.error('Error logging PDF generation:', logError);
+
+      await supabase.from('email_logs').insert({
+        application_id: application.id,
+        template_id: pdfTemplate.id,
+        recipient_email: 'unknown@error.com',
+        subject: 'Error: Failed to log PDF generation',
+        status: 'failed',
+        error_message: `Failed to log PDF generation: ${logError.message}`,
+        communication_type: 'pdf_generation',
+        metadata: {
+          endpoint: 'generate-pdf',
+          error_type: 'database',
+          order_id,
+          filename,
+          error_details: logError.message,
+        },
+      });
+
       return new Response(
         JSON.stringify({
           success: false,
@@ -453,6 +619,33 @@ Deno.serve(async (req: Request) => {
     );
   } catch (error: any) {
     console.error('Error generating PDF:', error);
+
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      await supabase.from('email_logs').insert({
+        application_id: null,
+        template_id: null,
+        recipient_email: 'unknown@error.com',
+        subject: 'Error: Unexpected error in /generate-pdf',
+        status: 'failed',
+        error_message: error.message || String(error),
+        communication_type: 'pdf_generation',
+        metadata: {
+          endpoint: 'generate-pdf',
+          error_type: 'unexpected',
+          error_details: {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          },
+        },
+      });
+    } catch (logError) {
+      console.error('Failed to log error:', logError);
+    }
 
     return new Response(
       JSON.stringify({
