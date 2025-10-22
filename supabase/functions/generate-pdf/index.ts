@@ -518,7 +518,7 @@ Deno.serve(async (req: Request) => {
               encoding: 'base64',
             },
           },
-          status: 'data_received',
+          status: 'pdf_generated',
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -551,48 +551,8 @@ Deno.serve(async (req: Request) => {
 
             if (completeResult.success) {
               console.log(`Email sent successfully for order ${order_id}`);
-
-              await supabase.from('email_logs').insert({
-                application_id: application.id,
-                template_id: pdfTemplate.id,
-                recipient_email: pendingComm.recipient_email,
-                subject: `PDF Generated & Email Triggered for ${order_id}`,
-                status: 'triggered',
-                communication_type: 'email_with_pdf',
-                pdf_generated: true,
-                metadata: {
-                  order_id,
-                  pending_communication_id: targetPendingId,
-                  pdf_log_id: pdfLog.id,
-                  filename,
-                  size_bytes: sizeBytes,
-                  action: 'pdf_generated_email_triggered',
-                  complete_result: completeResult,
-                  message: 'PDF generated successfully, email sending triggered',
-                },
-              });
             } else {
               console.error(`Failed to send email for order ${order_id}:`, completeResult);
-
-              await supabase.from('email_logs').insert({
-                application_id: application.id,
-                template_id: pdfTemplate.id,
-                recipient_email: pendingComm.recipient_email,
-                subject: `PDF Generated but Email Failed for ${order_id}`,
-                status: 'failed',
-                communication_type: 'email_with_pdf',
-                pdf_generated: true,
-                error_message: completeResult.error || 'Failed to trigger email after PDF generation',
-                metadata: {
-                  order_id,
-                  pending_communication_id: targetPendingId,
-                  pdf_log_id: pdfLog.id,
-                  filename,
-                  size_bytes: sizeBytes,
-                  action: 'pdf_generated_email_failed',
-                  complete_result: completeResult,
-                },
-              });
             }
           } catch (emailError: any) {
             console.error(`Error triggering email send for order ${order_id}:`, emailError);

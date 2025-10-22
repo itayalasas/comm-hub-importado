@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck } from 'lucide-react';
 
 interface Stats {
   totalSent: number;
@@ -419,10 +419,17 @@ export const Statistics = () => {
                       {pendingComms.map((comm) => (
                         <tr key={comm.id} className="hover:bg-amber-700/10 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-amber-500/20 bg-amber-500/10 text-amber-400">
-                              <Clock className="w-4 h-4" />
-                              <span>{comm.status === 'waiting_data' ? 'Esperando datos' : 'Procesando'}</span>
-                            </span>
+                            {comm.status === 'pdf_generated' ? (
+                              <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-green-500/20 bg-green-500/10 text-green-400">
+                                <FileCheck className="w-4 h-4" />
+                                <span>PDF Generado</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-amber-500/20 bg-amber-500/10 text-amber-400">
+                                <Clock className="w-4 h-4" />
+                                <span>{comm.status === 'waiting_data' ? 'Esperando datos' : 'Procesando'}</span>
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-amber-200">{comm.recipient_email}</div>

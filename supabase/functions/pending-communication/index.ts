@@ -201,6 +201,37 @@ Deno.serve(async (req: Request) => {
       const webhookUrl = requestData.webhook_url || null;
       const expiresAt = requestData.expires_at || null;
       const pendingFields = requestData.pending_fields || [];
+      const orderId = requestData.order_id || null;
+
+      if (orderId) {
+        const { data: existing } = await supabase
+          .from('pending_communications')
+          .select('id, status')
+          .eq('order_id', orderId)
+          .eq('application_id', application.id)
+          .in('status', ['waiting_data', 'pdf_generated'])
+          .maybeSingle();
+
+        if (existing) {
+          console.log(`[pending-communication] Found existing pending communication for order ${orderId}:`, existing.id);
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: 'Pending communication already exists for this order',
+              pending_communication_id: existing.id,
+              external_reference_id: externalRefId,
+              status: existing.status,
+              type: 'pdf',
+              note: 'Using existing pending communication',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+      }
 
       const { data: pendingComm, error: pendingError } = await supabase
         .from('pending_communications')
@@ -217,6 +248,7 @@ Deno.serve(async (req: Request) => {
           expires_at: expiresAt,
           communication_type: 'pdf',
           pdf_template_id: template.id,
+          order_id: orderId,
         })
         .select()
         .single();
