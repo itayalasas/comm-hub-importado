@@ -287,6 +287,8 @@ Deno.serve(async (req: Request) => {
         const pdfResult = await pdfResponse.json();
 
         if (!pdfResult.success) {
+          console.error('PDF generation failed:', pdfResult);
+
           await supabase
             .from('pending_communications')
             .update({
@@ -295,6 +297,22 @@ Deno.serve(async (req: Request) => {
               updated_at: new Date().toISOString(),
             })
             .eq('id', pendingComm.id);
+
+          await supabase.from('email_logs').insert({
+            application_id: application.id,
+            template_id: template.id,
+            recipient_email: recipient_email,
+            subject: `Error: PDF generation failed for ${template_name}`,
+            status: 'failed',
+            error_message: `PDF generation failed: ${pdfResult.error || 'Unknown error'}`,
+            communication_type: 'email_with_pdf',
+            metadata: {
+              template_name,
+              request_data: data,
+              pdf_error: pdfResult,
+              endpoint: 'send-email',
+            },
+          });
 
           return new Response(
             JSON.stringify({
@@ -334,6 +352,26 @@ Deno.serve(async (req: Request) => {
             updated_at: new Date().toISOString(),
           })
           .eq('id', pendingComm.id);
+
+        await supabase.from('email_logs').insert({
+          application_id: application.id,
+          template_id: template.id,
+          recipient_email: recipient_email,
+          subject: `Error: Exception generating PDF for ${template_name}`,
+          status: 'failed',
+          error_message: `Exception generating PDF: ${pdfError.message}`,
+          communication_type: 'email_with_pdf',
+          metadata: {
+            template_name,
+            request_data: data,
+            pdf_error: {
+              message: pdfError.message,
+              stack: pdfError.stack,
+              name: pdfError.name,
+            },
+            endpoint: 'send-email',
+          },
+        });
 
         return new Response(
           JSON.stringify({

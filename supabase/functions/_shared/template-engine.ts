@@ -32,7 +32,7 @@ function processEach(html: string, data: TemplateData): string {
 
       if (typeof item === 'object' && item !== null) {
         for (const [key, value] of Object.entries(item)) {
-          const regex = new RegExp(`\\{\\{${key}\\}\\}`, g');
+          const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
           const displayValue = value !== undefined && value !== null ? String(value) : '';
           itemHtml = itemHtml.replace(regex, displayValue);
         }
