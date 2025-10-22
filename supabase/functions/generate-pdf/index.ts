@@ -538,6 +538,26 @@ Deno.serve(async (req: Request) => {
 
     const targetPendingId = pending_communication_id || (pendingComm ? pendingComm.id : null);
 
+    await supabase.from('email_logs').insert({
+      application_id: application.id,
+      template_id: pdfTemplate.id,
+      recipient_email: data.customer?.email || data.recipient_email || 'pdf-only@generated.com',
+      subject: `PDF Generado: ${filename}`,
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+      communication_type: 'pdf_generation',
+      pdf_generated: true,
+      metadata: {
+        endpoint: 'generate-pdf',
+        pdf_id: pdfLog.id,
+        filename,
+        size_bytes: sizeBytes,
+        order_id,
+        pending_communication_id: targetPendingId,
+        template_name: pdfTemplate.name,
+      },
+    });
+
     if (targetPendingId) {
       console.log('Updating pending communication with PDF attachment...');
 
