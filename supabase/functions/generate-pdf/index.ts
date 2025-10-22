@@ -49,7 +49,15 @@ async function htmlToPdfBase64(html: string): Promise<string> {
 
   const pdfArrayBuffer = await response.arrayBuffer();
   const uint8Array = new Uint8Array(pdfArrayBuffer);
-  return btoa(String.fromCharCode(...uint8Array));
+
+  let binaryString = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+    binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+
+  return btoa(binaryString);
 }
 
 Deno.serve(async (req: Request) => {
