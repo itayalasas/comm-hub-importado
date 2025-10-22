@@ -54,8 +54,9 @@ const Router = () => {
 function App() {
   return (
     <AuthProvider>
-      <ToastContainer />
-      <Router />
+      <ToastContainer>
+        <Router />
+      </ToastContainer>
     </AuthProvider>
   );
 }
