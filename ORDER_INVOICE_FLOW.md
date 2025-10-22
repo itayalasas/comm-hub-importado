@@ -91,6 +91,19 @@ Your application (e.g., Dogcatify) creates an order and wants to send an email w
 └─────────────────────┘
 ```
 
+## API Parameters
+
+### /send-email Endpoint
+
+**Required Parameters:**
+- `template_name` (string): Name of the email template to use
+- `recipient_email` (string): Email address of the recipient
+- `data` (object): Variables to populate the template
+
+**Optional Parameters for PDF Communications:**
+- `order_id` (string): Identifier of the order/transaction for tracking and matching
+- `wait_for_invoice` (boolean): If `true`, email will be queued until invoice PDF is generated
+
 ## Step-by-Step Implementation
 
 ### Step 1: Create Order and Queue Email
@@ -353,12 +366,13 @@ ORDER BY created_at DESC;
 
 ## Alternative: Immediate Send (No Waiting)
 
-If you DON'T need to wait for an invoice, simply omit `wait_for_invoice`:
+If you DON'T need to wait for an invoice, simply omit `wait_for_invoice` or set it to `false`:
 
 ```json
 {
   "template_name": "invoice_email",
   "recipient_email": "client@example.com",
+  "order_id": "ORDER-12345",
   "data": {
     "client_name": "John Doe"
   }
@@ -366,3 +380,14 @@ If you DON'T need to wait for an invoice, simply omit `wait_for_invoice`:
 ```
 
 The system will immediately generate the PDF (if template has `pdf_template_id`) and send the email.
+
+## Parameter Combinations and Behavior
+
+| `order_id` | `wait_for_invoice` | Behavior |
+|------------|-------------------|----------|
+| Not provided | Not provided or `false` | If template has PDF, generates immediately and sends email |
+| Provided | Not provided or `false` | Generates PDF immediately, sends email, tracks with `order_id` |
+| Provided | `true` | Creates pending communication, waits for `/generate-pdf` call with matching `order_id` |
+| Not provided | `true` | Creates pending communication with auto-generated reference ID |
+
+**Recommendation:** Always include `order_id` for better tracking and matching between your system and the email platform.
