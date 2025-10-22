@@ -403,21 +403,36 @@ Content-Type: application/json`}
 
       {endpoints.map((endpoint) => (
         <div key={endpoint.id} className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
-          <button
-            onClick={() => toggleEndpoint(endpoint.id)}
-            className="w-full p-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              {expandedEndpoints.includes(endpoint.id) ? (
-                <ChevronDown className="w-5 h-5 text-slate-400" />
-              ) : (
-                <ChevronRight className="w-5 h-5 text-slate-400" />
-              )}
-              {renderMethodBadge(endpoint.method)}
-              <span className="text-white font-semibold">{endpoint.title}</span>
+          <div className="p-4 flex items-center justify-between">
+            <button
+              onClick={() => toggleEndpoint(endpoint.id)}
+              className="flex-1 flex items-center gap-3 hover:bg-slate-700/30 transition-colors -m-4 p-4 rounded-l"
+            >
+              <div className="flex items-center gap-3">
+                {expandedEndpoints.includes(endpoint.id) ? (
+                  <ChevronDown className="w-5 h-5 text-slate-400" />
+                ) : (
+                  <ChevronRight className="w-5 h-5 text-slate-400" />
+                )}
+                {renderMethodBadge(endpoint.method)}
+                <span className="text-white font-semibold">{endpoint.title}</span>
+              </div>
+            </button>
+            <div className="flex items-center gap-2">
+              <code className="text-sm text-slate-400 font-mono">{endpoint.path}</code>
+              <button
+                onClick={() => copyToClipboard(`${supabaseUrl}${endpoint.path}`, `${endpoint.id}-url`)}
+                className="p-2 hover:bg-slate-700 rounded transition-colors"
+                title="Copiar URL completa"
+              >
+                {copiedCode === `${endpoint.id}-url` ? (
+                  <Check className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy className="w-4 h-4 text-slate-400" />
+                )}
+              </button>
             </div>
-            <code className="text-sm text-slate-400 font-mono">{endpoint.path}</code>
-          </button>
+          </div>
 
           {expandedEndpoints.includes(endpoint.id) && (
             <div className="border-t border-slate-700 p-6 space-y-6">
