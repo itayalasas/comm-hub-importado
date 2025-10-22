@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { CheckCircle, XCircle, Clock, Eye, MousePointerClick } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText } from 'lucide-react';
 
 interface Stats {
   totalSent: number;
@@ -10,6 +10,8 @@ interface Stats {
   totalPending: number;
   totalOpened: number;
   totalClicked: number;
+  totalPdfs: number;
+  totalEmailsWithPdf: number;
 }
 
 interface Application {
@@ -34,7 +36,7 @@ export const Statistics = () => {
   const { user } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
-  const [stats, setStats] = useState<Stats>({ totalSent: 0, totalFailed: 0, totalPending: 0, totalOpened: 0, totalClicked: 0 });
+  const [stats, setStats] = useState<Stats>({ totalSent: 0, totalFailed: 0, totalPending: 0, totalOpened: 0, totalClicked: 0, totalPdfs: 0, totalEmailsWithPdf: 0 });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [logs, setLogs] = useState<EmailLog[]>([]);
@@ -114,7 +116,7 @@ export const Statistics = () => {
     try {
       const { data: logs, error } = await supabase
         .from('email_logs')
-        .select('status, opened_at, clicked_at')
+        .select('status, opened_at, clicked_at, communication_type, pdf_generated')
         .eq('application_id', appId);
 
       if (error) throw error;
@@ -124,8 +126,18 @@ export const Statistics = () => {
       const pending = logs?.filter((l) => l.status === 'pending').length || 0;
       const opened = logs?.filter((l) => l.opened_at !== null).length || 0;
       const clicked = logs?.filter((l) => l.clicked_at !== null).length || 0;
+      const pdfs = logs?.filter((l) => l.communication_type === 'pdf' || l.pdf_generated === true).length || 0;
+      const emailsWithPdf = logs?.filter((l) => l.communication_type === 'email_with_pdf' || (l.communication_type === 'email' && l.pdf_generated === true)).length || 0;
 
-      setStats({ totalSent: sent, totalFailed: failed, totalPending: pending, totalOpened: opened, totalClicked: clicked });
+      setStats({
+        totalSent: sent,
+        totalFailed: failed,
+        totalPending: pending,
+        totalOpened: opened,
+        totalClicked: clicked,
+        totalPdfs: pdfs,
+        totalEmailsWithPdf: emailsWithPdf
+      });
     } catch (error) {
       console.error('Error loading stats:', error);
     }
@@ -241,45 +253,67 @@ export const Statistics = () => {
               ))}
             </div>
 
-            <div className="grid md:grid-cols-5 gap-4">
-              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-slate-400">Enviados</h3>
-                  <CheckCircle className="w-5 h-5 text-emerald-400" />
+            <div className="space-y-4">
+              <div className="grid md:grid-cols-5 gap-4">
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-slate-400">Enviados</h3>
+                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <p className="text-3xl font-bold text-white">{stats.totalSent}</p>
                 </div>
-                <p className="text-3xl font-bold text-white">{stats.totalSent}</p>
+
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-slate-400">Fallidos</h3>
+                    <XCircle className="w-5 h-5 text-red-400" />
+                  </div>
+                  <p className="text-3xl font-bold text-white">{stats.totalFailed}</p>
+                </div>
+
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-slate-400">Pendientes</h3>
+                    <Clock className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <p className="text-3xl font-bold text-white">{stats.totalPending}</p>
+                </div>
+
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-slate-400">Abiertos</h3>
+                    <Eye className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <p className="text-3xl font-bold text-white">{stats.totalOpened}</p>
+                </div>
+
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-slate-400">Clics</h3>
+                    <MousePointerClick className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <p className="text-3xl font-bold text-white">{stats.totalClicked}</p>
+                </div>
               </div>
 
-              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-slate-400">Fallidos</h3>
-                  <XCircle className="w-5 h-5 text-red-400" />
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-purple-500/10 backdrop-blur-sm rounded-xl border border-purple-500/30 p-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-purple-300">PDFs Generados</h3>
+                    <FileText className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <p className="text-3xl font-bold text-white">{stats.totalPdfs}</p>
+                  <p className="text-xs text-purple-300/70 mt-1">PDFs creados y enviados</p>
                 </div>
-                <p className="text-3xl font-bold text-white">{stats.totalFailed}</p>
-              </div>
 
-              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-slate-400">Pendientes</h3>
-                  <Clock className="w-5 h-5 text-amber-400" />
+                <div className="bg-amber-500/10 backdrop-blur-sm rounded-xl border border-amber-500/30 p-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-amber-300">Emails con PDF</h3>
+                    <FileText className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <p className="text-3xl font-bold text-white">{stats.totalEmailsWithPdf}</p>
+                  <p className="text-xs text-amber-300/70 mt-1">Emails que incluyen adjuntos PDF</p>
                 </div>
-                <p className="text-3xl font-bold text-white">{stats.totalPending}</p>
-              </div>
-
-              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-slate-400">Abiertos</h3>
-                  <Eye className="w-5 h-5 text-cyan-400" />
-                </div>
-                <p className="text-3xl font-bold text-white">{stats.totalOpened}</p>
-              </div>
-
-              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-slate-400">Clics</h3>
-                  <MousePointerClick className="w-5 h-5 text-blue-400" />
-                </div>
-                <p className="text-3xl font-bold text-white">{stats.totalClicked}</p>
               </div>
             </div>
 
