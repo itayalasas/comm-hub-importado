@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
-import { renderTemplate } from '../_shared/template-engine.ts';
+import { renderTemplate } from './template-engine.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
