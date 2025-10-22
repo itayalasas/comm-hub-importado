@@ -122,27 +122,38 @@ Deno.serve(async (req: Request) => {
       ...completed_data,
     };
 
-    await supabase
-      .from('pending_communications')
-      .update({
-        completed_data: mergedData,
-        status: 'data_received',
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', pendingComm.id);
+    console.log('[complete-pending] Current status:', pendingComm.status);
+    console.log('[complete-pending] Has PDF attachment:', !!pendingComm.completed_data?.pdf_attachment);
 
-    console.log('[complete-pending] Data completed, now sending email...');
+    if (pendingComm.status === 'waiting_data') {
+      await supabase
+        .from('pending_communications')
+        .update({
+          completed_data: mergedData,
+          status: 'data_received',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', pendingComm.id);
+
+      console.log('[complete-pending] Status updated to data_received');
+    }
+
+    console.log('[complete-pending] Now sending email...');
 
     const sendEmailUrl = `${supabaseUrl}/functions/v1/send-email`;
 
     try {
+      const pdfAttachment = pendingComm.completed_data?.pdf_attachment;
+
       const requestBody: any = {
         template_name: pendingComm.template_name,
         recipient_email: pendingComm.recipient_email,
         data: mergedData,
-        _skip_pdf_generation: true,
-        _pdf_attachment: pendingComm.completed_data?.pdf_attachment,
+        _skip_pdf_generation: !!pdfAttachment,
+        _pdf_attachment: pdfAttachment,
       };
+
+      console.log('[complete-pending] Sending email with attachment:', !!pdfAttachment);
 
       const emailResponse = await fetch(sendEmailUrl, {
         method: 'POST',

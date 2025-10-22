@@ -435,15 +435,18 @@ Deno.serve(async (req: Request) => {
 
     if (targetPendingId) {
       console.log('Updating pending communication with PDF attachment...');
+
+      const pdfAttachment = {
+        filename,
+        content: pdfBase64,
+        encoding: 'base64',
+      };
+
       const { error: updateError } = await supabase
         .from('pending_communications')
         .update({
           completed_data: {
-            pdf_attachment: {
-              filename,
-              content: pdfBase64,
-              encoding: 'base64',
-            },
+            pdf_attachment: pdfAttachment,
           },
           status: 'pdf_generated',
           completed_at: new Date().toISOString(),
@@ -454,36 +457,33 @@ Deno.serve(async (req: Request) => {
       if (updateError) {
         console.error('Error updating pending communication:', updateError);
       } else {
-        console.log('Pending communication updated successfully');
+        console.log('Pending communication updated successfully with status: pdf_generated');
+        console.log(`Triggering email send for pending_communication_id: ${targetPendingId}...`);
 
-        if (pendingComm && order_id) {
-          console.log(`Triggering email send for order ${order_id}...`);
+        try {
+          const completeUrl = `${supabaseUrl}/functions/v1/complete-pending-communication`;
 
-          try {
-            const completeUrl = `${supabaseUrl}/functions/v1/complete-pending-communication`;
+          const completeResponse = await fetch(completeUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+              'x-api-key': apiKey,
+            },
+            body: JSON.stringify({
+              pending_communication_id: targetPendingId,
+            }),
+          });
 
-            const completeResponse = await fetch(completeUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${supabaseKey}`,
-                'x-api-key': apiKey,
-              },
-              body: JSON.stringify({
-                pending_communication_id: targetPendingId,
-              }),
-            });
+          const completeResult = await completeResponse.json();
 
-            const completeResult = await completeResponse.json();
-
-            if (completeResult.success) {
-              console.log(`Email sent successfully for order ${order_id}`);
-            } else {
-              console.error(`Failed to send email for order ${order_id}:`, completeResult);
-            }
-          } catch (emailError: any) {
-            console.error(`Error triggering email send for order ${order_id}:`, emailError);
+          if (completeResult.success) {
+            console.log(`Email sent successfully for pending_communication_id: ${targetPendingId}`);
+          } else {
+            console.error(`Failed to send email for pending_communication_id ${targetPendingId}:`, completeResult);
           }
+        } catch (emailError: any) {
+          console.error(`Error triggering email send for pending_communication_id ${targetPendingId}:`, emailError);
         }
       }
     }
