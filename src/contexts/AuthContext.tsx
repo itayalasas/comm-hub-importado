@@ -1,0 +1,129 @@
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+
+const AUTH_URL = import.meta.env.VITE_AUTH_URL;
+const AUTH_APP_ID = import.meta.env.VITE_AUTH_APP_ID;
+const AUTH_API_KEY = import.meta.env.VITE_AUTH_API_KEY;
+const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI;
+
+interface User {
+  sub: string;
+  name: string;
+  email: string;
+  picture?: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  isAuth: boolean;
+  isLoading: boolean;
+  login: () => void;
+  logout: () => void;
+  handleCallback: (code: string) => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider = ({ children }: AuthProviderProps) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    const storedToken = localStorage.getItem('access_token');
+
+    if (storedUser && storedToken) {
+      setUser(JSON.parse(storedUser));
+    }
+    setIsLoading(false);
+  }, []);
+
+  const login = () => {
+    const authUrl = `${AUTH_URL}/oauth/authorize?` +
+      `client_id=${AUTH_APP_ID}&` +
+      `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
+      `response_type=code&` +
+      `scope=openid profile email`;
+
+    window.location.href = authUrl;
+  };
+
+  const logout = () => {
+    localStorage.removeItem('user');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    setUser(null);
+    window.location.href = '/';
+  };
+
+  const handleCallback = async (code: string) => {
+    try {
+      const tokenResponse = await fetch(`${AUTH_URL}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${AUTH_API_KEY}`,
+        },
+        body: JSON.stringify({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: REDIRECT_URI,
+          client_id: AUTH_APP_ID,
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to exchange code for token');
+      }
+
+      const tokens = await tokenResponse.json();
+      localStorage.setItem('access_token', tokens.access_token);
+      if (tokens.refresh_token) {
+        localStorage.setItem('refresh_token', tokens.refresh_token);
+      }
+
+      const userInfoResponse = await fetch(`${AUTH_URL}/oauth/userinfo`, {
+        headers: {
+          'Authorization': `Bearer ${tokens.access_token}`,
+        },
+      });
+
+      if (!userInfoResponse.ok) {
+        throw new Error('Failed to fetch user info');
+      }
+
+      const userInfo = await userInfoResponse.json();
+      localStorage.setItem('user', JSON.stringify(userInfo));
+      setUser(userInfo);
+    } catch (error) {
+      console.error('Error in handleCallback:', error);
+      throw error;
+    }
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuth: !!user,
+        isLoading,
+        login,
+        logout,
+        handleCallback,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
