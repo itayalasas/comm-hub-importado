@@ -76,6 +76,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     window.location.href = '/';
   };
 
+  const decodeJWT = (token: string): any => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.error('Error decoding JWT:', error);
+      return null;
+    }
+  };
+
   const handleCallback = async (tokenOrCode: string) => {
     try {
       let accessToken = tokenOrCode;
@@ -108,19 +125,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       localStorage.setItem('access_token', accessToken);
 
-      const userInfoResponse = await fetch(`${AUTH_URL}/api/user`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const decodedToken = decodeJWT(accessToken);
 
-      if (!userInfoResponse.ok) {
-        throw new Error('Failed to fetch user info');
+      if (!decodedToken) {
+        throw new Error('Failed to decode token');
       }
 
-      const userInfo = await userInfoResponse.json();
+      const userInfo: User = {
+        sub: decodedToken.sub || decodedToken.user_id || decodedToken.id,
+        name: decodedToken.name || decodedToken.username || 'Usuario',
+        email: decodedToken.email || '',
+        picture: decodedToken.picture || decodedToken.avatar,
+      };
+
       localStorage.setItem('user', JSON.stringify(userInfo));
       setUser(userInfo);
     } catch (error) {
