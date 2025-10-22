@@ -591,7 +591,7 @@ export const Statistics = () => {
                         const engagement = getEngagementStatus(log);
                         const isExpanded = expandedLogs.has(log.id);
                         const children = childLogs[log.id] || [];
-                        const hasChildren = log.communication_type === 'pdf_generation';
+                        const hasChildren = log.communication_type === 'email_with_pdf' || (log.pdf_generated && log.communication_type !== 'pdf_generation');
 
                         return (
                           <>

@@ -540,35 +540,6 @@ Deno.serve(async (req: Request) => {
 
     const targetPendingId = pending_communication_id || (pendingComm ? pendingComm.id : null);
 
-    // Create a log entry for PDF generation (will be parent of email send)
-    const { data: pdfGenerationLog, error: pdfLogError } = await supabase
-      .from('email_logs')
-      .insert({
-        application_id: application.id,
-        template_id: pdfTemplate.id,
-        recipient_email: data.customer?.email || data.recipient_email || 'pdf-only@generated.com',
-        subject: `PDF Generado: ${filename}`,
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        communication_type: 'pdf_generation',
-        pdf_generated: true,
-        metadata: {
-          endpoint: 'generate-pdf',
-          pdf_id: pdfLog.id,
-          filename,
-          size_bytes: sizeBytes,
-          order_id,
-          pending_communication_id: targetPendingId,
-          template_name: pdfTemplate.name,
-        },
-      })
-      .select()
-      .single();
-
-    if (pdfLogError) {
-      console.error('Error creating PDF generation log:', pdfLogError);
-    }
-
     if (targetPendingId) {
       console.log('Updating pending communication with PDF attachment...');
 
@@ -583,7 +554,10 @@ Deno.serve(async (req: Request) => {
         .update({
           completed_data: {
             pdf_attachment: pdfAttachment,
-            pdf_generation_log_id: pdfGenerationLog?.id,
+            pdf_log_id: pdfLog.id,
+            pdf_template_id: pdfTemplate.id,
+            pdf_filename: filename,
+            pdf_size_bytes: sizeBytes,
           },
           status: 'pdf_generated',
           completed_at: new Date().toISOString(),

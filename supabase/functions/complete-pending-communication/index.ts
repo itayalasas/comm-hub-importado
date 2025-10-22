@@ -144,7 +144,12 @@ Deno.serve(async (req: Request) => {
 
     try {
       const pdfAttachment = pendingComm.completed_data?.pdf_attachment;
-      const pdfGenerationLogId = pendingComm.completed_data?.pdf_generation_log_id;
+      const pdfInfo = {
+        pdf_log_id: pendingComm.completed_data?.pdf_log_id,
+        pdf_template_id: pendingComm.completed_data?.pdf_template_id,
+        pdf_filename: pendingComm.completed_data?.pdf_filename,
+        pdf_size_bytes: pendingComm.completed_data?.pdf_size_bytes,
+      };
 
       const requestBody: any = {
         template_name: pendingComm.template_name,
@@ -152,7 +157,7 @@ Deno.serve(async (req: Request) => {
         data: mergedData,
         _skip_pdf_generation: !!pdfAttachment,
         _pdf_attachment: pdfAttachment,
-        _parent_log_id: pdfGenerationLogId,
+        _pdf_info: pdfInfo,
       };
 
       console.log('[complete-pending] Sending email with attachment:', !!pdfAttachment);
