@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Mail, CheckCircle, XCircle, Clock, Eye } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, MousePointerClick } from 'lucide-react';
 
 interface Stats {
   totalSent: number;
   totalFailed: number;
   totalPending: number;
+  totalOpened: number;
+  totalClicked: number;
 }
 
 interface Application {
@@ -32,7 +34,9 @@ export const Statistics = () => {
   const { user } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
-  const [stats, setStats] = useState<Stats>({ totalSent: 0, totalFailed: 0, totalPending: 0 });
+  const [stats, setStats] = useState<Stats>({ totalSent: 0, totalFailed: 0, totalPending: 0, totalOpened: 0, totalClicked: 0 });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [logs, setLogs] = useState<EmailLog[]>([]);
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,7 +64,7 @@ export const Statistics = () => {
           },
           (payload) => {
             if (payload.eventType === 'INSERT') {
-              setLogs((prev) => [payload.new as EmailLog, ...prev.slice(0, 49)]);
+              setLogs((prev) => [payload.new as EmailLog, ...prev]);
               loadStats(selectedApp);
             } else if (payload.eventType === 'UPDATE') {
               setLogs((prev) =>
@@ -110,7 +114,7 @@ export const Statistics = () => {
     try {
       const { data: logs, error } = await supabase
         .from('email_logs')
-        .select('status')
+        .select('status, opened_at, clicked_at')
         .eq('application_id', appId);
 
       if (error) throw error;
@@ -118,8 +122,10 @@ export const Statistics = () => {
       const sent = logs?.filter((l) => l.status === 'sent').length || 0;
       const failed = logs?.filter((l) => l.status === 'failed').length || 0;
       const pending = logs?.filter((l) => l.status === 'pending').length || 0;
+      const opened = logs?.filter((l) => l.opened_at !== null).length || 0;
+      const clicked = logs?.filter((l) => l.clicked_at !== null).length || 0;
 
-      setStats({ totalSent: sent, totalFailed: failed, totalPending: pending });
+      setStats({ totalSent: sent, totalFailed: failed, totalPending: pending, totalOpened: opened, totalClicked: clicked });
     } catch (error) {
       console.error('Error loading stats:', error);
     }
@@ -215,7 +221,7 @@ export const Statistics = () => {
               ))}
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-5 gap-4">
               <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-medium text-slate-400">Enviados</h3>
@@ -239,17 +245,24 @@ export const Statistics = () => {
                 </div>
                 <p className="text-3xl font-bold text-white">{stats.totalPending}</p>
               </div>
+
+              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-slate-400">Abiertos</h3>
+                  <Eye className="w-5 h-5 text-cyan-400" />
+                </div>
+                <p className="text-3xl font-bold text-white">{stats.totalOpened}</p>
+              </div>
+
+              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-slate-400">Clics</h3>
+                  <MousePointerClick className="w-5 h-5 text-blue-400" />
+                </div>
+                <p className="text-3xl font-bold text-white">{stats.totalClicked}</p>
+              </div>
             </div>
 
-            <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
-              <div className="flex items-center space-x-2 mb-4">
-                <Mail className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-lg font-semibold text-white">Resumen</h3>
-              </div>
-              <p className="text-slate-400">
-                Total de comunicaciones: {stats.totalSent + stats.totalFailed + stats.totalPending}
-              </p>
-            </div>
 
             <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 overflow-hidden">
               <div className="p-6 border-b border-slate-700">
@@ -282,7 +295,7 @@ export const Statistics = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700/50">
-                      {logs.map((log) => {
+                      {logs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((log) => {
                         const engagement = getEngagementStatus(log);
                         return (
                           <tr key={log.id} className="hover:bg-slate-700/20 transition-colors">
@@ -318,6 +331,46 @@ export const Statistics = () => {
                       })}
                     </tbody>
                   </table>
+                )}
+
+                {logs.length > itemsPerPage && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t border-slate-700">
+                    <div className="text-sm text-slate-400">
+                      Mostrando {Math.min((currentPage - 1) * itemsPerPage + 1, logs.length)} a{' '}
+                      {Math.min(currentPage * itemsPerPage, logs.length)} de {logs.length} registros
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Anterior
+                      </button>
+                      <div className="flex items-center space-x-1">
+                        {Array.from({ length: Math.ceil(logs.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page)}
+                            className={`px-3 py-2 rounded-lg transition-colors ${
+                              currentPage === page
+                                ? 'bg-cyan-500 text-white'
+                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => setCurrentPage(Math.min(Math.ceil(logs.length / itemsPerPage), currentPage + 1))}
+                        disabled={currentPage === Math.ceil(logs.length / itemsPerPage)}
+                        className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Siguiente
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

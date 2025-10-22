@@ -3,7 +3,7 @@ import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
-import { Plus, Copy, Trash2, Key } from 'lucide-react';
+import { Plus, Copy, Trash2, Key, Eye, EyeOff } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -18,6 +18,7 @@ export const Dashboard = () => {
   const { user } = useAuth();
   const toast = useToast();
   const [applications, setApplications] = useState<Application[]>([]);
+  const [visibleApiKeys, setVisibleApiKeys] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -104,6 +105,18 @@ export const Dashboard = () => {
     toast.success(`${label} copiado al portapapeles`);
   };
 
+  const toggleApiKeyVisibility = (appId: string) => {
+    setVisibleApiKeys((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(appId)) {
+        newSet.delete(appId);
+      } else {
+        newSet.add(appId);
+      }
+      return newSet;
+    });
+  };
+
   if (loading) {
     return (
       <Layout currentPage="dashboard">
@@ -184,15 +197,31 @@ export const Dashboard = () => {
                           <Key className="w-3 h-3 text-slate-500" />
                           <span className="text-xs text-slate-500 font-medium">API Key</span>
                         </div>
-                        <button
-                          onClick={() => copyToClipboard(app.api_key!, 'API Key')}
-                          className="p-1 text-slate-400 hover:text-cyan-400 transition-colors"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => toggleApiKeyVisibility(app.id)}
+                            className="p-1 text-slate-400 hover:text-cyan-400 transition-colors"
+                            title={visibleApiKeys.has(app.id) ? 'Ocultar API Key' : 'Mostrar API Key'}
+                          >
+                            {visibleApiKeys.has(app.id) ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                          {visibleApiKeys.has(app.id) && (
+                            <button
+                              onClick={() => copyToClipboard(app.api_key!, 'API Key')}
+                              className="p-1 text-slate-400 hover:text-cyan-400 transition-colors"
+                              title="Copiar API Key"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <code className="text-sm text-cyan-400 font-mono break-all">
-                        {app.api_key}
+                        {visibleApiKeys.has(app.id) ? app.api_key : '••••••••••••••••••••••••••••••••'}
                       </code>
                     </div>
                   )}
