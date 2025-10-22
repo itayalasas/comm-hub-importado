@@ -245,6 +245,8 @@ Deno.serve(async (req: Request) => {
           external_reference_id: externalRefId,
           external_system: 'pdf_generator',
           status: 'waiting_data',
+          communication_type: 'pdf',
+          pdf_template_id: template.pdf_template_id,
         })
         .select()
         .single();
@@ -376,17 +378,23 @@ Deno.serve(async (req: Request) => {
     htmlContent = processLogoAndQR(htmlContent, data, template);
     subject = prepareForSMTP(subject);
 
+    const hasPdfAttachment = !!pdfAttachment;
+    const communicationType = hasPdfAttachment ? 'email_with_pdf' : 'email';
+
     const emailLog = {
       application_id: application.id,
       template_id: template.id,
       recipient_email,
       subject,
       status: 'pending',
+      communication_type: communicationType,
+      pdf_generated: hasPdfAttachment,
       metadata: {
         data,
         has_attachment: template.has_attachment,
         has_logo: template.has_logo,
         has_qr: template.has_qr,
+        pdf_attachment: hasPdfAttachment,
         request_headers: {
           'user-agent': req.headers.get('user-agent'),
           'x-forwarded-for': req.headers.get('x-forwarded-for'),
@@ -456,11 +464,14 @@ Deno.serve(async (req: Request) => {
       const endTime = Date.now();
       const processingTime = endTime - startTime;
 
+      const pdfSize = pdfAttachment ? pdfAttachment.content.length : null;
+
       await supabase
         .from('email_logs')
         .update({
           status: 'sent',
           sent_at: new Date().toISOString(),
+          pdf_attachment_size: pdfSize,
           metadata: {
             ...emailLog.metadata,
             processing_time_ms: processingTime,
@@ -472,6 +483,20 @@ Deno.serve(async (req: Request) => {
           },
         })
         .eq('id', logEntry.id);
+
+      if (pdfAttachment && template.pdf_template_id) {
+        await supabase
+          .from('pending_communications')
+          .update({
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+            sent_log_id: logEntry.id,
+            pdf_generated: true,
+          })
+          .eq('template_name', template_name)
+          .eq('recipient_email', recipient_email)
+          .eq('status', 'data_received');
+      }
 
       return new Response(
         JSON.stringify({
