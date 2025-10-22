@@ -479,9 +479,11 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('Rendering HTML template with data...');
-    const htmlContent = renderTemplate(pdfTemplate.html_content, data);
+    // Wrap data in an object to match template structure (e.g., {{data.issuer.razon_social}})
+    const templateData = { data };
+    const htmlContent = renderTemplate(pdfTemplate.html_content, templateData);
 
-    const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', data);
+    const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', templateData);
 
     console.log('Converting HTML to PDF with PDFShift API...');
     const pdfBase64 = await htmlToPdfBase64(htmlContent);
