@@ -32,6 +32,18 @@ interface EmailLog {
   created_at: string;
 }
 
+interface PendingCommunication {
+  id: string;
+  recipient_email: string;
+  template_name: string;
+  status: string;
+  communication_type: string;
+  pending_fields: string[];
+  external_reference_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export const Statistics = () => {
   const { user } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
@@ -40,6 +52,7 @@ export const Statistics = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [logs, setLogs] = useState<EmailLog[]>([]);
+  const [pendingComms, setPendingComms] = useState<PendingCommunication[]>([]);
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -53,8 +66,9 @@ export const Statistics = () => {
     if (selectedApp) {
       loadStats(selectedApp);
       loadLogs(selectedApp);
+      loadPendingCommunications(selectedApp);
 
-      const channel = supabase
+      const emailLogsChannel = supabase
         .channel(`email_logs_${selectedApp}`)
         .on(
           'postgres_changes',
@@ -83,8 +97,38 @@ export const Statistics = () => {
         )
         .subscribe();
 
+      const pendingChannel = supabase
+        .channel(`pending_communications_${selectedApp}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'pending_communications',
+            filter: `application_id=eq.${selectedApp}`,
+          },
+          (payload) => {
+            if (payload.eventType === 'INSERT') {
+              setPendingComms((prev) => [payload.new as PendingCommunication, ...prev]);
+              loadStats(selectedApp);
+            } else if (payload.eventType === 'UPDATE') {
+              setPendingComms((prev) =>
+                prev.map((comm) =>
+                  comm.id === payload.new.id ? (payload.new as PendingCommunication) : comm
+                )
+              );
+              loadStats(selectedApp);
+            } else if (payload.eventType === 'DELETE') {
+              setPendingComms((prev) => prev.filter((comm) => comm.id !== payload.old.id));
+              loadStats(selectedApp);
+            }
+          }
+        )
+        .subscribe();
+
       return () => {
-        supabase.removeChannel(channel);
+        supabase.removeChannel(emailLogsChannel);
+        supabase.removeChannel(pendingChannel);
       };
     }
   }, [selectedApp]);
@@ -121,9 +165,16 @@ export const Statistics = () => {
 
       if (error) throw error;
 
+      const { data: pendingData } = await supabase
+        .from('pending_communications')
+        .select('status')
+        .eq('application_id', appId)
+        .in('status', ['waiting_data', 'processing']);
+
       const sent = logs?.filter((l) => l.status === 'sent').length || 0;
       const failed = logs?.filter((l) => l.status === 'failed').length || 0;
-      const pending = logs?.filter((l) => l.status === 'pending').length || 0;
+      const logsPending = logs?.filter((l) => l.status === 'pending').length || 0;
+      const commsPending = pendingData?.length || 0;
       const opened = logs?.filter((l) => l.opened_at !== null).length || 0;
       const clicked = logs?.filter((l) => l.clicked_at !== null).length || 0;
       const pdfs = logs?.filter((l) => l.communication_type === 'pdf' || l.pdf_generated === true).length || 0;
@@ -132,7 +183,7 @@ export const Statistics = () => {
       setStats({
         totalSent: sent,
         totalFailed: failed,
-        totalPending: pending,
+        totalPending: logsPending + commsPending,
         totalOpened: opened,
         totalClicked: clicked,
         totalPdfs: pdfs,
@@ -156,6 +207,23 @@ export const Statistics = () => {
       setLogs(data || []);
     } catch (error) {
       console.error('Error loading logs:', error);
+    }
+  };
+
+  const loadPendingCommunications = async (appId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('pending_communications')
+        .select('*')
+        .eq('application_id', appId)
+        .in('status', ['waiting_data', 'processing'])
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      setPendingComms(data || []);
+    } catch (error) {
+      console.error('Error loading pending communications:', error);
     }
   };
 
@@ -317,6 +385,73 @@ export const Statistics = () => {
               </div>
             </div>
 
+
+            {pendingComms.length > 0 && (
+              <div className="bg-amber-900/20 backdrop-blur-sm rounded-xl border border-amber-700/50 overflow-hidden">
+                <div className="p-6 border-b border-amber-700/50">
+                  <div className="flex items-center space-x-2">
+                    <Clock className="w-5 h-5 text-amber-400" />
+                    <h3 className="text-lg font-semibold text-amber-300">Comunicaciones Pendientes</h3>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-amber-700/50">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-amber-400 uppercase tracking-wider">
+                          Estado
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-amber-400 uppercase tracking-wider">
+                          Destinatario
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-amber-400 uppercase tracking-wider">
+                          Template
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-amber-400 uppercase tracking-wider">
+                          Campos Pendientes
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-amber-400 uppercase tracking-wider">
+                          Fecha
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-700/30">
+                      {pendingComms.map((comm) => (
+                        <tr key={comm.id} className="hover:bg-amber-700/10 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-amber-500/20 bg-amber-500/10 text-amber-400">
+                              <Clock className="w-4 h-4" />
+                              <span>{comm.status === 'waiting_data' ? 'Esperando datos' : 'Procesando'}</span>
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-amber-200">{comm.recipient_email}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-amber-300">{comm.template_name}</div>
+                            <div className="text-xs text-amber-400/60">{comm.communication_type}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-wrap gap-1">
+                              {comm.pending_fields.map((field, idx) => (
+                                <span key={idx} className="px-2 py-1 bg-amber-500/20 text-amber-300 rounded text-xs">
+                                  {field}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-amber-400">
+                              {formatDate(comm.created_at)}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 overflow-hidden">
               <div className="p-6 border-b border-slate-700">
