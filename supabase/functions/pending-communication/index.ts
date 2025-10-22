@@ -9,7 +9,13 @@ const corsHeaders = {
 interface SendCommunicationRequest {
   template_name: string;
   recipient_email: string;
-  data: Record<string, any>;
+  data?: Record<string, any>;
+  base_data?: Record<string, any>;
+  pending_fields?: string[];
+  external_reference_id?: string;
+  external_system?: string;
+  webhook_url?: string;
+  expires_at?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -21,20 +27,64 @@ Deno.serve(async (req: Request) => {
   }
 
   const startTime = Date.now();
+  let application: any = null;
+  let supabase: any = null;
 
   try {
-    console.log('[pending-communication] Request received:', {
-      method: req.method,
-      url: req.url,
-      headers: Object.fromEntries(req.headers.entries()),
-    });
+    console.log('[pending-communication] Request received');
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl, supabaseKey);
 
     const apiKey = req.headers.get('x-api-key');
-    console.log('[pending-communication] API Key present:', !!apiKey);
+
+    let requestData: any = null;
+    let requestBody = '';
+
+    try {
+      requestBody = await req.text();
+      requestData = JSON.parse(requestBody);
+      console.log('[pending-communication] Request parsed successfully');
+    } catch (parseError: any) {
+      console.error('[pending-communication] JSON parse error:', parseError);
+
+      if (apiKey) {
+        const { data: app } = await supabase
+          .from('applications')
+          .select('id')
+          .eq('api_key', apiKey)
+          .maybeSingle();
+
+        if (app) {
+          await supabase.from('email_logs').insert({
+            application_id: app.id,
+            template_id: null,
+            recipient_email: 'unknown@error.com',
+            subject: 'Error: Invalid JSON',
+            status: 'failed',
+            error_message: `JSON parse error at pending-communication: ${parseError.message}`,
+            metadata: {
+              raw_body: requestBody.substring(0, 1000),
+              parse_error: parseError.message,
+              endpoint: 'pending-communication',
+            },
+          });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Invalid JSON',
+          details: parseError.message,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
 
     if (!apiKey) {
       console.error('[pending-communication] Missing API key');
@@ -50,18 +100,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: application, error: appError } = await supabase
+    const { data: app, error: appError } = await supabase
       .from('applications')
       .select('id, name')
       .eq('api_key', apiKey)
       .maybeSingle();
 
-    console.log('[pending-communication] Application lookup:', {
-      found: !!application,
-      error: appError,
-    });
-
-    if (appError || !application) {
+    if (appError || !app) {
       console.error('[pending-communication] Invalid API key or app not found');
       return new Response(
         JSON.stringify({
@@ -75,16 +120,30 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const requestData: SendCommunicationRequest = await req.json();
-    const { template_name, recipient_email, data } = requestData;
+    application = app;
+    const { template_name, recipient_email, data, base_data } = requestData;
+    const emailData = data || base_data || {};
 
     console.log('[pending-communication] Request data:', {
       template_name,
       recipient_email,
-      hasData: !!data,
+      hasData: !!emailData,
     });
 
     if (!template_name || !recipient_email) {
+      await supabase.from('email_logs').insert({
+        application_id: application.id,
+        template_id: null,
+        recipient_email: recipient_email || 'unknown@error.com',
+        subject: 'Error: Missing required fields',
+        status: 'failed',
+        error_message: 'Missing required fields: template_name, recipient_email',
+        metadata: {
+          request_data: requestData,
+          endpoint: 'pending-communication',
+        },
+      });
+
       return new Response(
         JSON.stringify({
           success: false,
@@ -105,13 +164,23 @@ Deno.serve(async (req: Request) => {
       .eq('is_active', true)
       .maybeSingle();
 
-    console.log('[pending-communication] Template lookup:', {
-      found: !!template,
-      error: templateError,
-    });
-
     if (templateError || !template) {
       console.error('[pending-communication] Template not found or inactive');
+
+      await supabase.from('email_logs').insert({
+        application_id: application.id,
+        template_id: null,
+        recipient_email: recipient_email,
+        subject: `Error: Template '${template_name}' not found`,
+        status: 'failed',
+        error_message: 'Template not found or inactive',
+        metadata: {
+          template_name,
+          request_data: requestData,
+          endpoint: 'pending-communication',
+        },
+      });
+
       return new Response(
         JSON.stringify({
           success: false,
@@ -138,7 +207,7 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           template_name,
           recipient_email,
-          data: data || {},
+          data: emailData,
         }),
       });
 
