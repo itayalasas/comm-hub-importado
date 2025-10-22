@@ -56,7 +56,7 @@ export default function Documentation() {
       title: 'Generar PDF',
       method: 'POST',
       path: '/functions/v1/generate-pdf',
-      description: 'Genera un PDF desde un template HTML. El PDF se guarda y puede usarse en comunicaciones pendientes.',
+      description: 'Genera un PDF desde un template HTML usando jsPDF. El PDF se guarda en la base de datos y puede adjuntarse a comunicaciones pendientes si se proporciona un order_id.',
       authentication: 'API Key (x-api-key header)',
       headers: [
         { name: 'x-api-key', type: 'string', required: true, description: 'Tu API key de la aplicación' },
@@ -65,20 +65,55 @@ export default function Documentation() {
       requestBody: {
         contentType: 'application/json',
         schema: {
-          pdf_template_name: 'string (required)',
+          pdf_template_name: 'string (required*)',
+          template_id: 'string (required*)',
           data: 'object (required)',
-          external_reference_id: 'string (optional)',
+          order_id: 'string (optional)',
+          pending_communication_id: 'string (optional)',
         },
         example: {
-          pdf_template_name: 'invoice_pdf',
+          order_id: 'ORDER-1234567',
+          pdf_template_name: 'invoice_template',
           data: {
-            client_name: 'Juan Pérez',
-            invoice_number: 'FAC-2025-001',
-            invoice_date: '2025-10-21',
-            items: 'Consulta veterinaria',
-            total: '$150.00',
+            response_payload: {
+              success: true,
+              approved: true,
+              reference: 'CFE-123456789',
+              numero_cfe: '101000001',
+              serie_cfe: 'A',
+              tipo_cfe: '101',
+              cae: '12345678901234',
+              vencimiento_cae: '2025-10-29',
+              qr_code: 'https://servicios.dgi.gub.uy/cfe?id=abc123...',
+              dgi_estado: 'aprobado',
+            },
+            issuer: {
+              numero_cfe: 'INV-1729567890-a2396dce',
+              serie: 'A',
+              rut: '211234560018',
+              razon_social: 'Empresa Demo S.A.',
+              fecha_emision: '2025-10-22',
+              moneda: 'UYU',
+              subtotal: 819.67,
+              iva: 180.33,
+              total: 1000.00,
+            },
+            items: [
+              {
+                descripcion: 'Producto o Servicio',
+                cantidad: 2,
+                precio_unitario: 409.84,
+                iva_porcentaje: 22,
+                subtotal: 819.68,
+                iva: 180.33,
+                total: 1000.01,
+              },
+            ],
+            datos_adicionales: {
+              observaciones: 'Venta al público',
+              forma_pago: 'Efectivo',
+            },
           },
-          external_reference_id: 'INVOICE-12345',
         },
       },
       responses: [
@@ -89,10 +124,10 @@ export default function Documentation() {
             success: true,
             message: 'PDF generated successfully',
             data: {
-              pdf_id: 'uuid-pdf-123',
-              pdf_base64: 'JVBERi0xLjQKJeLjz9MK...',
-              filename: 'factura_FAC-2025-001.pdf',
-              size_bytes: 45678,
+              pdf_id: 'e52fbc58-1a59-4f14-8b24-2e4a3c8c7b91',
+              pdf_base64: 'JVBERi0xLjQKJeLjz9MKMyAwIG9iago8PC9UeXBlIC9QYWdlcy9LaWRzWzQgMCBSXS9Db3VudCAxL01lZGlhQm94WzAgMCA1OTUuMjggODQxLjg5XT4+CmVuZG9iago0IDAgb2JqCjw8L1R5cGUgL1BhZ2UvUGFyZW50IDMgMCBSL0NvbnRlbnRzIDUgMCBSL1Jlc291cmNlczw8L0ZvbnQ8PC9GMSA3IDAgUi9GMiA5IDAgUj4+Pj4+PgplbmRvYmoKNSAwIG9iago8PC9MZW5ndGggNjcxPj4Kc3RyZWFtCkJUCi9GMSA0MCBUZgooSW52b2ljZSBJTlYtMTcyOTU2Nzg5MC1hMjM5NmRjZSkgVGoKL0YyIDE0IFRmCihFbXByZXNhIERlbW8gUy5BLikgVGoKKFJVVDogMjExMjM0NTYwMDE4KSBUagooRmVjaGEgZGUgZW1pc2nDs246IDIwMjUtMTAtMjIpIFRqCihNb25lZGE6IFVZVSkgVGoKKFN1YnRvdGFsOiA4MTkuNjcpIFRqCihJVkE6IDE4MC4zMykgVGoKKFRvdGFsOiAxMDAwLjAwKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCjYgMCBvYmoKPDwvVHlwZS9DYXRhbG9nL1BhZ2VzIDMgMCBSPj4KZW5kb2JqCjcgMCBvYmoKPDwvVHlwZS9Gb250L1N1YnR5cGUvVHlwZTEvQmFzZUZvbnQvSGVsdmV0aWNhL0VuY29kaW5nL1dpbkFuc2lFbmNvZGluZz4+CmVuZG9iago5IDAgb2JqCjw8L1R5cGUvRm9udC9TdWJ0eXBlL1R5cGUxL0Jhc2VGb250L0hlbHZldGljYS1Cb2xkL0VuY29kaW5nL1dpbkFuc2lFbmNvZGluZz4+CmVuZG9iagp4cmVmCjAgMTAKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwOTggMDAwMDAgbiAKMDAwMDAwMDEzNiAwMDAwMCBuIAowMDAwMDAwMjExIDAwMDAwIG4gCjAwMDAwMDAzMzEgMDAwMDAgbiAKMDAwMDAwMTA1MSAwMDAwMCBuIAowMDAwMDAxMTAwIDAwMDAwIG4gCjAwMDAwMDExOTkgMDAwMDAgbiAKMDAwMDAwMTMwNCAwMDAwMCBuIAp0cmFpbGVyCjw8L1NpemUgMTAvUm9vdCA2IDAgUi9JbmZvIDEgMCBSPj4Kc3RhcnR4cmVmCjE0MDkKJSVFT0YK...',
+              filename: 'invoice_INV-1729567890-a2396dce.pdf',
+              size_bytes: 8245,
             },
           },
         },
@@ -102,6 +137,23 @@ export default function Documentation() {
           example: {
             success: false,
             error: 'PDF template not found or inactive',
+            details: 'Template not found',
+          },
+        },
+        {
+          code: '400',
+          description: 'Parámetros faltantes o inválidos',
+          example: {
+            success: false,
+            error: 'Either template_id or pdf_template_name is required',
+          },
+        },
+        {
+          code: '401',
+          description: 'API key inválida',
+          example: {
+            success: false,
+            error: 'Invalid API key',
           },
         },
       ],
@@ -525,6 +577,13 @@ Content-Type: application/json`}
                               <span className="text-amber-400">{String(value)}</span>
                             </div>
                           ))}
+                          {endpoint.id === 'generate-pdf' && (
+                            <div className="mt-3 pt-3 border-t border-slate-700">
+                              <p className="text-xs text-amber-400 mb-1">* Solo necesitas UNO de estos:</p>
+                              <p className="text-xs text-slate-400">• <code className="text-cyan-400">pdf_template_name</code>: Nombre del template (ej: "invoice_template")</p>
+                              <p className="text-xs text-slate-400">• <code className="text-cyan-400">template_id</code>: UUID del template</p>
+                            </div>
+                          )}
                         </div>
                         <div className="relative">
                           <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
