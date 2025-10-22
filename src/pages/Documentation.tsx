@@ -513,11 +513,11 @@ Content-Type: application/json`}
                         </div>
                         <div className="relative">
                           <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
-                            {JSON.stringify(endpoint.requestBody.example, null, 2)}
+                            {endpoint.requestBody?.example && JSON.stringify(endpoint.requestBody.example, null, 2)}
                           </pre>
                           <button
                             onClick={() =>
-                              copyToClipboard(
+                              endpoint.requestBody?.example && copyToClipboard(
                                 JSON.stringify(endpoint.requestBody.example, null, 2),
                                 `${endpoint.id}-request`
                               )
