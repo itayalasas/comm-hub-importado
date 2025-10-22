@@ -11,7 +11,7 @@ This project uses PDFShift API to convert HTML templates to PDF documents with f
 3. Navigate to your Dashboard
 4. Copy your API key
 
-### 2. Configure Environment Variables
+### 2. Configure Local Environment Variables (Optional - for local testing)
 
 Add your PDFShift API key to your `.env` file:
 
@@ -22,15 +22,70 @@ PDFSHIFT_API_URL=https://api.pdfshift.io/v3/convert/pdf
 
 **IMPORTANT:** Replace `your_actual_api_key_here` with your real PDFShift API key.
 
-### 3. Supabase Environment Variables
+### 3. Configure Supabase Edge Functions Secrets (REQUIRED) ⚠️
 
-For production, you need to add these environment variables to your Supabase project:
+**This is the critical step!** The Edge Functions run on Supabase's servers and need the API key configured there.
 
-1. Go to your Supabase Dashboard
-2. Navigate to **Project Settings** → **Edge Functions**
-3. Add the following secrets:
-   - `PDFSHIFT_API_KEY` = your PDFShift API key
-   - `PDFSHIFT_API_URL` = `https://api.pdfshift.io/v3/convert/pdf`
+#### Method 1: Using Supabase Dashboard (Easiest) ⭐
+
+1. Go to your Supabase Dashboard: **https://supabase.com/dashboard**
+2. Select your project: **drhbcmithlrldtjlhnee**
+3. Click on **Project Settings** (gear icon ⚙️ in the bottom left sidebar)
+4. In the settings menu, click on **Edge Functions**
+5. Scroll down to the **Environment Variables** or **Secrets** section
+6. Click **Add new secret** or **New secret**
+7. Add these two secrets one by one:
+
+**Secret 1:**
+- Name: `PDFSHIFT_API_KEY`
+- Value: Your actual PDFShift API key (from step 1)
+
+**Secret 2:**
+- Name: `PDFSHIFT_API_URL`
+- Value: `https://api.pdfshift.io/v3/convert/pdf`
+
+8. Click **Save** or **Add** for each secret
+9. **Important:** The secrets are available immediately - no need to redeploy
+
+#### Method 2: Using Supabase CLI (Advanced)
+
+If you have Supabase CLI installed and linked to your project:
+
+```bash
+# Login to Supabase
+supabase login
+
+# Link to your project
+supabase link --project-ref drhbcmithlrldtjlhnee
+
+# Set the PDFShift API Key
+supabase secrets set PDFSHIFT_API_KEY=your_actual_api_key_here
+
+# Set the PDFShift API URL
+supabase secrets set PDFSHIFT_API_URL=https://api.pdfshift.io/v3/convert/pdf
+
+# Verify secrets are set
+supabase secrets list
+```
+
+### 4. Verify Configuration
+
+After setting the secrets in Supabase Dashboard, test the endpoint immediately:
+
+```bash
+curl -X POST https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/generate-pdf \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pdf_template_name": "invoice_email_service",
+    "data": {
+      "order_id": "TEST-001"
+    }
+  }'
+```
+
+✅ **Success:** You should get a PDF generated successfully
+❌ **Still getting error?** Double-check that you saved the secrets in the Supabase Dashboard
 
 ## How It Works
 
