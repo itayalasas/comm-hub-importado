@@ -7,6 +7,7 @@ export const Callback = () => {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
     const code = params.get('code');
     const errorParam = params.get('error');
 
@@ -18,7 +19,9 @@ export const Callback = () => {
       return;
     }
 
-    if (!code) {
+    const authToken = token || code;
+
+    if (!authToken) {
       setError('No se recibió código de autenticación.');
       setTimeout(() => {
         window.location.href = '/';
@@ -26,7 +29,7 @@ export const Callback = () => {
       return;
     }
 
-    handleCallback(code)
+    handleCallback(authToken)
       .then(() => {
         window.location.href = '/dashboard';
       })
