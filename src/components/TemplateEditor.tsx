@@ -36,6 +36,7 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
   const [showAddVariable, setShowAddVariable] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [pdfTemplates, setPdfTemplates] = useState<any[]>([]);
+  const [detectedVariables, setDetectedVariables] = useState<Set<string>>(new Set());
   const [newVariable, setNewVariable] = useState<PredefinedVariable>({
     name: '',
     description: '',
@@ -46,6 +47,37 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
     loadCustomVariables();
     loadPdfTemplates();
   }, [applicationId]);
+
+  useEffect(() => {
+    if (formData.html_content) {
+      extractVariablesFromTemplate(formData.html_content);
+    }
+  }, [formData.html_content]);
+
+  const extractVariablesFromTemplate = (html: string) => {
+    const variables = new Set<string>();
+
+    const simpleVarRegex = /\{\{([a-zA-Z0-9_.@]+)\}\}/g;
+    let match;
+    while ((match = simpleVarRegex.exec(html)) !== null) {
+      const varName = match[1];
+      if (!varName.startsWith('@') && varName !== 'this') {
+        variables.add(varName);
+      }
+    }
+
+    const eachRegex = /\{\{#each\s+([a-zA-Z0-9_.]+)\}\}/g;
+    while ((match = eachRegex.exec(html)) !== null) {
+      variables.add(match[1] + ' (array)');
+    }
+
+    const ifRegex = /\{\{#if\s+([a-zA-Z0-9_.]+)\}\}/g;
+    while ((match = ifRegex.exec(html)) !== null) {
+      variables.add(match[1]);
+    }
+
+    setDetectedVariables(variables);
+  };
 
   const loadPdfTemplates = async () => {
     if (!applicationId) return;
@@ -439,9 +471,134 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
                   </div>
                 </div>
               </div>
+
+              <div className="bg-amber-500/10 p-4 rounded-lg border border-amber-500/30">
+                <h3 className="text-sm font-semibold text-amber-400 mb-3">Estructuras Complejas</h3>
+                <p className="text-xs text-slate-400 mb-3">
+                  Inserta loops y condicionales para datos complejos
+                </p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      const loopTemplate = `{{#each items}}
+  <tr>
+    <td>{{descripcion}}</td>
+    <td>{{cantidad}}</td>
+    <td>{{precio}}</td>
+  </tr>
+{{/each}}`;
+                      setFormData({
+                        ...formData,
+                        html_content: formData.html_content + '\n' + loopTemplate,
+                      });
+                    }}
+                    className="w-full text-left px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs transition-colors border border-slate-700"
+                  >
+                    <div className="font-medium text-amber-300 mb-1">🔄 Loop sobre Array</div>
+                    <div className="text-slate-400">Itera sobre lista de items</div>
+                    <code className="block mt-1 text-[10px] text-slate-500">
+                      {`{{#each items}} ... {{/each}}`}
+                    </code>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const conditionalTemplate = `{{#if has_discount}}
+  <p>Descuento: {{discount_amount}}</p>
+{{/if}}`;
+                      setFormData({
+                        ...formData,
+                        html_content: formData.html_content + '\n' + conditionalTemplate,
+                      });
+                    }}
+                    className="w-full text-left px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs transition-colors border border-slate-700"
+                  >
+                    <div className="font-medium text-green-300 mb-1">❓ Condicional Simple</div>
+                    <div className="text-slate-400">Muestra si condición es verdadera</div>
+                    <code className="block mt-1 text-[10px] text-slate-500">
+                      {`{{#if condition}} ... {{/if}}`}
+                    </code>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const conditionalElseTemplate = `{{#if is_paid}}
+  <span class="paid">Pagado</span>
+{{else}}
+  <span class="pending">Pendiente</span>
+{{/if}}`;
+                      setFormData({
+                        ...formData,
+                        html_content: formData.html_content + '\n' + conditionalElseTemplate,
+                      });
+                    }}
+                    className="w-full text-left px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs transition-colors border border-slate-700"
+                  >
+                    <div className="font-medium text-blue-300 mb-1">⚡ Condicional con Else</div>
+                    <div className="text-slate-400">Muestra contenido alternativo</div>
+                    <code className="block mt-1 text-[10px] text-slate-500">
+                      {`{{#if}} ... {{else}} ... {{/if}}`}
+                    </code>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const nestedObjectTemplate = `<p>Emisor: {{issuer.razon_social}}</p>
+<p>RUT: {{issuer.rut}}</p>`;
+                      setFormData({
+                        ...formData,
+                        html_content: formData.html_content + '\n' + nestedObjectTemplate,
+                      });
+                    }}
+                    className="w-full text-left px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs transition-colors border border-slate-700"
+                  >
+                    <div className="font-medium text-purple-300 mb-1">📦 Objeto Anidado</div>
+                    <div className="text-slate-400">Accede a propiedades de objetos</div>
+                    <code className="block mt-1 text-[10px] text-slate-500">
+                      {`{{object.property}}`}
+                    </code>
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-4">
+              {detectedVariables.size > 0 && (
+                <div className="bg-cyan-500/10 p-4 rounded-lg border border-cyan-500/30">
+                  <h3 className="text-sm font-semibold text-cyan-400 mb-3">Variables del Template</h3>
+                  <p className="text-xs text-slate-400 mb-3">
+                    Variables detectadas en tu template HTML
+                  </p>
+                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                    {Array.from(detectedVariables).sort().map((varName) => (
+                      <div
+                        key={varName}
+                        className="px-3 py-2 bg-slate-800 rounded text-xs font-mono text-cyan-300 border border-slate-700"
+                      >
+                        {varName.includes('(array)') ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-amber-400">🔄</span>
+                            <span>{varName.replace(' (array)', '')}</span>
+                            <span className="text-xs text-slate-500">(loop)</span>
+                          </div>
+                        ) : varName.includes('.') ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-purple-400">📦</span>
+                            <span>{varName}</span>
+                            <span className="text-xs text-slate-500">(anidada)</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-green-400">✓</span>
+                            <span>{varName}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 sticky top-0">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-white">Variables Predefinidas</h3>
