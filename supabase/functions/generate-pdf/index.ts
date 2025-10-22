@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 
-export interface TemplateData {
+interface TemplateData {
   [key: string]: any;
 }
 
@@ -340,7 +340,9 @@ Deno.serve(async (req: Request) => {
         .select('*')
         .eq('order_id', order_id)
         .eq('application_id', application.id)
-        .eq('status', 'waiting_data')
+        .in('status', ['waiting_data', 'pdf_generated'])
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (pendingError) {
