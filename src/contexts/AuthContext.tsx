@@ -17,6 +17,7 @@ interface AuthContextType {
   isAuth: boolean;
   isLoading: boolean;
   login: () => void;
+  register: () => void;
   logout: () => void;
   handleCallback: (code: string) => Promise<void>;
 }
@@ -50,11 +51,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const login = () => {
-    const authUrl = `${AUTH_URL}/oauth/authorize?` +
-      `client_id=${AUTH_APP_ID}&` +
+    const authUrl = `${AUTH_URL}/login?` +
+      `app_id=${AUTH_APP_ID}&` +
       `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
-      `response_type=code&` +
-      `scope=openid profile email`;
+      `api_key=${AUTH_API_KEY}`;
+
+    window.location.href = authUrl;
+  };
+
+  const register = () => {
+    const authUrl = `${AUTH_URL}/register?` +
+      `app_id=${AUTH_APP_ID}&` +
+      `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
+      `api_key=${AUTH_API_KEY}`;
 
     window.location.href = authUrl;
   };
@@ -119,6 +128,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         isAuth: !!user,
         isLoading,
         login,
+        register,
         logout,
         handleCallback,
       }}
