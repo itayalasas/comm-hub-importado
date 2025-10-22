@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+import { renderTemplate } from '../_shared/template-engine.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -295,21 +296,11 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    let htmlContent = template.html_content;
-    let subject = template.subject || '';
+    let htmlContent = renderTemplate(template.html_content, data);
+    let subject = renderTemplate(template.subject || '', data);
 
     console.log('Variables received:', JSON.stringify(data));
-    console.log('Template contains cta_url?', htmlContent.includes('{{cta_url}}'));
-
-    Object.keys(data).forEach((key) => {
-      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-      const value = data[key] !== undefined && data[key] !== null ? String(data[key]) : '';
-      console.log(`Replacing {{${key}}} with: ${value}`);
-      htmlContent = htmlContent.replace(regex, value);
-      subject = subject.replace(regex, value);
-    });
-
-    console.log('After replacement, still contains {{cta_url}}?', htmlContent.includes('{{cta_url}}'));
+    console.log('Template rendered with advanced template engine');
 
     htmlContent = processLogoAndQR(htmlContent, data, template);
     subject = prepareForSMTP(subject);
