@@ -20,6 +20,7 @@ interface SendEmailRequest {
     content: string;
     encoding: string;
   };
+  _parent_log_id?: string;
 }
 
 const generateQRCode = (data: string): string => {
@@ -176,7 +177,7 @@ Deno.serve(async (req: Request) => {
     }
 
     application = app;
-    const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment } = requestData;
+    const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment, _parent_log_id } = requestData;
 
     if (!template_name || !recipient_email) {
       await supabase.from('email_logs').insert({
@@ -506,7 +507,7 @@ Deno.serve(async (req: Request) => {
     const hasPdfAttachment = !!pdfAttachment;
     const communicationType = hasPdfAttachment ? 'email_with_pdf' : 'email';
 
-    const emailLog = {
+    const emailLog: any = {
       application_id: application.id,
       template_id: template.id,
       recipient_email,
@@ -526,6 +527,11 @@ Deno.serve(async (req: Request) => {
         },
       },
     };
+
+    // Link to parent transaction if provided (e.g., PDF generation)
+    if (_parent_log_id) {
+      emailLog.parent_log_id = _parent_log_id;
+    }
 
     const { data: logData, error: logError } = await supabase
       .from('email_logs')

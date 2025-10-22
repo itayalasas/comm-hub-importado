@@ -3,7 +3,7 @@ import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
-import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2 } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
 
 interface Stats {
   totalSent: number;
@@ -31,6 +31,9 @@ interface EmailLog {
   error_message: string | null;
   metadata: any;
   created_at: string;
+  parent_log_id: string | null;
+  communication_type: string;
+  pdf_generated: boolean;
 }
 
 interface PendingCommunication {
@@ -58,6 +61,8 @@ export const Statistics = () => {
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
   const [deleteConfirmPending, setDeleteConfirmPending] = useState<string | null>(null);
   const [deleteConfirmLog, setDeleteConfirmLog] = useState<string | null>(null);
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
+  const [childLogs, setChildLogs] = useState<Record<string, EmailLog[]>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -204,6 +209,7 @@ export const Statistics = () => {
         .from('email_logs')
         .select('*')
         .eq('application_id', appId)
+        .is('parent_log_id', null)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -212,6 +218,34 @@ export const Statistics = () => {
     } catch (error) {
       console.error('Error loading logs:', error);
     }
+  };
+
+  const loadChildLogs = async (parentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('email_logs')
+        .select('*')
+        .eq('parent_log_id', parentId)
+        .order('created_at', { ascending: true});
+
+      if (error) throw error;
+      setChildLogs(prev => ({ ...prev, [parentId]: data || [] }));
+    } catch (error) {
+      console.error('Error loading child logs:', error);
+    }
+  };
+
+  const toggleExpand = async (logId: string) => {
+    const newExpanded = new Set(expandedLogs);
+    if (newExpanded.has(logId)) {
+      newExpanded.delete(logId);
+    } else {
+      newExpanded.add(logId);
+      if (!childLogs[logId]) {
+        await loadChildLogs(logId);
+      }
+    }
+    setExpandedLogs(newExpanded);
   };
 
   const loadPendingCommunications = async (appId: string) => {
@@ -555,46 +589,109 @@ export const Statistics = () => {
                     <tbody className="divide-y divide-slate-700/50">
                       {logs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((log) => {
                         const engagement = getEngagementStatus(log);
+                        const isExpanded = expandedLogs.has(log.id);
+                        const children = childLogs[log.id] || [];
+                        const hasChildren = log.communication_type === 'pdf_generation';
+
                         return (
-                          <tr key={log.id} className="hover:bg-slate-700/20 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span
-                                className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border ${engagement.color}`}
-                              >
-                                {engagement.icon}
-                                <span>{engagement.label}</span>
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-white">{log.recipient_email}</div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="text-sm text-slate-300 max-w-md truncate">{log.subject}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-slate-400">
-                                {formatDate(log.sent_at || log.created_at)}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={() => setSelectedLog(log)}
-                                  className="p-2 text-slate-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-slate-700/30"
-                                  title="Ver detalles"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setDeleteConfirmLog(log.id)}
-                                  className="p-2 text-slate-400 hover:text-red-400 transition-colors rounded-lg hover:bg-red-900/20"
-                                  title="Eliminar"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
+                          <>
+                            <tr key={log.id} className="hover:bg-slate-700/20 transition-colors">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center space-x-2">
+                                  {hasChildren && (
+                                    <button
+                                      onClick={() => toggleExpand(log.id)}
+                                      className="p-1 text-slate-400 hover:text-white transition-colors"
+                                      title={isExpanded ? "Colapsar" : "Expandir"}
+                                    >
+                                      {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                    </button>
+                                  )}
+                                  <span
+                                    className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border ${engagement.color}`}
+                                  >
+                                    {engagement.icon}
+                                    <span>{engagement.label}</span>
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-white">{log.recipient_email}</div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="text-sm text-slate-300 max-w-md truncate">{log.subject}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-slate-400">
+                                  {formatDate(log.sent_at || log.created_at)}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={() => setSelectedLog(log)}
+                                    className="p-2 text-slate-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-slate-700/30"
+                                    title="Ver detalles"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteConfirmLog(log.id)}
+                                    className="p-2 text-slate-400 hover:text-red-400 transition-colors rounded-lg hover:bg-red-900/20"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            {isExpanded && children.map((child) => {
+                              const childEngagement = getEngagementStatus(child);
+                              return (
+                                <tr key={child.id} className="bg-slate-800/30 hover:bg-slate-700/30 transition-colors">
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="flex items-center space-x-2 pl-8">
+                                      <span
+                                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border ${childEngagement.color}`}
+                                      >
+                                        {childEngagement.icon}
+                                        <span>{childEngagement.label}</span>
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-sm text-slate-300">{child.recipient_email}</div>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <div className="text-sm text-slate-400 max-w-md truncate">{child.subject}</div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-sm text-slate-500">
+                                      {formatDate(child.sent_at || child.created_at)}
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="flex items-center space-x-2">
+                                      <button
+                                        onClick={() => setSelectedLog(child)}
+                                        className="p-2 text-slate-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-slate-700/30"
+                                        title="Ver detalles"
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => setDeleteConfirmLog(child.id)}
+                                        className="p-2 text-slate-400 hover:text-red-400 transition-colors rounded-lg hover:bg-red-900/20"
+                                        title="Eliminar"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </>
                         );
                       })}
                     </tbody>
