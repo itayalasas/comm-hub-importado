@@ -56,7 +56,8 @@ export const Statistics = () => {
   const [logs, setLogs] = useState<EmailLog[]>([]);
   const [pendingComms, setPendingComms] = useState<PendingCommunication[]>([]);
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleteConfirmPending, setDeleteConfirmPending] = useState<string | null>(null);
+  const [deleteConfirmLog, setDeleteConfirmLog] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -282,25 +283,48 @@ export const Statistics = () => {
   };
 
   const deletePendingCommunication = async () => {
-    if (!deleteConfirm) return;
+    if (!deleteConfirmPending) return;
 
     try {
       const { error } = await supabase
         .from('pending_communications')
         .delete()
-        .eq('id', deleteConfirm);
+        .eq('id', deleteConfirmPending);
 
       if (error) throw error;
 
-      toast.success('Comunicación eliminada exitosamente');
-      setDeleteConfirm(null);
+      toast.success('Comunicación pendiente eliminada exitosamente');
+      setDeleteConfirmPending(null);
       if (selectedApp) {
         loadPendingCommunications(selectedApp);
         loadStats(selectedApp);
       }
     } catch (error) {
       console.error('Error deleting pending communication:', error);
-      toast.error('Error al eliminar la comunicación');
+      toast.error('Error al eliminar la comunicación pendiente');
+    }
+  };
+
+  const deleteEmailLog = async () => {
+    if (!deleteConfirmLog) return;
+
+    try {
+      const { error } = await supabase
+        .from('email_logs')
+        .delete()
+        .eq('id', deleteConfirmLog);
+
+      if (error) throw error;
+
+      toast.success('Registro de comunicación eliminado exitosamente');
+      setDeleteConfirmLog(null);
+      if (selectedApp) {
+        loadLogs(selectedApp);
+        loadStats(selectedApp);
+      }
+    } catch (error) {
+      console.error('Error deleting email log:', error);
+      toast.error('Error al eliminar el registro');
     }
   };
 
@@ -483,7 +507,7 @@ export const Statistics = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <button
-                              onClick={() => setDeleteConfirm(comm.id)}
+                              onClick={() => setDeleteConfirmPending(comm.id)}
                               className="p-2 text-amber-400 hover:text-red-400 transition-colors rounded-lg hover:bg-red-900/20"
                               title="Eliminar"
                             >
@@ -553,13 +577,22 @@ export const Statistics = () => {
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <button
-                                onClick={() => setSelectedLog(log)}
-                                className="p-2 text-slate-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-slate-700/30"
-                                title="Ver detalles"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => setSelectedLog(log)}
+                                  className="p-2 text-slate-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-slate-700/30"
+                                  title="Ver detalles"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setDeleteConfirmLog(log.id)}
+                                  className="p-2 text-slate-400 hover:text-red-400 transition-colors rounded-lg hover:bg-red-900/20"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -613,7 +646,7 @@ export const Statistics = () => {
         )}
       </div>
 
-      {deleteConfirm && (
+      {deleteConfirmPending && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold text-white mb-2">Eliminar Comunicación Pendiente</h3>
@@ -622,13 +655,38 @@ export const Statistics = () => {
             </p>
             <div className="flex space-x-3">
               <button
-                onClick={() => setDeleteConfirm(null)}
+                onClick={() => setDeleteConfirmPending(null)}
                 className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={deletePendingCommunication}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmLog && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-white mb-2">Eliminar Registro de Comunicación</h3>
+            <p className="text-slate-300 text-sm mb-6">
+              ¿Estás seguro de que deseas eliminar este registro del historial? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setDeleteConfirmLog(null)}
+                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deleteEmailLog}
                 className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
               >
                 Eliminar
