@@ -210,6 +210,27 @@ Deno.serve(async (req: Request) => {
           }
         );
       } else {
+        console.error('[complete-pending] Email send failed:', emailResult);
+
+        await supabase.from('email_logs').insert({
+          application_id: application.id,
+          template_id: null,
+          recipient_email: pendingComm.recipient_email,
+          subject: `Failed to complete pending communication for ${pendingComm.order_id || pendingComm.id}`,
+          status: 'failed',
+          error_message: emailResult.error || 'Failed to send email',
+          communication_type: pendingComm.communication_type || 'email',
+          metadata: {
+            pending_communication_id: pendingComm.id,
+            external_reference_id: pendingComm.external_reference_id,
+            order_id: pendingComm.order_id,
+            template_name: pendingComm.template_name,
+            action: 'email_send_failed_from_complete',
+            email_result: emailResult,
+            message: 'Failed to send email after completing pending communication',
+          },
+        });
+
         await supabase
           .from('pending_communications')
           .update({
@@ -232,6 +253,28 @@ Deno.serve(async (req: Request) => {
       }
     } catch (sendError: any) {
       console.error('[complete-pending] Error sending email:', sendError);
+
+      await supabase.from('email_logs').insert({
+        application_id: application.id,
+        template_id: null,
+        recipient_email: pendingComm.recipient_email,
+        subject: `Exception completing pending communication for ${pendingComm.order_id || pendingComm.id}`,
+        status: 'failed',
+        error_message: sendError.message,
+        communication_type: pendingComm.communication_type || 'email',
+        metadata: {
+          pending_communication_id: pendingComm.id,
+          external_reference_id: pendingComm.external_reference_id,
+          order_id: pendingComm.order_id,
+          template_name: pendingComm.template_name,
+          action: 'exception_sending_email',
+          error_details: {
+            name: sendError.name,
+            message: sendError.message,
+            stack: sendError.stack,
+          },
+        },
+      });
 
       await supabase
         .from('pending_communications')
