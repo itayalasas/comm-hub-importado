@@ -394,12 +394,14 @@ export const Statistics = () => {
         pdfBase64 = log.metadata.pdf_base64;
       }
 
+      const templateData = log.metadata?.template_data || log.metadata?.data || {};
+
       const payload: any = {
         recipient_email: log.recipient_email,
         subject: log.subject,
         template_name: log.metadata?.template_name || 'default',
         application_id: selectedApp,
-        template_data: log.metadata?.template_data || {}
+        data: templateData
       };
 
       if (pdfBase64) {
