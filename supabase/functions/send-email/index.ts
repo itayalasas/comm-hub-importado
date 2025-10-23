@@ -273,6 +273,30 @@ Deno.serve(async (req: Request) => {
 
         if (pendingError) {
           console.error('Error creating pending communication:', pendingError);
+
+          await supabase.from('email_logs').insert({
+            application_id: application.id,
+            template_id: template.id,
+            recipient_email,
+            subject: renderTemplate(template.subject || '', data),
+            status: 'failed',
+            error_message: `Failed to create pending communication: ${pendingError.message}`,
+            communication_type: 'email_with_pdf',
+            pdf_generated: false,
+            metadata: {
+              order_id,
+              wait_for_invoice: true,
+              data,
+              action: 'pending_communication_creation_failed',
+              error_details: {
+                code: pendingError.code,
+                message: pendingError.message,
+                details: pendingError.details,
+                hint: pendingError.hint,
+              },
+            },
+          });
+
           return new Response(
             JSON.stringify({
               success: false,
@@ -346,6 +370,29 @@ Deno.serve(async (req: Request) => {
 
       if (pendingError) {
         console.error('Error creating pending communication:', pendingError);
+
+        await supabase.from('email_logs').insert({
+          application_id: application.id,
+          template_id: template.id,
+          recipient_email,
+          subject: renderTemplate(template.subject || '', data),
+          status: 'failed',
+          error_message: `Failed to create pending communication: ${pendingError.message}`,
+          communication_type: 'email_with_pdf',
+          pdf_generated: false,
+          metadata: {
+            order_id: order_id || null,
+            data,
+            action: 'pending_communication_creation_failed',
+            error_details: {
+              code: pendingError.code,
+              message: pendingError.message,
+              details: pendingError.details,
+              hint: pendingError.hint,
+            },
+          },
+        });
+
         return new Response(
           JSON.stringify({
             success: false,
