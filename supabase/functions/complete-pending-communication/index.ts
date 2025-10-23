@@ -145,11 +145,13 @@ Deno.serve(async (req: Request) => {
     try {
       const pdfAttachment = pendingComm.completed_data?.pdf_attachment;
       const pdfInfo = {
-        pdf_log_id: pendingComm.completed_data?.pdf_log_id,
+        pdf_log_id: pendingComm.completed_data?.pdf_generation_log_id,
         pdf_template_id: pendingComm.completed_data?.pdf_template_id,
         pdf_filename: pendingComm.completed_data?.pdf_filename,
         pdf_size_bytes: pendingComm.completed_data?.pdf_size_bytes,
       };
+
+      console.log('[complete-pending] PDF info being passed:', JSON.stringify(pdfInfo));
 
       const requestBody: any = {
         template_name: pendingComm.template_name,
@@ -221,24 +223,7 @@ Deno.serve(async (req: Request) => {
       } else {
         console.error('[complete-pending] Email send failed:', emailResult);
 
-        await supabase.from('email_logs').insert({
-          application_id: application.id,
-          template_id: null,
-          recipient_email: pendingComm.recipient_email,
-          subject: `Failed to complete pending communication for ${pendingComm.order_id || pendingComm.id}`,
-          status: 'failed',
-          error_message: emailResult.error || 'Failed to send email',
-          communication_type: pendingComm.communication_type || 'email',
-          metadata: {
-            pending_communication_id: pendingComm.id,
-            external_reference_id: pendingComm.external_reference_id,
-            order_id: pendingComm.order_id,
-            template_name: pendingComm.template_name,
-            action: 'email_send_failed_from_complete',
-            email_result: emailResult,
-            message: 'Failed to send email after completing pending communication',
-          },
-        });
+        console.log('[complete-pending] Error already logged by send-email function');
 
         await supabase
           .from('pending_communications')

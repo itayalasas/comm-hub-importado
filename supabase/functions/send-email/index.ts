@@ -697,11 +697,12 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', logEntry.id);
 
-      if (pdfAttachment && _pdf_info) {
+      if (pdfAttachment && _pdf_info && _pdf_info.pdf_filename) {
         console.log('[send-email] Creating PDF generation log as child of email log...');
+        console.log('[send-email] PDF info:', JSON.stringify(_pdf_info));
+        console.log('[send-email] Parent log ID:', logEntry.id);
 
-        // Create a child log entry for the PDF generation
-        await supabase
+        const { data: pdfChildLog, error: pdfLogError } = await supabase
           .from('email_logs')
           .insert({
             application_id: application.id,
@@ -721,11 +722,19 @@ Deno.serve(async (req: Request) => {
               pending_communication_id: _pending_communication_id,
               action: 'pdf_generated',
               template_name: template.name,
-              parent_log_id: logEntry.id,
+              pdf_generation_log_id: _pdf_info.pdf_log_id,
             },
-          });
+          })
+          .select()
+          .single();
 
-        console.log('[send-email] PDF generation log created as child successfully');
+        if (pdfLogError) {
+          console.error('[send-email] Error creating PDF child log:', pdfLogError);
+        } else {
+          console.log('[send-email] PDF generation log created as child successfully with ID:', pdfChildLog.id);
+        }
+      } else {
+        console.log('[send-email] Skipping PDF child log creation. pdfAttachment:', !!pdfAttachment, '_pdf_info:', !!_pdf_info, 'pdf_filename:', _pdf_info?.pdf_filename);
       }
 
       if (pdfAttachment && template.pdf_template_id) {
