@@ -491,7 +491,36 @@ Deno.serve(async (req: Request) => {
 
     console.log('PDF generated successfully:', { filename, sizeBytes });
 
-    let emailLog: any = null;
+    const { data: emailLog, error: emailLogError } = await supabase
+      .from('email_logs')
+      .insert({
+        application_id: application.id,
+        template_id: pdfTemplate.id,
+        recipient_email: 'pdf_generation@system.local',
+        subject: `PDF Generated: ${filename}`,
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        communication_type: 'pdf_generation',
+        pdf_generated: true,
+        metadata: {
+          endpoint: 'generate-pdf',
+          filename,
+          size_bytes: sizeBytes,
+          order_id,
+          pending_communication_id,
+          action: 'pdf_generated',
+          template_name: pdfTemplate.name,
+          data,
+        },
+      })
+      .select()
+      .single();
+
+    if (emailLogError) {
+      console.error('[generate-pdf] Error creating email_log entry:', emailLogError);
+    } else {
+      console.log('[generate-pdf] Email log created with ID:', emailLog.id);
+    }
 
     const { data: pdfLog, error: logError } = await supabase
       .from('pdf_generation_logs')
@@ -540,6 +569,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log('[generate-pdf] PDF generation logged successfully. email_log_id:', emailLog?.id, ', pdf_log_id:', pdfLog.id);
+
     const targetPendingId = pending_communication_id || (pendingComm ? pendingComm.id : null);
 
     if (targetPendingId) {
@@ -561,6 +592,7 @@ Deno.serve(async (req: Request) => {
         ...currentPending?.completed_data,
         pdf_attachment: pdfAttachment,
         pdf_generation_log_id: pdfLog.id,
+        pdf_log_id: emailLog?.id,
         pdf_template_id: pdfTemplate.id,
         pdf_filename: filename,
         pdf_size_bytes: sizeBytes,
