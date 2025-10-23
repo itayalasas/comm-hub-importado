@@ -22,6 +22,7 @@ interface SendEmailRequest {
   };
   _pdf_info?: {
     pdf_log_id?: string;
+    pdf_generation_log_id?: string;
     pdf_template_id?: string;
     pdf_filename?: string;
     pdf_size_bytes?: number;
@@ -710,40 +711,44 @@ Deno.serve(async (req: Request) => {
         .eq('id', logEntry.id);
 
       if (pdfAttachment && _pdf_info && _pdf_info.pdf_filename) {
-        console.log('[send-email] Creating PDF generation log as child of email log...');
-        console.log('[send-email] PDF info:', JSON.stringify(_pdf_info));
-        console.log('[send-email] Parent log ID:', logEntry.id);
-
-        const { data: pdfChildLog, error: pdfLogError } = await supabase
-          .from('email_logs')
-          .insert({
-            application_id: application.id,
-            template_id: _pdf_info.pdf_template_id || template.pdf_template_id,
-            recipient_email: 'pdf_generation@system.local',
-            subject: `PDF Generated: ${_pdf_info.pdf_filename || 'document.pdf'}`,
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-            communication_type: 'pdf_generation',
-            pdf_generated: true,
-            parent_log_id: logEntry.id,
-            metadata: {
-              endpoint: 'send-email',
-              filename: _pdf_info.pdf_filename,
-              size_bytes: _pdf_info.pdf_size_bytes,
-              order_id: order_id || null,
-              pending_communication_id: _pending_communication_id,
-              action: 'pdf_generated',
-              template_name: template.name,
-              pdf_generation_log_id: _pdf_info.pdf_log_id,
-            },
-          })
-          .select()
-          .single();
-
-        if (pdfLogError) {
-          console.error('[send-email] Error creating PDF child log:', pdfLogError);
+        if (_pdf_info.pdf_log_id || _pdf_info.pdf_generation_log_id) {
+          console.log('[send-email] PDF already logged by generate-pdf function, skipping duplicate log creation');
+          console.log('[send-email] Existing PDF log ID:', _pdf_info.pdf_log_id || _pdf_info.pdf_generation_log_id);
         } else {
-          console.log('[send-email] PDF generation log created as child successfully with ID:', pdfChildLog.id);
+          console.log('[send-email] Creating PDF generation log as child of email log...');
+          console.log('[send-email] PDF info:', JSON.stringify(_pdf_info));
+          console.log('[send-email] Parent log ID:', logEntry.id);
+
+          const { data: pdfChildLog, error: pdfLogError } = await supabase
+            .from('email_logs')
+            .insert({
+              application_id: application.id,
+              template_id: _pdf_info.pdf_template_id || template.pdf_template_id,
+              recipient_email: 'pdf_generation@system.local',
+              subject: `PDF Generated: ${_pdf_info.pdf_filename || 'document.pdf'}`,
+              status: 'sent',
+              sent_at: new Date().toISOString(),
+              communication_type: 'pdf_generation',
+              pdf_generated: true,
+              parent_log_id: logEntry.id,
+              metadata: {
+                endpoint: 'send-email',
+                filename: _pdf_info.pdf_filename,
+                size_bytes: _pdf_info.pdf_size_bytes,
+                order_id: order_id || null,
+                pending_communication_id: _pending_communication_id,
+                action: 'pdf_generated',
+                template_name: template.name,
+              },
+            })
+            .select()
+            .single();
+
+          if (pdfLogError) {
+            console.error('[send-email] Error creating PDF child log:', pdfLogError);
+          } else {
+            console.log('[send-email] PDF generation log created as child successfully with ID:', pdfChildLog.id);
+          }
         }
       } else {
         console.log('[send-email] Skipping PDF child log creation. pdfAttachment:', !!pdfAttachment, '_pdf_info:', !!_pdf_info, 'pdf_filename:', _pdf_info?.pdf_filename);
