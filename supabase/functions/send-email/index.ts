@@ -698,7 +698,7 @@ Deno.serve(async (req: Request) => {
           sent_at: new Date().toISOString(),
           pdf_attachment_size: pdfSize,
           metadata: {
-            ...emailLog.metadata,
+            ...(logEntry.metadata || {}),
             processing_time_ms: processingTime,
             smtp_config: {
               host: credentials.smtp_host,
@@ -797,7 +797,7 @@ Deno.serve(async (req: Request) => {
           status: 'failed',
           error_message: emailError.message || String(emailError),
           metadata: {
-            ...emailLog.metadata,
+            ...(logEntry.metadata || {}),
             processing_time_ms: processingTime,
             error_details: {
               name: emailError.name,
