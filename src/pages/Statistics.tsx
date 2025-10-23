@@ -803,7 +803,7 @@ export const Statistics = () => {
                       <div className="flex items-center space-x-1">
                         {Array.from({ length: Math.ceil(logs.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
                           <button
-                            key={page}
+                            key={`page-${page}`}
                             onClick={() => setCurrentPage(page)}
                             className={`px-3 py-2 rounded-lg transition-colors ${
                               currentPage === page
