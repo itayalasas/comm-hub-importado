@@ -186,6 +186,18 @@ Deno.serve(async (req: Request) => {
     application = app;
     const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment, _pdf_info, _pending_communication_id, _existing_log_id } = requestData;
 
+    console.log('[send-email] Request params:', {
+      template_name,
+      recipient_email,
+      order_id,
+      wait_for_invoice,
+      _skip_pdf_generation,
+      has_pdf_attachment: !!_pdf_attachment,
+      _pdf_info,
+      _pending_communication_id,
+      _existing_log_id,
+    });
+
     if (!template_name || !recipient_email) {
       await supabase.from('email_logs').insert({
         application_id: application.id,
