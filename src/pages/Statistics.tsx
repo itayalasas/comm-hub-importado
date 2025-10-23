@@ -601,11 +601,16 @@ export const Statistics = () => {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-wrap gap-1">
-                              {comm.pending_fields.map((field, idx) => (
-                                <span key={idx} className="px-2 py-1 bg-amber-500/20 text-amber-300 rounded text-xs">
+                              {Array.isArray(comm.pending_fields) && comm.pending_fields.map((field, idx) => (
+                                <span key={`field-${comm.id}-${idx}`} className="px-2 py-1 bg-amber-500/20 text-amber-300 rounded text-xs">
                                   {field}
                                 </span>
                               ))}
+                              {!Array.isArray(comm.pending_fields) && comm.pending_fields && (
+                                <span className="px-2 py-1 bg-amber-500/20 text-amber-300 rounded text-xs">
+                                  {String(comm.pending_fields)}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
