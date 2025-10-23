@@ -89,7 +89,10 @@ export const Statistics = () => {
           },
           (payload) => {
             if (payload.eventType === 'INSERT') {
-              setLogs((prev) => [payload.new as EmailLog, ...prev]);
+              const newLog = payload.new as EmailLog;
+              if (!newLog.parent_log_id && newLog.communication_type !== 'pdf_generation') {
+                setLogs((prev) => [newLog, ...prev]);
+              }
               loadStats(selectedApp);
             } else if (payload.eventType === 'UPDATE') {
               setLogs((prev) =>
@@ -210,6 +213,7 @@ export const Statistics = () => {
         .select('*')
         .eq('application_id', appId)
         .is('parent_log_id', null)
+        .neq('communication_type', 'pdf_generation')
         .order('created_at', { ascending: false })
         .limit(50);
 
