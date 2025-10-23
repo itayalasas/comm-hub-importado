@@ -3,7 +3,7 @@ import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
-import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send } from 'lucide-react';
 
 interface Stats {
   totalSent: number;
@@ -61,6 +61,8 @@ export const Statistics = () => {
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
   const [deleteConfirmPending, setDeleteConfirmPending] = useState<string | null>(null);
   const [deleteConfirmLog, setDeleteConfirmLog] = useState<string | null>(null);
+  const [resendConfirmLog, setResendConfirmLog] = useState<EmailLog | null>(null);
+  const [resending, setResending] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [childLogs, setChildLogs] = useState<Record<string, EmailLog[]>>({});
   const [loading, setLoading] = useState(true);
@@ -371,6 +373,62 @@ export const Statistics = () => {
     }
   };
 
+  const resendCommunication = async () => {
+    if (!resendConfirmLog || !selectedApp) return;
+
+    setResending(true);
+    try {
+      const log = resendConfirmLog;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      let pdfBase64 = null;
+
+      if (log.pdf_generated && log.metadata?.pdf_base64) {
+        pdfBase64 = log.metadata.pdf_base64;
+      }
+
+      const payload: any = {
+        recipient_email: log.recipient_email,
+        subject: log.subject,
+        application_id: selectedApp,
+        template_data: log.metadata?.template_data || {}
+      };
+
+      if (pdfBase64) {
+        payload.pdf_base64 = pdfBase64;
+        payload.pdf_filename = log.metadata?.pdf_filename || 'document.pdf';
+      }
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al reenviar comunicación');
+      }
+
+      toast.success('Comunicación reenviada exitosamente');
+      setResendConfirmLog(null);
+
+      if (selectedApp) {
+        loadLogs(selectedApp);
+        loadStats(selectedApp);
+      }
+    } catch (error) {
+      console.error('Error resending communication:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al reenviar la comunicación');
+    } finally {
+      setResending(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout currentPage="statistics">
@@ -645,6 +703,13 @@ export const Statistics = () => {
                                     <Eye className="w-4 h-4" />
                                   </button>
                                   <button
+                                    onClick={() => setResendConfirmLog(log)}
+                                    className="p-2 text-slate-400 hover:text-green-400 transition-colors rounded-lg hover:bg-green-900/20"
+                                    title="Reenviar comunicación"
+                                  >
+                                    <Send className="w-4 h-4" />
+                                  </button>
+                                  <button
                                     onClick={() => setDeleteConfirmLog(log.id)}
                                     className="p-2 text-slate-400 hover:text-red-400 transition-colors rounded-lg hover:bg-red-900/20"
                                     title="Eliminar"
@@ -687,6 +752,13 @@ export const Statistics = () => {
                                         title="Ver detalles"
                                       >
                                         <Eye className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => setResendConfirmLog(child)}
+                                        className="p-2 text-slate-400 hover:text-green-400 transition-colors rounded-lg hover:bg-green-900/20"
+                                        title="Reenviar comunicación"
+                                      >
+                                        <Send className="w-4 h-4" />
                                       </button>
                                       <button
                                         onClick={() => setDeleteConfirmLog(child.id)}
@@ -796,6 +868,59 @@ export const Statistics = () => {
                 className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
               >
                 Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resendConfirmLog && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-white mb-2">Reenviar Comunicación</h3>
+            <p className="text-slate-300 text-sm mb-4">
+              ¿Estás seguro de que deseas reenviar esta comunicación?
+            </p>
+            <div className="bg-slate-900/50 rounded-lg p-4 mb-6 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Destinatario:</span>
+                <span className="text-white">{resendConfirmLog.recipient_email}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Asunto:</span>
+                <span className="text-white truncate ml-2">{resendConfirmLog.subject}</span>
+              </div>
+              {resendConfirmLog.pdf_generated && (
+                <div className="flex items-center space-x-2 text-sm">
+                  <FileText className="w-4 h-4 text-purple-400" />
+                  <span className="text-purple-300">Incluye PDF adjunto</span>
+                </div>
+              )}
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setResendConfirmLog(null)}
+                disabled={resending}
+                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={resendCommunication}
+                disabled={resending}
+                className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              >
+                {resending ? (
+                  <>
+                    <Clock className="w-4 h-4 animate-spin" />
+                    <span>Enviando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>Reenviar</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
