@@ -18,6 +18,7 @@ interface Stats {
 interface Application {
   id: string;
   name: string;
+  api_key: string;
 }
 
 interface EmailLog {
@@ -153,7 +154,7 @@ export const Statistics = () => {
 
       const { data, error } = await supabase
         .from('applications')
-        .select('id, name')
+        .select('id, name, api_key')
         .eq('user_id', user.sub)
         .order('created_at', { ascending: false });
 
@@ -382,6 +383,11 @@ export const Statistics = () => {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+      const currentApp = applications.find(app => app.id === selectedApp);
+      if (!currentApp) {
+        throw new Error('No se encontró la aplicación');
+      }
+
       let pdfBase64 = null;
 
       if (log.pdf_generated && log.metadata?.pdf_base64) {
@@ -405,6 +411,7 @@ export const Statistics = () => {
         headers: {
           'Authorization': `Bearer ${supabaseAnonKey}`,
           'Content-Type': 'application/json',
+          'x-api-key': currentApp.api_key
         },
         body: JSON.stringify(payload)
       });
