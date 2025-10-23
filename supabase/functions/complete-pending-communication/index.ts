@@ -143,6 +143,8 @@ Deno.serve(async (req: Request) => {
     const sendEmailUrl = `${supabaseUrl}/functions/v1/send-email`;
 
     try {
+      console.log('[complete-pending] Full completed_data:', JSON.stringify(pendingComm.completed_data));
+
       const pdfAttachment = pendingComm.completed_data?.pdf_attachment;
       const pdfInfo = {
         pdf_log_id: pendingComm.completed_data?.pdf_generation_log_id,
@@ -152,6 +154,8 @@ Deno.serve(async (req: Request) => {
       };
 
       console.log('[complete-pending] PDF info being passed:', JSON.stringify(pdfInfo));
+      console.log('[complete-pending] Has pdf_attachment:', !!pdfAttachment);
+      console.log('[complete-pending] Has pdf_filename:', !!pdfInfo.pdf_filename);
 
       const requestBody: any = {
         template_name: pendingComm.template_name,

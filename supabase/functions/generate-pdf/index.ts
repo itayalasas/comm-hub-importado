@@ -557,17 +557,24 @@ Deno.serve(async (req: Request) => {
         encoding: 'base64',
       };
 
+      const completedDataToSave = {
+        ...currentPending?.completed_data,
+        pdf_attachment: pdfAttachment,
+        pdf_generation_log_id: pdfLog.id,
+        pdf_template_id: pdfTemplate.id,
+        pdf_filename: filename,
+        pdf_size_bytes: sizeBytes,
+      };
+
+      console.log('[generate-pdf] Saving completed_data:', JSON.stringify({
+        ...completedDataToSave,
+        pdf_attachment: { filename: pdfAttachment.filename, size: pdfAttachment.content.length }
+      }));
+
       const { error: updateError } = await supabase
         .from('pending_communications')
         .update({
-          completed_data: {
-            ...currentPending?.completed_data,
-            pdf_attachment: pdfAttachment,
-            pdf_generation_log_id: pdfLog.id,
-            pdf_template_id: pdfTemplate.id,
-            pdf_filename: filename,
-            pdf_size_bytes: sizeBytes,
-          },
+          completed_data: completedDataToSave,
           status: 'pdf_generated',
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
