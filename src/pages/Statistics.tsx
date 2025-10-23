@@ -397,6 +397,7 @@ export const Statistics = () => {
       const payload: any = {
         recipient_email: log.recipient_email,
         subject: log.subject,
+        template_name: log.metadata?.template_name || 'default',
         application_id: selectedApp,
         template_data: log.metadata?.template_data || {}
       };
