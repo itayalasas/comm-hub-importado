@@ -270,6 +270,11 @@ export const Statistics = () => {
   };
 
   const getEngagementStatus = (log: EmailLog) => {
+    if (log.communication_type === 'pdf_generation') return {
+      label: 'Generated',
+      color: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
+      icon: <FileText className="w-4 h-4" />
+    };
     if (log.clicked_at) return {
       label: 'Clicked',
       color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
