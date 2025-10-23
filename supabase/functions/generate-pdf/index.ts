@@ -545,6 +545,12 @@ Deno.serve(async (req: Request) => {
     if (targetPendingId) {
       console.log('Updating pending communication with PDF attachment...');
 
+      const { data: currentPending } = await supabase
+        .from('pending_communications')
+        .select('completed_data')
+        .eq('id', targetPendingId)
+        .single();
+
       const pdfAttachment = {
         filename,
         content: pdfBase64,
@@ -555,6 +561,7 @@ Deno.serve(async (req: Request) => {
         .from('pending_communications')
         .update({
           completed_data: {
+            ...currentPending?.completed_data,
             pdf_attachment: pdfAttachment,
             pdf_generation_log_id: pdfLog.id,
             pdf_template_id: pdfTemplate.id,

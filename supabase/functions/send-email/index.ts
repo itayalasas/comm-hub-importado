@@ -27,6 +27,7 @@ interface SendEmailRequest {
     pdf_size_bytes?: number;
   };
   _pending_communication_id?: string;
+  _existing_log_id?: string;
 }
 
 const generateQRCode = (data: string): string => {
@@ -183,7 +184,7 @@ Deno.serve(async (req: Request) => {
     }
 
     application = app;
-    const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment, _pdf_info, _pending_communication_id } = requestData;
+    const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment, _pdf_info, _pending_communication_id, _existing_log_id } = requestData;
 
     if (!template_name || !recipient_email) {
       await supabase.from('email_logs').insert({
@@ -312,7 +313,7 @@ Deno.serve(async (req: Request) => {
 
         console.log(`Pending communication created for order ${order_id}. Waiting for invoice...`);
 
-        await supabase.from('email_logs').insert({
+        const { data: initialLog } = await supabase.from('email_logs').insert({
           application_id: application.id,
           template_id: template.id,
           recipient_email,
@@ -328,7 +329,11 @@ Deno.serve(async (req: Request) => {
             action: 'email_queued',
             message: 'Email queued, waiting for invoice PDF',
           },
-        });
+        }).select().single();
+
+        await supabase.from('pending_communications').update({
+          completed_data: { initial_log_id: initialLog.id }
+        }).eq('id', pendingComm.id);
 
         return new Response(
           JSON.stringify({
@@ -560,49 +565,77 @@ Deno.serve(async (req: Request) => {
     const hasPdfAttachment = !!pdfAttachment;
     const communicationType = hasPdfAttachment ? 'email_with_pdf' : 'email';
 
-    const emailLog: any = {
-      application_id: application.id,
-      template_id: template.id,
-      recipient_email,
-      subject,
-      status: 'pending',
-      communication_type: communicationType,
-      pdf_generated: hasPdfAttachment,
-      metadata: {
-        data,
-        has_attachment: template.has_attachment,
-        has_logo: template.has_logo,
-        has_qr: template.has_qr,
-        pdf_attachment: hasPdfAttachment,
-        pdf_info: _pdf_info,
-        request_headers: {
-          'user-agent': req.headers.get('user-agent'),
-          'x-forwarded-for': req.headers.get('x-forwarded-for'),
+    if (_existing_log_id) {
+      console.log('[send-email] Reusing existing log:', _existing_log_id);
+      const { data: existingLog, error: fetchLogError } = await supabase
+        .from('email_logs')
+        .select('*')
+        .eq('id', _existing_log_id)
+        .single();
+
+      if (fetchLogError || !existingLog) {
+        console.error('Error fetching existing log:', fetchLogError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Failed to fetch existing log entry',
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      logEntry = existingLog;
+      console.log('[send-email] Using existing log entry with ID:', logEntry.id);
+    } else {
+      console.log('[send-email] Creating new log entry');
+      const emailLog: any = {
+        application_id: application.id,
+        template_id: template.id,
+        recipient_email,
+        subject,
+        status: 'pending',
+        communication_type: communicationType,
+        pdf_generated: hasPdfAttachment,
+        metadata: {
+          data,
+          has_attachment: template.has_attachment,
+          has_logo: template.has_logo,
+          has_qr: template.has_qr,
+          pdf_attachment: hasPdfAttachment,
+          pdf_info: _pdf_info,
+          request_headers: {
+            'user-agent': req.headers.get('user-agent'),
+            'x-forwarded-for': req.headers.get('x-forwarded-for'),
+          },
         },
-      },
-    };
+      };
 
-    const { data: logData, error: logError } = await supabase
-      .from('email_logs')
-      .insert(emailLog)
-      .select()
-      .single();
+      const { data: logData, error: logError } = await supabase
+        .from('email_logs')
+        .insert(emailLog)
+        .select()
+        .single();
 
-    if (logError) {
-      console.error('Error creating log entry:', logError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Failed to create log entry',
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      if (logError) {
+        console.error('Error creating log entry:', logError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Failed to create log entry',
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      logEntry = logData;
+      console.log('[send-email] New log entry created with ID:', logEntry.id);
     }
-
-    logEntry = logData;
 
     htmlContent = addTracking(htmlContent, logEntry.id, supabaseUrl);
     htmlContent = prepareForSMTP(htmlContent);

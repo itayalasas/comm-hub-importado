@@ -160,7 +160,10 @@ Deno.serve(async (req: Request) => {
         _pdf_attachment: pdfAttachment,
         _pdf_info: pdfInfo,
         _pending_communication_id: pendingComm.id,
+        _existing_log_id: pendingComm.completed_data?.initial_log_id,
       };
+
+      console.log('[complete-pending] Reusing log ID:', pendingComm.completed_data?.initial_log_id);
 
       console.log('[complete-pending] Sending email with attachment:', !!pdfAttachment);
 
