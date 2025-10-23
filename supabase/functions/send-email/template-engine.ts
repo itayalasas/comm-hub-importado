@@ -30,22 +30,11 @@ function processEach(html: string, data: TemplateData): string {
     return arrayData.map((item, index) => {
       let itemHtml = template;
 
-      if (typeof item === 'object' && item !== null) {
-        for (const [key, value] of Object.entries(item)) {
-          const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-          const displayValue = value !== undefined && value !== null ? String(value) : '';
-          itemHtml = itemHtml.replace(regex, displayValue);
-        }
-      } else {
-        const itemRegex = /\{\{this\}\}/g;
-        itemHtml = itemHtml.replace(itemRegex, String(item));
-      }
+      itemHtml = itemHtml.replace(/\{\{this\.([a-zA-Z0-9_]+)\}\}/g, (_: string, key: string) => {
+        return item[key] !== undefined && item[key] !== null ? String(item[key]) : '';
+      });
 
-      const indexRegex = /\{\{@index\}\}/g;
-      itemHtml = itemHtml.replace(indexRegex, String(index));
-
-      const numberRegex = /\{\{@number\}\}/g;
-      itemHtml = itemHtml.replace(numberRegex, String(index + 1));
+      itemHtml = itemHtml.replace(/\{\{@index\}\}/g, String(index));
 
       return itemHtml;
     }).join('');
@@ -53,72 +42,24 @@ function processEach(html: string, data: TemplateData): string {
 }
 
 function processIf(html: string, data: TemplateData): string {
-  const ifRegex = /\{\{#if\s+([a-zA-Z0-9_.]+)\}\}([\s\S]*?)(\{\{\/if\}\}|\{\{else\}\}[\s\S]*?\{\{\/if\}\})/g;
+  const ifRegex = /\{\{#if\s+([a-zA-Z0-9_.]+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
 
-  return html.replace(ifRegex, (match, condition, ifContent, elseBlock) => {
+  return html.replace(ifRegex, (match, condition, template) => {
     const value = getNestedValue(data, condition);
-    const isTruthy = Boolean(value) && value !== '' && value !== '0' && value !== 'false';
-
-    if (elseBlock.startsWith('{{else}}')) {
-      const elseContent = elseBlock.replace('{{else}}', '').replace('{{/if}}', '');
-      return isTruthy ? ifContent : elseContent;
-    } else {
-      return isTruthy ? ifContent : '';
-    }
-  });
-}
-
-function processVariables(html: string, data: TemplateData): string {
-  const variableRegex = /\{\{([a-zA-Z0-9_.]+)\}\}/g;
-
-  return html.replace(variableRegex, (match, path) => {
-    if (path.startsWith('@') || path === 'this') {
-      return match;
-    }
-
-    const value = getNestedValue(data, path);
-    return value !== undefined && value !== null ? String(value) : '';
+    return value ? template : '';
   });
 }
 
 export function renderTemplate(template: string, data: TemplateData): string {
-  let result = template;
+  let html = template;
 
-  result = processEach(result, data);
+  html = processIf(html, data);
+  html = processEach(html, data);
 
-  result = processIf(result, data);
+  html = html.replace(/\{\{([a-zA-Z0-9_.]+)\}\}/g, (match, path) => {
+    const value = getNestedValue(data, path);
+    return value !== undefined && value !== null ? String(value) : '';
+  });
 
-  result = processVariables(result, data);
-
-  const leftoverEach = /\{\{#each[\s\S]*?\{\{\/each\}\}/g;
-  result = result.replace(leftoverEach, '');
-
-  const leftoverIf = /\{\{#if[\s\S]*?\{\{\/if\}\}/g;
-  result = result.replace(leftoverIf, '');
-
-  const leftoverVariables = /\{\{[^}]+\}\}/g;
-  result = result.replace(leftoverVariables, '');
-
-  return result;
-}
-
-export function validateTemplate(template: string): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-
-  const eachOpen = (template.match(/\{\{#each/g) || []).length;
-  const eachClose = (template.match(/\{\{\/each\}\}/g) || []).length;
-  if (eachOpen !== eachClose) {
-    errors.push(`Mismatched {{#each}} tags: ${eachOpen} opening, ${eachClose} closing`);
-  }
-
-  const ifOpen = (template.match(/\{\{#if/g) || []).length;
-  const ifClose = (template.match(/\{\{\/if\}\}/g) || []).length;
-  if (ifOpen !== ifClose) {
-    errors.push(`Mismatched {{#if}} tags: ${ifOpen} opening, ${ifClose} closing`);
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
+  return html;
 }

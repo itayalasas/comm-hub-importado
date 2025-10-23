@@ -1,94 +1,47 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { renderTemplate } from './template-engine.ts';
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, X-Api-Key',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-interface SendEmailRequest {
-  template_name: string;
+interface EmailRequest {
   recipient_email: string;
-  data: Record<string, any>;
-  order_id?: string;
+  template_name: string;
+  data?: Record<string, any>;
+  application_id?: string;
+  subject?: string;
+  pdf_base64?: string;
+  pdf_filename?: string;
   wait_for_invoice?: boolean;
+  order_id?: string | null;
   _skip_pdf_generation?: boolean;
-  _pdf_attachment?: {
-    filename: string;
-    content: string;
-    encoding: string;
-  };
+  _pdf_attachment?: { filename: string; content: string };
   _pdf_info?: {
-    pdf_log_id?: string;
-    pdf_generation_log_id?: string;
     pdf_template_id?: string;
     pdf_filename?: string;
     pdf_size_bytes?: number;
+    pdf_log_id?: string;
+    pdf_generation_log_id?: string;
   };
   _pending_communication_id?: string;
   _existing_log_id?: string;
 }
 
-const generateQRCode = (data: string): string => {
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data)}`;
-  return qrUrl;
-};
-
-const processLogoAndQR = (html: string, data: Record<string, any>, template: any): string => {
-  let processedHtml = html;
-
-  if (template.has_logo && template.logo_variable && data[template.logo_variable]) {
-    const logoData = data[template.logo_variable];
-    const logoSrc = logoData.startsWith('http') ? logoData : `data:image/png;base64,${logoData}`;
-    const logoTag = `<img src="${logoSrc}" alt="Logo" style="max-width: 200px; height: auto;" />`;
-    const regex = new RegExp(`\\{\\{${template.logo_variable}\\}\\}`, 'g');
-    processedHtml = processedHtml.replace(regex, logoTag);
-  }
-
-  if (template.has_qr && template.qr_variable && data[template.qr_variable]) {
-    const qrData = data[template.qr_variable];
-    const qrUrl = generateQRCode(qrData);
-    const qrTag = `<img src="${qrUrl}" alt="QR Code" style="width: 200px; height: 200px;" />`;
-    const regex = new RegExp(`\\{\\{${template.qr_variable}_qr\\}\\}`, 'g');
-    processedHtml = processedHtml.replace(regex, qrTag);
-  }
-
-  return processedHtml;
-};
-
-const prepareForSMTP = (text: string): string => {
-  return text
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .split('\n')
-    .map(line => line.trimEnd())
-    .join('\r\n');
-};
-
-const addTracking = (html: string, logId: string, supabaseUrl: string): string => {
-  let trackedHtml = html;
-
-  const trackingPixel = `<img src="${supabaseUrl}/functions/v1/track-email/open?log_id=${logId}" width="1" height="1" style="display:none;" alt="" />`;
-  trackedHtml = trackedHtml.replace('</body>', `${trackingPixel}</body>`);
-
-  trackedHtml = trackedHtml.replace(
-    /href="([^"]+)"/g,
-    (match, url) => {
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        const trackingUrl = `${supabaseUrl}/functions/v1/track-email/click?log_id=${logId}&url=${encodeURIComponent(url)}`;
-        return `href="${trackingUrl}"`;
-      }
-      return match;
-    }
-  );
-
-  return trackedHtml;
-};
+interface PdfInfo {
+  pdf_template_id?: string;
+  pdf_filename: string;
+  pdf_size_bytes: number;
+  pdf_log_id?: string;
+  pdf_generation_log_id?: string;
+}
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
       headers: corsHeaders,
@@ -96,67 +49,19 @@ Deno.serve(async (req: Request) => {
   }
 
   const startTime = Date.now();
-  let logEntry: any = null;
-  let application: any = null;
-  let supabase: any = null;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const apiKey = req.headers.get('x-api-key');
-
-    let requestData: any = null;
-    let requestBody = '';
-
-    try {
-      requestBody = await req.text();
-      requestData = JSON.parse(requestBody);
-    } catch (parseError: any) {
-      console.error('JSON parse error:', parseError);
-
-      if (apiKey) {
-        const { data: app } = await supabase
-          .from('applications')
-          .select('id')
-          .eq('api_key', apiKey)
-          .maybeSingle();
-
-        if (app) {
-          await supabase.from('email_logs').insert({
-            application_id: app.id,
-            template_id: null,
-            recipient_email: 'unknown@error.com',
-            subject: 'Error: Invalid JSON',
-            status: 'failed',
-            error_message: `JSON parse error: ${parseError.message}`,
-            metadata: {
-              raw_body: requestBody.substring(0, 500),
-              parse_error: parseError.message,
-            },
-          });
-        }
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Invalid JSON',
-          details: parseError.message,
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
 
     if (!apiKey) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Missing API key in x-api-key header',
+          error: 'Missing API key',
         }),
         {
           status: 401,
@@ -165,17 +70,18 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: app, error: appError } = await supabase
+    const { data: application, error: appError } = await supabase
       .from('applications')
-      .select('id, name')
+      .select('*')
       .eq('api_key', apiKey)
+      .eq('is_active', true)
       .maybeSingle();
 
-    if (appError || !app) {
+    if (appError || !application) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Invalid API key',
+          error: 'Invalid or inactive API key',
         }),
         {
           status: 401,
@@ -184,20 +90,38 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    application = app;
-    const { template_name, recipient_email, data, order_id, wait_for_invoice, _skip_pdf_generation, _pdf_attachment, _pdf_info, _pending_communication_id, _existing_log_id } = requestData;
+    const requestData: EmailRequest = await req.json();
 
-    console.log('[send-email] Request params:', {
-      template_name,
+    const {
       recipient_email,
-      order_id,
-      wait_for_invoice,
-      _skip_pdf_generation,
-      has_pdf_attachment: !!_pdf_attachment,
-      _pdf_info,
-      _pending_communication_id,
-      _existing_log_id,
-    });
+      template_name,
+      data = {},
+      subject,
+      pdf_base64,
+      pdf_filename,
+      wait_for_invoice = false,
+      order_id = null,
+      _skip_pdf_generation = false,
+      _pdf_attachment = null,
+      _pdf_info = null,
+      _pending_communication_id = null,
+      _existing_log_id = null,
+    } = requestData;
+
+    console.log('=== SEND-EMAIL FUNCTION START ===');
+    console.log('Application:', application.name, '(', application.id, ')');
+    console.log('Template:', template_name);
+    console.log('Recipient:', recipient_email);
+    console.log('Order ID:', order_id);
+    console.log('Wait for invoice:', wait_for_invoice);
+    console.log('Skip PDF generation:', _skip_pdf_generation);
+    console.log('Has PDF attachment:', !!_pdf_attachment);
+    console.log('Has PDF info:', !!_pdf_info);
+    console.log('Pending communication ID:', _pending_communication_id);
+    console.log('Existing log ID:', _existing_log_id);
+    console.log('Data keys:', Object.keys(data).join(', '));
+
+    let logEntry: any = null;
 
     if (!template_name || !recipient_email) {
       await supabase.from('email_logs').insert({
@@ -279,7 +203,7 @@ Deno.serve(async (req: Request) => {
             external_system: 'billing_system',
             order_id: order_id,
             status: 'waiting_data',
-            communication_type: 'pdf',
+            communication_type: 'order_invoice',
             pdf_template_id: template.pdf_template_id,
           })
           .select()
@@ -298,8 +222,7 @@ Deno.serve(async (req: Request) => {
             communication_type: 'email_with_pdf',
             pdf_generated: false,
             metadata: {
-              order_id,
-              wait_for_invoice: true,
+              order_id: order_id || null,
               data,
               action: 'pending_communication_creation_failed',
               error_details: {
@@ -324,160 +247,94 @@ Deno.serve(async (req: Request) => {
           );
         }
 
-        console.log(`Pending communication created for order ${order_id}. Waiting for invoice...`);
-
-        const { data: initialLog } = await supabase.from('email_logs').insert({
-          application_id: application.id,
-          template_id: template.id,
-          recipient_email,
-          subject: renderTemplate(template.subject || '', data),
-          status: 'queued',
-          communication_type: 'email_with_pdf',
-          pdf_generated: false,
-          metadata: {
-            order_id,
-            pending_communication_id: pendingComm.id,
-            wait_for_invoice: true,
-            data,
-            action: 'email_queued',
-            message: 'Email queued, waiting for invoice PDF',
-          },
-        }).select().single();
-
-        await supabase.from('pending_communications').update({
-          completed_data: { initial_log_id: initialLog.id }
-        }).eq('id', pendingComm.id);
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            message: 'Email queued, waiting for invoice',
-            pending_communication_id: pendingComm.id,
-            order_id,
-            status: 'waiting_invoice',
-            instructions: `Call /generate-pdf with order_id: "${order_id}" when invoice is ready`,
-          }),
-          {
-            status: 202,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
-      }
-
-      console.log('Template requires PDF attachment, creating pending communication...');
-
-      const externalRefId = order_id || `email_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-      const { data: pendingComm, error: pendingError } = await supabase
-        .from('pending_communications')
-        .insert({
-          application_id: application.id,
-          template_name,
-          recipient_email,
-          base_data: data,
-          pending_fields: ['pdf_attachment'],
-          external_reference_id: externalRefId,
-          external_system: 'pdf_generator',
-          order_id: order_id || null,
-          status: 'waiting_data',
-          communication_type: 'pdf',
-          pdf_template_id: template.pdf_template_id,
-        })
-        .select()
-        .single();
-
-      if (pendingError) {
-        console.error('Error creating pending communication:', pendingError);
-
         await supabase.from('email_logs').insert({
           application_id: application.id,
           template_id: template.id,
           recipient_email,
-          subject: renderTemplate(template.subject || '', data),
-          status: 'failed',
-          error_message: `Failed to create pending communication: ${pendingError.message}`,
+          subject: `Pending: ${renderTemplate(template.subject || '', data)}`,
+          status: 'pending',
           communication_type: 'email_with_pdf',
           pdf_generated: false,
           metadata: {
-            order_id: order_id || null,
+            order_id: order_id,
+            pending_communication_id: pendingComm.id,
             data,
-            action: 'pending_communication_creation_failed',
-            error_details: {
-              code: pendingError.code,
-              message: pendingError.message,
-              details: pendingError.details,
-              hint: pendingError.hint,
-            },
+            action: 'waiting_for_invoice_pdf',
           },
         });
 
         return new Response(
           JSON.stringify({
-            success: false,
-            error: 'Failed to create pending communication',
-            details: pendingError.message,
+            success: true,
+            status: 'pending',
+            message: 'Communication pending invoice data',
+            pending_communication_id: pendingComm.id,
+            order_id: externalRefId,
           }),
           {
-            status: 500,
+            status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           }
         );
-      }
+      } else if (pdf_base64 && pdf_filename) {
+        console.log('Using provided PDF base64 attachment...');
+        pdfAttachment = {
+          filename: pdf_filename,
+          content: pdf_base64,
+        };
+      } else {
+        console.log('PDF template detected, generating PDF...');
 
-      console.log('Pending communication created, calling generate-pdf function...');
+        const externalRefId = order_id || `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-      const generatePdfUrl = `${supabaseUrl}/functions/v1/generate-pdf`;
+        const { data: pendingComm, error: pendingError } = await supabase
+          .from('pending_communications')
+          .insert({
+            application_id: application.id,
+            template_name,
+            recipient_email,
+            base_data: data,
+            pending_fields: ['pdf_attachment'],
+            external_reference_id: externalRefId,
+            external_system: 'pdf_generator',
+            order_id: order_id || null,
+            status: 'waiting_data',
+            communication_type: 'pdf',
+            pdf_template_id: template.pdf_template_id,
+          })
+          .select()
+          .single();
 
-      try {
-        const pdfResponse = await fetch(generatePdfUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseKey}`,
-            'x-api-key': apiKey,
-          },
-          body: JSON.stringify({
-            template_id: template.pdf_template_id,
-            data,
-            pending_communication_id: pendingComm.id,
-          }),
-        });
-
-        const pdfResult = await pdfResponse.json();
-
-        if (!pdfResult.success) {
-          console.error('PDF generation failed:', pdfResult);
-
-          await supabase
-            .from('pending_communications')
-            .update({
-              status: 'failed',
-              error_message: pdfResult.error || 'PDF generation failed',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', pendingComm.id);
+        if (pendingError) {
+          console.error('Error creating pending communication:', pendingError);
 
           await supabase.from('email_logs').insert({
             application_id: application.id,
             template_id: template.id,
-            recipient_email: recipient_email,
-            subject: `Error: PDF generation failed for ${template_name}`,
+            recipient_email,
+            subject: renderTemplate(template.subject || '', data),
             status: 'failed',
-            error_message: `PDF generation failed: ${pdfResult.error || 'Unknown error'}`,
+            error_message: `Failed to create pending communication: ${pendingError.message}`,
             communication_type: 'email_with_pdf',
+            pdf_generated: false,
             metadata: {
-              template_name,
-              request_data: data,
-              pdf_error: pdfResult,
-              endpoint: 'send-email',
+              order_id: order_id || null,
+              data,
+              action: 'pending_communication_creation_failed',
+              error_details: {
+                code: pendingError.code,
+                message: pendingError.message,
+                details: pendingError.details,
+                hint: pendingError.hint,
+              },
             },
           });
 
           return new Response(
             JSON.stringify({
               success: false,
-              error: 'PDF generation failed',
-              details: pdfResult.error,
+              error: 'Failed to create pending communication',
+              details: pendingError.message,
             }),
             {
               status: 500,
@@ -486,63 +343,95 @@ Deno.serve(async (req: Request) => {
           );
         }
 
-        console.log('PDF generated successfully, retrieving attachment data...');
+        console.log('Pending communication created, calling generate-pdf function...');
 
-        const { data: updatedPending, error: fetchError } = await supabase
-          .from('pending_communications')
-          .select('completed_data')
-          .eq('id', pendingComm.id)
-          .single();
+        const generatePdfUrl = `${supabaseUrl}/functions/v1/generate-pdf`;
 
-        if (fetchError || !updatedPending?.completed_data?.pdf_attachment) {
-          throw new Error('Failed to retrieve PDF attachment data');
-        }
-
-        pdfAttachment = updatedPending.completed_data.pdf_attachment;
-        console.log('PDF attachment retrieved:', pdfAttachment.filename);
-      } catch (pdfError: any) {
-        console.error('Error calling generate-pdf:', pdfError);
-
-        await supabase
-          .from('pending_communications')
-          .update({
-            status: 'failed',
-            error_message: pdfError.message,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', pendingComm.id);
-
-        await supabase.from('email_logs').insert({
-          application_id: application.id,
-          template_id: template.id,
-          recipient_email: recipient_email,
-          subject: `Error: Exception generating PDF for ${template_name}`,
-          status: 'failed',
-          error_message: `Exception generating PDF: ${pdfError.message}`,
-          communication_type: 'email_with_pdf',
-          metadata: {
-            template_name,
-            request_data: data,
-            pdf_error: {
-              message: pdfError.message,
-              stack: pdfError.stack,
-              name: pdfError.name,
+        try {
+          const pdfResponse = await fetch(generatePdfUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+              'x-api-key': apiKey,
             },
-            endpoint: 'send-email',
-          },
-        });
+            body: JSON.stringify({
+              pending_communication_id: pendingComm.id,
+            }),
+          });
 
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Error generating PDF',
-            details: pdfError.message,
-          }),
-          {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          if (!pdfResponse.ok) {
+            const errorText = await pdfResponse.text();
+            console.error('PDF generation failed:', errorText);
+            throw new Error(`PDF generation failed: ${errorText}`);
           }
-        );
+
+          const pdfResult = await pdfResponse.json();
+
+          if (!pdfResult.success || !pdfResult.pdf_base64) {
+            console.error('PDF generation did not return base64:', pdfResult);
+            throw new Error('PDF generation did not return valid base64 data');
+          }
+
+          console.log('PDF generated successfully:', pdfResult.filename);
+
+          pdfAttachment = {
+            filename: pdfResult.filename,
+            content: pdfResult.pdf_base64,
+          };
+
+          await supabase
+            .from('pending_communications')
+            .update({
+              pdf_attachment: pdfResult.pdf_base64,
+              status: 'data_received',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', pendingComm.id);
+        } catch (pdfError: any) {
+          console.error('Exception during PDF generation:', pdfError);
+
+          await supabase
+            .from('pending_communications')
+            .update({
+              status: 'failed',
+              error_message: pdfError.message,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', pendingComm.id);
+
+          await supabase.from('email_logs').insert({
+            application_id: application.id,
+            template_id: template.id,
+            recipient_email: recipient_email,
+            subject: `Error: Exception generating PDF for ${template_name}`,
+            status: 'failed',
+            error_message: `Exception generating PDF: ${pdfError.message}`,
+            communication_type: 'email_with_pdf',
+            metadata: {
+              template_name,
+              request_data: data,
+              pdf_error: {
+                message: pdfError.message,
+                stack: pdfError.stack,
+                name: pdfError.name,
+              },
+              endpoint: 'send-email',
+            },
+          });
+
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Error generating PDF',
+              details: pdfError.message,
+            }),
+            {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
       }
     }
 
@@ -613,6 +502,8 @@ Deno.serve(async (req: Request) => {
         communication_type: communicationType,
         pdf_generated: hasPdfAttachment,
         metadata: {
+          template_name,
+          template_data: data,
           data,
           has_attachment: template.has_attachment,
           has_logo: template.has_logo,
@@ -668,23 +559,24 @@ Deno.serve(async (req: Request) => {
         },
       });
 
-      const emailMessage: any = {
-        from: credentials.from_name
-          ? `${credentials.from_name} <${credentials.from_email}>`
-          : credentials.from_email,
+      const emailConfig: any = {
+        from: credentials.from_email,
         to: recipient_email,
         subject: subject,
-        content: 'text/html',
         html: htmlContent,
       };
 
       if (pdfAttachment) {
-        emailMessage.attachments = [pdfAttachment];
-        console.log('Adding PDF attachment:', pdfAttachment.filename);
+        emailConfig.attachments = [
+          {
+            filename: pdfAttachment.filename,
+            content: pdfAttachment.content,
+            encoding: 'base64',
+          },
+        ];
       }
 
-      await client.send(emailMessage);
-
+      await client.send(emailConfig);
       await client.close();
 
       const endTime = Date.now();
@@ -706,6 +598,8 @@ Deno.serve(async (req: Request) => {
               port: credentials.smtp_port,
               tls: useTLS,
             },
+            pdf_base64: pdfAttachment ? pdfAttachment.content : null,
+            pdf_filename: pdfAttachment ? pdfAttachment.filename : null,
           },
         })
         .eq('id', logEntry.id);
@@ -757,64 +651,63 @@ Deno.serve(async (req: Request) => {
               console.log('[send-email] PDF generation log created as child successfully with ID:', pdfChildLog.id);
             }
           } else {
+            console.log('[send-email] Found existing PDF log, updating parent_log_id');
+
             const { error: updateError } = await supabase
               .from('email_logs')
-              .update({ parent_log_id: logEntry.id })
+              .update({
+                parent_log_id: logEntry.id,
+              })
               .eq('id', existingPdfLogId);
 
             if (updateError) {
-              console.error('[send-email] Error updating PDF log with parent_log_id:', updateError);
+              console.error('[send-email] Error updating PDF log parent_log_id:', updateError);
             } else {
-              console.log('[send-email] PDF log updated successfully with parent_log_id:', logEntry.id);
+              console.log('[send-email] PDF log parent_log_id updated to:', logEntry.id);
+
+              const { data: pdfChildLog, error: pdfLogError } = await supabase
+                .from('email_logs')
+                .insert({
+                  application_id: application.id,
+                  template_id: _pdf_info.pdf_template_id || template.pdf_template_id,
+                  recipient_email: 'pdf_generation@system.local',
+                  subject: `PDF Generated: ${_pdf_info.pdf_filename || 'document.pdf'}`,
+                  status: 'sent',
+                  sent_at: new Date().toISOString(),
+                  communication_type: 'pdf_generation',
+                  pdf_generated: true,
+                  parent_log_id: logEntry.id,
+                  metadata: {
+                    endpoint: 'send-email',
+                    filename: _pdf_info.pdf_filename,
+                    size_bytes: _pdf_info.pdf_size_bytes,
+                    order_id: order_id || null,
+                    pending_communication_id: _pending_communication_id,
+                    action: 'pdf_linked',
+                    template_name: template.name,
+                  },
+                })
+                .select()
+                .single();
+
+              if (pdfLogError) {
+                console.error('[send-email] Error creating PDF link log:', pdfLogError);
+              } else {
+                console.log('[send-email] PDF link log created with ID:', pdfChildLog.id);
+              }
             }
           }
         } else {
-          console.log('[send-email] Creating PDF generation log as child of email log...');
-          console.log('[send-email] PDF info:', JSON.stringify(_pdf_info));
-          console.log('[send-email] Parent log ID:', logEntry.id);
-
-          const { data: pdfChildLog, error: pdfLogError } = await supabase
-            .from('email_logs')
-            .insert({
-              application_id: application.id,
-              template_id: _pdf_info.pdf_template_id || template.pdf_template_id,
-              recipient_email: 'pdf_generation@system.local',
-              subject: `PDF Generated: ${_pdf_info.pdf_filename || 'document.pdf'}`,
-              status: 'sent',
-              sent_at: new Date().toISOString(),
-              communication_type: 'pdf_generation',
-              pdf_generated: true,
-              parent_log_id: logEntry.id,
-              metadata: {
-                endpoint: 'send-email',
-                filename: _pdf_info.pdf_filename,
-                size_bytes: _pdf_info.pdf_size_bytes,
-                order_id: order_id || null,
-                pending_communication_id: _pending_communication_id,
-                action: 'pdf_generated',
-                template_name: template.name,
-              },
-            })
-            .select()
-            .single();
-
-          if (pdfLogError) {
-            console.error('[send-email] Error creating PDF child log:', pdfLogError);
-          } else {
-            console.log('[send-email] PDF generation log created as child successfully with ID:', pdfChildLog.id);
-          }
+          console.log('[send-email] Skipping PDF child log creation. pdfAttachment:', !!pdfAttachment, '_pdf_info:', !!_pdf_info, 'pdf_filename:', _pdf_info?.pdf_filename);
         }
-      } else {
-        console.log('[send-email] Skipping PDF child log creation. pdfAttachment:', !!pdfAttachment, '_pdf_info:', !!_pdf_info, 'pdf_filename:', _pdf_info?.pdf_filename);
       }
 
-      if (pdfAttachment && template.pdf_template_id) {
+      if (_pending_communication_id) {
         await supabase
           .from('pending_communications')
           .update({
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-            sent_log_id: logEntry.id,
+            status: 'completed',
+            updated_at: new Date().toISOString(),
             pdf_generated: true,
           })
           .eq('template_name', template_name)
@@ -871,8 +764,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           success: false,
           error: 'Failed to send email',
-          details: emailError.message || String(emailError),
-          log_id: logEntry.id,
+          details: emailError.message,
         }),
         {
           status: 500,
@@ -881,27 +773,12 @@ Deno.serve(async (req: Request) => {
       );
     }
   } catch (error: any) {
-    console.error('Error processing request:', error);
-
-    if (logEntry) {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
-      await supabase
-        .from('email_logs')
-        .update({
-          status: 'failed',
-          error_message: error.message || String(error),
-        })
-        .eq('id', logEntry.id);
-    }
-
+    console.error('Unexpected error in send-email function:', error);
     return new Response(
       JSON.stringify({
         success: false,
         error: 'Internal server error',
-        details: error.message || String(error),
+        details: error.message,
       }),
       {
         status: 500,
@@ -910,3 +787,46 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+function addTracking(html: string, logId: string, supabaseUrl: string): string {
+  const trackingPixel = `<img src="${supabaseUrl}/functions/v1/track-email?log_id=${logId}&action=open" width="1" height="1" style="display:none" alt="" />`;
+  const trackingScript = `
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        var links = document.querySelectorAll('a');
+        links.forEach(function(link) {
+          link.addEventListener('click', function() {
+            navigator.sendBeacon('${supabaseUrl}/functions/v1/track-email?log_id=${logId}&action=click');
+          });
+        });
+      });
+    </script>
+  `;
+
+  if (html.includes('</body>')) {
+    html = html.replace('</body>', `${trackingPixel}${trackingScript}</body>`);
+  } else {
+    html += trackingPixel + trackingScript;
+  }
+
+  return html;
+}
+
+function processLogoAndQR(html: string, data: any, template: any): string {
+  if (template.has_logo && data.logo_url) {
+    html = html.replace(/\{\{logo_url\}\}/g, data.logo_url);
+  }
+
+  if (template.has_qr && data.qr_code_url) {
+    html = html.replace(/\{\{qr_code_url\}\}/g, data.qr_code_url);
+  }
+
+  return html;
+}
+
+function prepareForSMTP(content: string): string {
+  return content
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n{3,}/g, '\n\n');
+}
