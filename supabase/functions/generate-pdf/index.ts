@@ -479,7 +479,6 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('Rendering HTML template with data...');
-    // Wrap data in an object to match template structure (e.g., {{data.issuer.razon_social}})
     const templateData = { data };
     const htmlContent = renderTemplate(pdfTemplate.html_content, templateData);
 
@@ -492,33 +491,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('PDF generated successfully:', { filename, sizeBytes });
 
-    const { data: emailLog, error: emailLogError } = await supabase
-      .from('email_logs')
-      .insert({
-        application_id: application.id,
-        template_id: pdfTemplate.id,
-        recipient_email: 'pdf_generation@system.local',
-        subject: `PDF Generated: ${filename}`,
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        communication_type: 'pdf_generation',
-        pdf_generated: true,
-        metadata: {
-          endpoint: 'generate-pdf',
-          filename,
-          size_bytes: sizeBytes,
-          order_id,
-          pending_communication_id: pending_communication_id || (pendingComm ? pendingComm.id : null),
-          action: 'pdf_generated',
-          template_name: pdfTemplate.name,
-        },
-      })
-      .select()
-      .single();
-
-    if (emailLogError) {
-      console.error('Error creating email log for PDF:', emailLogError);
-    }
+    let emailLog: any = null;
 
     const { data: pdfLog, error: logError } = await supabase
       .from('pdf_generation_logs')
@@ -583,7 +556,6 @@ Deno.serve(async (req: Request) => {
         .update({
           completed_data: {
             pdf_attachment: pdfAttachment,
-            pdf_log_id: emailLog?.id,
             pdf_generation_log_id: pdfLog.id,
             pdf_template_id: pdfTemplate.id,
             pdf_filename: filename,

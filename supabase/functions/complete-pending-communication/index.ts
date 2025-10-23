@@ -155,9 +155,11 @@ Deno.serve(async (req: Request) => {
         template_name: pendingComm.template_name,
         recipient_email: pendingComm.recipient_email,
         data: mergedData,
+        order_id: pendingComm.order_id || null,
         _skip_pdf_generation: !!pdfAttachment,
         _pdf_attachment: pdfAttachment,
         _pdf_info: pdfInfo,
+        _pending_communication_id: pendingComm.id,
       };
 
       console.log('[complete-pending] Sending email with attachment:', !!pdfAttachment);
