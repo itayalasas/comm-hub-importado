@@ -428,21 +428,30 @@ Deno.serve(async (req: Request) => {
 
       console.log('[pending-communication] Checking if PDF already exists for order_id:', orderId);
 
-      const { data: pdfLogs } = await supabase
+      const { data: pdfLogs, error: pdfLogsError } = await supabase
         .from('email_logs')
-        .select('id, metadata')
+        .select('id, metadata, created_at')
         .eq('application_id', application.id)
         .eq('communication_type', 'pdf_generation')
         .eq('status', 'sent')
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(20);
+
+      if (pdfLogsError) {
+        console.error('[pending-communication] Error fetching PDF logs:', pdfLogsError);
+      }
+
+      console.log('[pending-communication] Found', pdfLogs?.length || 0, 'PDF logs total');
 
       let existingPdf = null;
       let pdfEmailLogId = null;
-      if (pdfLogs) {
+      if (pdfLogs && pdfLogs.length > 0) {
         for (const log of pdfLogs) {
-          if (log.metadata?.order_id === orderId) {
-            console.log('[pending-communication] Found PDF log for order_id:', orderId, 'log_id:', log.id);
+          const logOrderId = log.metadata?.order_id;
+          console.log('[pending-communication] Checking PDF log:', log.id, 'order_id in metadata:', logOrderId);
+
+          if (logOrderId === orderId) {
+            console.log('[pending-communication] ✅ MATCH! Found PDF log for order_id:', orderId, 'log_id:', log.id);
             pdfEmailLogId = log.id;
 
             const { data: pdfData, error: pdfDataError } = await supabase
@@ -467,7 +476,10 @@ Deno.serve(async (req: Request) => {
       }
 
       if (!existingPdf) {
-        console.log('[pending-communication] No existing PDF found for order_id:', orderId);
+        console.log('[pending-communication] ❌ NO existing PDF found for order_id:', orderId);
+        console.log('[pending-communication] Will wait for PDF to be generated via generate-pdf endpoint');
+      } else {
+        console.log('[pending-communication] ✅ PDF exists, will attach to email');
       }
 
       if (existingPdf && existingPdf.pdf_base64) {
