@@ -162,6 +162,7 @@ Deno.serve(async (req: Request) => {
         recipient_email: pendingComm.recipient_email,
         data: mergedData,
         order_id: pendingComm.order_id || null,
+        parent_log_id: pendingComm.parent_log_id || null,
         _skip_pdf_generation: !!pdfAttachment,
         _pdf_attachment: pdfAttachment,
         _pdf_info: pdfInfo,

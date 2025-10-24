@@ -88,13 +88,21 @@ Deno.serve(async (req: Request) => {
       subject,
       pdf_base64,
       pdf_filename,
+      parent_log_id,
+      _pdf_attachment,
+      _pdf_info,
     } = requestData;
+
+    const finalPdfBase64 = _pdf_attachment || pdf_base64;
+    const finalPdfFilename = _pdf_info?.pdf_filename || pdf_filename || 'document.pdf';
 
     console.log('=== SEND-EMAIL FUNCTION START ===');
     console.log('Application:', application.name);
     console.log('Template:', template_name);
     console.log('Recipient:', recipient_email);
-    console.log('Has PDF:', !!pdf_base64);
+    console.log('Has PDF:', !!finalPdfBase64);
+    console.log('PDF from _pdf_attachment:', !!_pdf_attachment);
+    console.log('Parent log ID:', parent_log_id);
 
     if (!template_name || !recipient_email) {
       return new Response(
@@ -157,7 +165,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('Rendering email with data:', JSON.stringify(data));
 
-    const hasPdfAttachment = !!pdf_base64;
+    const hasPdfAttachment = !!finalPdfBase64;
 
     const emailLog: any = {
       application_id: application.id,
@@ -171,8 +179,14 @@ Deno.serve(async (req: Request) => {
         template_name,
         data,
         resend: true,
+        pdf_info: _pdf_info || null,
       },
     };
+
+    if (parent_log_id) {
+      emailLog.parent_log_id = parent_log_id;
+      console.log('Setting parent_log_id:', parent_log_id);
+    }
 
     const { data: logData, error: logError } = await supabase
       .from('email_logs')
@@ -226,14 +240,15 @@ Deno.serve(async (req: Request) => {
         html: htmlContent,
       };
 
-      if (pdf_base64 && pdf_filename) {
+      if (finalPdfBase64 && finalPdfFilename) {
         emailConfig.attachments = [
           {
-            filename: pdf_filename,
-            content: pdf_base64,
+            filename: finalPdfFilename,
+            content: finalPdfBase64,
             encoding: 'base64',
           },
         ];
+        console.log('PDF attachment configured:', finalPdfFilename);
       }
 
       console.log('Sending email to:', recipient_email);
@@ -248,7 +263,7 @@ Deno.serve(async (req: Request) => {
         .update({
           status: 'sent',
           sent_at: new Date().toISOString(),
-          pdf_attachment_size: pdf_base64 ? pdf_base64.length : null,
+          pdf_attachment_size: finalPdfBase64 ? finalPdfBase64.length : null,
           metadata: {
             ...(logEntry.metadata || {}),
             processing_time_ms: processingTime,

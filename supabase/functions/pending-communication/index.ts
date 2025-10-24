@@ -304,6 +304,94 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const orderId = requestData.order_id;
+    const waitForInvoice = requestData.wait_for_invoice;
+
+    if (orderId && waitForInvoice) {
+      console.log('[pending-communication] wait_for_invoice=true, creating parent log and pending communication');
+
+      const parentLog: any = {
+        application_id: application.id,
+        template_id: template.id,
+        recipient_email,
+        subject: requestData.subject || template.subject || 'Pending Invoice',
+        status: 'sent',
+        communication_type: 'email_with_pdf',
+        pdf_generated: false,
+        metadata: {
+          action: 'email_queued',
+          message: 'Email queued, waiting for invoice PDF',
+          order_id: orderId,
+          wait_for_invoice: true,
+          template_name,
+          template_data: emailData,
+          processing_time_ms: Date.now() - startTime,
+        },
+      };
+
+      const { data: parentLogData, error: parentLogError } = await supabase
+        .from('email_logs')
+        .insert(parentLog)
+        .select()
+        .single();
+
+      if (parentLogError) {
+        console.error('[pending-communication] Error creating parent log:', parentLogError);
+        throw new Error('Failed to create parent log');
+      }
+
+      const { data: pendingComm, error: pendingError } = await supabase
+        .from('pending_communications')
+        .insert({
+          application_id: application.id,
+          email_template_id: template.id,
+          recipient_email,
+          subject: parentLog.subject,
+          base_data: emailData,
+          pending_fields: ['invoice_pdf'],
+          external_system: 'email_system',
+          external_reference_id: orderId,
+          order_id: orderId,
+          parent_log_id: parentLogData.id,
+        })
+        .select()
+        .single();
+
+      if (pendingError) {
+        console.error('[pending-communication] Error creating pending communication:', pendingError);
+        throw new Error('Failed to create pending communication');
+      }
+
+      console.log('[pending-communication] Created parent log and pending communication:', {
+        parent_log_id: parentLogData.id,
+        pending_communication_id: pendingComm.id,
+      });
+
+      await supabase
+        .from('email_logs')
+        .update({
+          metadata: {
+            ...parentLog.metadata,
+            pending_communication_id: pendingComm.id,
+          },
+        })
+        .eq('id', parentLogData.id);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Email queued successfully, waiting for invoice PDF',
+          log_id: parentLogData.id,
+          pending_communication_id: pendingComm.id,
+          status: 'queued',
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const sendEmailUrl = `${supabaseUrl}/functions/v1/send-email`;
 
     console.log('[pending-communication] Template is email type, calling send-email function...');
