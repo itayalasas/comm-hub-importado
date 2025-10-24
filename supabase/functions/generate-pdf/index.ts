@@ -553,6 +553,39 @@ Deno.serve(async (req: Request) => {
 
     console.log('[generate-pdf] PDF generation logged successfully. email_log_id:', emailLog?.id, ', pdf_log_id:', pdfLog.id);
 
+    const accessToken = crypto.randomUUID() + '-' + Date.now().toString(36);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 90);
+
+    const { data: publicLink, error: linkError } = await supabase
+      .from('public_pdf_links')
+      .insert({
+        application_id: application.id,
+        pdf_generation_log_id: pdfLog.id,
+        order_id: order_id || null,
+        access_token: accessToken,
+        filename,
+        expires_at: expiresAt.toISOString(),
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (linkError) {
+      console.error('[generate-pdf] Error creating public link:', linkError);
+    } else {
+      console.log('[generate-pdf] Public link created:', accessToken);
+    }
+
+    const publicUrl = publicLink ? `${supabaseUrl}/functions/v1/view-pdf?token=${accessToken}` : null;
+
+    if (publicUrl) {
+      await supabase
+        .from('pdf_generation_logs')
+        .update({ public_url: publicUrl })
+        .eq('id', pdfLog.id);
+    }
+
     const targetPendingId = pending_communication_id || (pendingComm ? pendingComm.id : null);
 
     if (targetPendingId) {
@@ -575,9 +608,11 @@ Deno.serve(async (req: Request) => {
         pdf_attachment: pdfAttachment,
         pdf_generation_log_id: pdfLog.id,
         pdf_log_id: emailLog?.id,
+        pdf_email_log_id: emailLog?.id,
         pdf_template_id: pdfTemplate.id,
         pdf_filename: filename,
         pdf_size_bytes: sizeBytes,
+        pdf_public_url: publicUrl,
       };
 
       console.log('[generate-pdf] Saving completed_data:', JSON.stringify({
@@ -638,6 +673,7 @@ Deno.serve(async (req: Request) => {
           pdf_base64: pdfBase64,
           filename,
           size_bytes: sizeBytes,
+          public_url: publicUrl,
         },
       }),
       {
