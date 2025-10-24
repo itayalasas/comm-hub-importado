@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -388,6 +388,12 @@ export const Statistics = () => {
         throw new Error('No se encontró la aplicación');
       }
 
+      if (!currentApp.api_key) {
+        throw new Error('La aplicación no tiene una API key configurada');
+      }
+
+      console.log('Reenviando con API key:', currentApp.api_key);
+
       let pdfBase64 = null;
 
       if (log.pdf_generated && log.metadata?.pdf_base64) {
@@ -676,8 +682,8 @@ export const Statistics = () => {
                         const hasChildren = log.communication_type === 'email_with_pdf' || (log.pdf_generated && log.communication_type !== 'pdf_generation');
 
                         return (
-                          <>
-                            <tr key={log.id} className="hover:bg-slate-700/20 transition-colors">
+                          <React.Fragment key={log.id}>
+                            <tr className="hover:bg-slate-700/20 transition-colors">
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center space-x-2">
                                   {hasChildren && (
@@ -787,7 +793,7 @@ export const Statistics = () => {
                                 </tr>
                               );
                             })}
-                          </>
+                          </React.Fragment>
                         );
                       })}
                     </tbody>
