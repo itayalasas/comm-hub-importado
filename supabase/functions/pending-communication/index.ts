@@ -233,13 +233,15 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      const baseDataWithOrderId = orderId ? { ...emailData, order_id: orderId } : emailData;
+
       const { data: pendingComm, error: pendingError } = await supabase
         .from('pending_communications')
         .insert({
           application_id: application.id,
           template_name,
           recipient_email,
-          base_data: emailData,
+          base_data: baseDataWithOrderId,
           pending_fields: pendingFields,
           external_reference_id: externalRefId,
           external_system: externalSystem,
@@ -340,13 +342,15 @@ Deno.serve(async (req: Request) => {
         throw new Error('Failed to create parent log');
       }
 
+      const baseDataWithOrderId = orderId ? { ...emailData, order_id: orderId } : emailData;
+
       const { data: pendingComm, error: pendingError } = await supabase
         .from('pending_communications')
         .insert({
           application_id: application.id,
           template_name: template_name,
           recipient_email,
-          base_data: emailData,
+          base_data: baseDataWithOrderId,
           pending_fields: ['invoice_pdf'],
           external_system: 'email_system',
           external_reference_id: orderId,
