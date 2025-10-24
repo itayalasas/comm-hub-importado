@@ -232,8 +232,12 @@ Deno.serve(async (req: Request) => {
         },
       });
 
+      const fromAddress = credentials.from_name
+        ? `${credentials.from_name} <${credentials.from_email}>`
+        : credentials.from_email;
+
       const emailConfig: any = {
-        from: credentials.from_email,
+        from: fromAddress,
         to: recipient_email,
         subject: emailSubject,
         html: htmlContent,
