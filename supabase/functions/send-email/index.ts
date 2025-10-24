@@ -153,6 +153,8 @@ Deno.serve(async (req: Request) => {
     let htmlContent = renderTemplate(template.html_content, data);
     let emailSubject = subject || renderTemplate(template.subject || '', data);
 
+    htmlContent = htmlContent.replace(/\r?\n/g, '\r\n');
+
     console.log('Rendering email with data:', JSON.stringify(data));
 
     const hasPdfAttachment = !!pdf_base64;
