@@ -317,12 +317,30 @@ Deno.serve(async (req: Request) => {
     if (orderId && waitForInvoice) {
       console.log('[pending-communication] wait_for_invoice=true, creating parent log and pending communication');
 
+      function renderTemplate(template: string, data: Record<string, any>): string {
+        let result = template;
+        const variableRegex = /\{\{([a-zA-Z0-9_.]+)\}\}/g;
+        result = result.replace(variableRegex, (match, path) => {
+          const keys = path.split('.');
+          let value: any = data;
+          for (const key of keys) {
+            if (value === null || value === undefined) return '';
+            value = value[key];
+          }
+          return value !== undefined && value !== null ? String(value) : '';
+        });
+        return result;
+      }
+
+      const emailDataWithOrderId = { ...emailData, order_id: orderId };
+      const renderedSubject = requestData.subject || renderTemplate(template.subject || 'Pending Invoice', emailDataWithOrderId);
+
       const parentLog: any = {
         application_id: application.id,
         template_id: template.id,
         recipient_email,
-        subject: requestData.subject || template.subject || 'Pending Invoice',
-        status: 'queued',
+        subject: renderedSubject,
+        status: 'pending',
         communication_type: 'email_with_pdf',
         pdf_generated: false,
         metadata: {
@@ -331,7 +349,7 @@ Deno.serve(async (req: Request) => {
           order_id: orderId,
           wait_for_invoice: true,
           template_name,
-          template_data: emailData,
+          template_data: emailDataWithOrderId,
           processing_time_ms: Date.now() - startTime,
         },
       };
@@ -427,18 +445,29 @@ Deno.serve(async (req: Request) => {
             console.log('[pending-communication] Found PDF log for order_id:', orderId, 'log_id:', log.id);
             pdfEmailLogId = log.id;
 
-            const { data: pdfData } = await supabase
+            const { data: pdfData, error: pdfDataError } = await supabase
               .from('pdf_generation_logs')
               .select('id, pdf_base64, filename, size_bytes, created_at')
               .eq('email_log_id', log.id)
               .maybeSingle();
 
-            if (pdfData) {
+            if (pdfDataError) {
+              console.error('[pending-communication] Error fetching PDF data:', pdfDataError);
+            }
+
+            if (pdfData && pdfData.pdf_base64) {
+              console.log('[pending-communication] PDF found with base64, size:', pdfData.size_bytes);
               existingPdf = pdfData;
               break;
+            } else {
+              console.log('[pending-communication] PDF log found but no base64 data');
             }
           }
         }
+      }
+
+      if (!existingPdf) {
+        console.log('[pending-communication] No existing PDF found for order_id:', orderId);
       }
 
       if (existingPdf && existingPdf.pdf_base64) {
@@ -463,11 +492,14 @@ Deno.serve(async (req: Request) => {
           .update({
             completed_data: {
               pdf_attachment: pdfAttachment,
-              pdf_generation_log_id: existingPdf.id,
+              pdf_generation_log_id: pdfEmailLogId,
+              pdf_email_log_id: pdfEmailLogId,
               pdf_filename: existingPdf.filename,
               pdf_size_bytes: existingPdf.size_bytes,
+              initial_log_id: parentLogData.id,
             },
             status: 'pdf_generated',
+            pdf_generated: true,
             completed_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
