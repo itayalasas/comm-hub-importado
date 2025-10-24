@@ -155,6 +155,10 @@ Deno.serve(async (req: Request) => {
       const useTLS = credentials.smtp_port === 465;
       console.log('[send-email] SMTP config:', { host: credentials.smtp_host, port: credentials.smtp_port, user: credentials.smtp_user, tls: useTLS });
 
+      const actualFromEmail = credentials.from_email || credentials.smtp_user;
+      const fromName = credentials.from_name || 'DogCatify';
+      console.log('[send-email] From email:', actualFromEmail, 'Name:', fromName);
+
       const connectionConfig: any = {
         hostname: credentials.smtp_host,
         port: credentials.smtp_port,
@@ -164,16 +168,16 @@ Deno.serve(async (req: Request) => {
 
       const client = new SMTPClient({ connection: connectionConfig });
 
-      const actualFromEmail = credentials.from_email || credentials.smtp_user;
-      const fromAddress = credentials.from_name ? credentials.from_name + ' <' + actualFromEmail + '>' : actualFromEmail;
-      console.log('[send-email] From address:', fromAddress);
-
       const emailConfig: any = {
-        from: fromAddress,
+        from: actualFromEmail,
+        fromName: fromName,
         to: recipient_email,
         subject: emailSubject,
+        content: 'auto',
         html: htmlContent,
       };
+
+      console.log('[send-email] Email config:', { from: actualFromEmail, fromName: fromName, to: recipient_email, subject: emailSubject, hasHtml: !!htmlContent });
 
       if (finalPdfBase64 && finalPdfFilename) {
         emailConfig.attachments = [{ filename: finalPdfFilename, content: finalPdfBase64, encoding: 'base64' }];
