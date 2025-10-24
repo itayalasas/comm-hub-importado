@@ -31,22 +31,21 @@ function renderTemplate(template: string, data: Record<string, any>): string {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 200,
       headers: corsHeaders,
     });
   }
 
-  const startTime = Date.now();
-
   try {
+    const startTime = Date.now();
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const apiKey = req.headers.get('x-api-key');
-
     if (!apiKey) {
       return new Response(
         JSON.stringify({
@@ -62,7 +61,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: application, error: appError } = await supabase
       .from('applications')
-      .select('*')
+      .select('id, name, api_key')
       .eq('api_key', apiKey)
       .maybeSingle();
 
@@ -70,7 +69,7 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Invalid or inactive API key',
+          error: 'Invalid API key',
         }),
         {
           status: 401,
@@ -100,19 +99,39 @@ Deno.serve(async (req: Request) => {
     console.log('Application:', application.name);
     console.log('Template:', template_name);
     console.log('Recipient:', recipient_email);
-    console.log('Has PDF:', !!finalPdfBase64);
-    console.log('PDF from _pdf_attachment:', !!_pdf_attachment);
-    console.log('_pdf_attachment structure:', _pdf_attachment ? { filename: _pdf_attachment.filename, hasContent: !!_pdf_attachment.content, contentLength: _pdf_attachment.content?.length } : null);
+    console.log('Has parent_log_id:', !!parent_log_id);
     console.log('Parent log ID:', parent_log_id);
+    console.log('PDF from _pdf_attachment:', !!_pdf_attachment);
+    console.log('Has PDF:', !!finalPdfBase64);
 
     if (!template_name || !recipient_email) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Missing required fields: template_name, recipient_email',
+          error: 'Missing required fields',
         }),
         {
           status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    const { data: credentials, error: credsError } = await supabase
+      .from('smtp_credentials')
+      .select('*')
+      .eq('application_id', application.id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (credsError || !credentials) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'SMTP credentials not configured',
+        }),
+        {
+          status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
@@ -123,6 +142,7 @@ Deno.serve(async (req: Request) => {
       .select('*')
       .eq('name', template_name)
       .eq('application_id', application.id)
+      .eq('template_type', 'email')
       .eq('is_active', true)
       .maybeSingle();
 
@@ -130,27 +150,7 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Template not found or inactive',
-        }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    const { data: credentials, error: credError } = await supabase
-      .from('email_credentials')
-      .select('*')
-      .eq('application_id', application.id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (credError || !credentials) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Email credentials not configured',
+          error: 'Template not found',
         }),
         {
           status: 404,
@@ -168,34 +168,48 @@ Deno.serve(async (req: Request) => {
 
     const hasPdfAttachment = !!finalPdfBase64;
 
-    let logEntry;
+    let logEntry: any;
 
     if (parent_log_id) {
       console.log('[send-email] Using existing parent_log_id, not creating new log:', parent_log_id);
+
+      const { data: existingLog, error: fetchError } = await supabase
+        .from('email_logs')
+        .select('*')
+        .eq('id', parent_log_id)
+        .maybeSingle();
+
+      if (fetchError || !existingLog) {
+        console.error('[send-email] Failed to fetch parent log:', fetchError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Parent log not found',
+          }),
+          {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      logEntry = existingLog;
+      console.log('[send-email] Updating parent log from queued to pending:', parent_log_id);
 
       await supabase
         .from('email_logs')
         .update({
           status: 'pending',
-          pdf_generated: hasPdfAttachment,
           metadata: {
-            template_name,
-            data,
-            resend: true,
-            pdf_info: _pdf_info || null,
+            ...(existingLog.metadata || {}),
+            action: 'email_sending',
+            message: 'Sending email with invoice',
+            pdf_attached: hasPdfAttachment,
           },
         })
         .eq('id', parent_log_id);
-
-      const { data: parentLog } = await supabase
-        .from('email_logs')
-        .select()
-        .eq('id', parent_log_id)
-        .single();
-
-      logEntry = parentLog;
     } else {
-      const emailLog: any = {
+      const initialLog: any = {
         application_id: application.id,
         template_id: template.id,
         recipient_email,
@@ -204,25 +218,26 @@ Deno.serve(async (req: Request) => {
         communication_type: hasPdfAttachment ? 'email_with_pdf' : 'email',
         pdf_generated: hasPdfAttachment,
         metadata: {
-          template_name,
           data,
-          resend: true,
-          pdf_info: _pdf_info || null,
+          action: 'email_queued',
+          message: 'Email queued for sending',
+          template_name,
+          processing_time_ms: Date.now() - startTime,
         },
       };
 
-      const { data: logData, error: logError } = await supabase
+      const { data: newLog, error: logError } = await supabase
         .from('email_logs')
-        .insert(emailLog)
+        .insert(initialLog)
         .select()
         .single();
 
       if (logError) {
-        console.error('Error creating log entry:', logError);
+        console.error('Error creating email log:', logError);
         return new Response(
           JSON.stringify({
             success: false,
-            error: 'Failed to create log entry',
+            error: 'Failed to create email log',
           }),
           {
             status: 500,
@@ -231,16 +246,11 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      logEntry = logData;
+      logEntry = newLog;
     }
 
-    const trackingPixel = `<img src="${supabaseUrl}/functions/v1/track-email/open?log_id=${logEntry.id}" width="1" height="1" style="display:none" alt="" />`;
-
-    if (htmlContent.includes('</body>')) {
-      htmlContent = htmlContent.replace('</body>', `${trackingPixel}</body>`);
-    } else {
-      htmlContent += trackingPixel;
-    }
+    const trackingPixelUrl = `${supabaseUrl}/functions/v1/track-email/open?log_id=${logEntry.id}`;
+    htmlContent += `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none" />`;
 
     htmlContent = htmlContent.replace(
       /href="(https?:\/\/[^"]+)"/gi,
@@ -252,6 +262,14 @@ Deno.serve(async (req: Request) => {
 
     try {
       const useTLS = credentials.smtp_port === 465;
+
+      console.log('[send-email] SMTP Configuration:', {
+        host: credentials.smtp_host,
+        port: credentials.smtp_port,
+        user: credentials.smtp_user,
+        from: credentials.from_email,
+        useTLS,
+      });
 
       const client = new SMTPClient({
         connection: {
@@ -283,9 +301,15 @@ Deno.serve(async (req: Request) => {
         console.log('PDF attachment configured:', finalPdfFilename);
       }
 
-      console.log('Sending email to:', recipient_email);
-      await client.send(emailConfig);
+      console.log('[send-email] Sending email to:', recipient_email);
+      console.log('[send-email] Email subject:', emailSubject);
+      console.log('[send-email] Has attachments:', !!emailConfig.attachments);
+
+      const sendResult = await client.send(emailConfig);
+      console.log('[send-email] SMTP send result:', JSON.stringify(sendResult));
+
       await client.close();
+      console.log('[send-email] SMTP connection closed');
 
       const endTime = Date.now();
       const processingTime = endTime - startTime;
@@ -333,15 +357,13 @@ Deno.serve(async (req: Request) => {
         .from('email_logs')
         .update({
           status: 'failed',
-          error_message: emailError.message || String(emailError),
+          error_message: emailError.message || 'Unknown email sending error',
           metadata: {
             ...(logEntry.metadata || {}),
+            action: 'email_failed',
+            message: 'Failed to send email',
+            error: emailError.message,
             processing_time_ms: processingTime,
-            error_details: {
-              name: emailError.name,
-              message: emailError.message,
-              stack: emailError.stack,
-            },
           },
         })
         .eq('id', logEntry.id);
@@ -359,7 +381,7 @@ Deno.serve(async (req: Request) => {
       );
     }
   } catch (error: any) {
-    console.error('Unexpected error in send-email function:', error);
+    console.error('Unexpected error:', error);
     return new Response(
       JSON.stringify({
         success: false,
