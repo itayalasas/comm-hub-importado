@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
-import { renderTemplate } from '../_shared/template-engine.ts';
+import { renderTemplate } from './_shared/template-engine.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -387,28 +387,35 @@ Deno.serve(async (req: Request) => {
 
     console.log('PDF generated successfully:', { filename, sizeBytes });
 
+    const emailLogData: any = {
+      application_id: application.id,
+      template_id: pdfTemplate.id,
+      recipient_email: 'pdf_generation@system.local',
+      subject: `PDF Generated: ${filename}`,
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+      communication_type: 'pdf_generation',
+      pdf_generated: true,
+      metadata: {
+        endpoint: 'generate-pdf',
+        filename,
+        size_bytes: sizeBytes,
+        order_id,
+        pending_communication_id,
+        action: 'pdf_generated',
+        template_name: pdfTemplate.name,
+        data,
+      },
+    };
+
+    if (pendingComm?.parent_log_id) {
+      emailLogData.parent_log_id = pendingComm.parent_log_id;
+      console.log('[generate-pdf] Setting parent_log_id from pending communication:', pendingComm.parent_log_id);
+    }
+
     const { data: emailLog, error: emailLogError } = await supabase
       .from('email_logs')
-      .insert({
-        application_id: application.id,
-        template_id: pdfTemplate.id,
-        recipient_email: 'pdf_generation@system.local',
-        subject: `PDF Generated: ${filename}`,
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        communication_type: 'pdf_generation',
-        pdf_generated: true,
-        metadata: {
-          endpoint: 'generate-pdf',
-          filename,
-          size_bytes: sizeBytes,
-          order_id,
-          pending_communication_id,
-          action: 'pdf_generated',
-          template_name: pdfTemplate.name,
-          data,
-        },
-      })
+      .insert(emailLogData)
       .select()
       .single();
 
