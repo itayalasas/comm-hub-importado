@@ -3,7 +3,7 @@ import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
-import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send, Check } from 'lucide-react';
 
 interface Stats {
   totalSent: number;
@@ -262,7 +262,7 @@ export const Statistics = () => {
         .from('pending_communications')
         .select('*')
         .eq('application_id', appId)
-        .in('status', ['waiting_data', 'processing', 'pdf_generated'])
+        .in('status', ['waiting_data', 'processing', 'pdf_generated', 'sent', 'failed'])
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -613,7 +613,17 @@ export const Statistics = () => {
                       {pendingComms.map((comm) => (
                         <tr key={comm.id} className="hover:bg-amber-700/10 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {comm.status === 'pdf_generated' ? (
+                            {comm.status === 'sent' ? (
+                              <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-blue-500/20 bg-blue-500/10 text-blue-400">
+                                <Check className="w-4 h-4" />
+                                <span>Enviado</span>
+                              </span>
+                            ) : comm.status === 'failed' ? (
+                              <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-red-500/20 bg-red-500/10 text-red-400">
+                                <XCircle className="w-4 h-4" />
+                                <span>Fallido</span>
+                              </span>
+                            ) : comm.status === 'pdf_generated' ? (
                               <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-green-500/20 bg-green-500/10 text-green-400">
                                 <FileCheck className="w-4 h-4" />
                                 <span>PDF Generado</span>
