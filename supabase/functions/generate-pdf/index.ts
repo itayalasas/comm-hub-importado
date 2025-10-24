@@ -457,7 +457,7 @@ Deno.serve(async (req: Request) => {
     const wrappedData = { data: processedData };
     const htmlContent = renderTemplate(pdfTemplate.html_content, wrappedData);
 
-    const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', wrappedData);
+    const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', processedData);
 
     console.log('Converting HTML to PDF with PDFShift API...');
     const pdfBase64 = await htmlToPdfBase64(htmlContent);
