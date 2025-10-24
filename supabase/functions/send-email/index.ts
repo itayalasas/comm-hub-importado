@@ -55,13 +55,15 @@ Deno.serve(async (req: Request) => {
 
     let finalPdfBase64 = _pdf_attachment?.content || pdf_base64;
     const finalPdfFilename = _pdf_attachment?.filename || _pdf_info?.pdf_filename || pdf_filename || 'document.pdf';
+    let pdfPublicUrl = null;
 
     if (_pdf_info?.pdf_email_log_id && !finalPdfBase64) {
       console.log('[send-email] Fetching PDF from database, email_log_id:', _pdf_info.pdf_email_log_id);
-      const { data: pdfData } = await supabase.from('pdf_generation_logs').select('pdf_base64, filename, size_bytes').eq('email_log_id', _pdf_info.pdf_email_log_id).maybeSingle();
+      const { data: pdfData } = await supabase.from('pdf_generation_logs').select('pdf_base64, filename, size_bytes, public_url').eq('email_log_id', _pdf_info.pdf_email_log_id).maybeSingle();
       if (pdfData?.pdf_base64) {
         console.log('[send-email] PDF fetched from DB, size:', pdfData.size_bytes);
         finalPdfBase64 = pdfData.pdf_base64;
+        pdfPublicUrl = pdfData.public_url;
       } else {
         console.log('[send-email] PDF not found in database');
       }
@@ -115,6 +117,28 @@ Deno.serve(async (req: Request) => {
     if (hasPdfAttachment && _pdf_info?.pdf_email_log_id) {
       console.log('[send-email] Linking PDF log as child');
       await supabase.from('email_logs').update({ parent_log_id: logEntry.id }).eq('id', _pdf_info.pdf_email_log_id);
+    }
+
+    if (hasPdfAttachment && pdfPublicUrl) {
+      console.log('[send-email] Adding PDF download link to email');
+      const downloadSection = `
+        <div style="margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-radius: 8px; text-align: center; font-family: Arial, sans-serif;">
+          <p style="margin: 0 0 15px 0; color: #333; font-size: 16px;">
+            <strong>\uD83D\uDCC4 Tu factura está adjunta a este correo</strong>
+          </p>
+          <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">
+            También puedes descargarla o verla en línea haciendo clic en el botón:
+          </p>
+          <a href="${pdfPublicUrl}"
+             style="display: inline-block; padding: 12px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px;">
+            \uD83D\uDCE5 Ver/Descargar Factura
+          </a>
+          <p style="margin: 15px 0 0 0; color: #999; font-size: 12px;">
+            Este enlace estará disponible por 90 días
+          </p>
+        </div>
+      `;
+      htmlContent += downloadSection;
     }
 
     const trackingPixelUrl = supabaseUrl + '/functions/v1/track-email/open?log_id=' + logEntry.id;
