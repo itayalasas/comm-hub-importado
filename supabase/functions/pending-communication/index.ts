@@ -411,10 +411,12 @@ Deno.serve(async (req: Request) => {
         .limit(10);
 
       let existingPdf = null;
+      let pdfEmailLogId = null;
       if (pdfLogs) {
         for (const log of pdfLogs) {
           if (log.metadata?.order_id === orderId) {
             console.log('[pending-communication] Found PDF log for order_id:', orderId, 'log_id:', log.id);
+            pdfEmailLogId = log.id;
 
             const { data: pdfData } = await supabase
               .from('pdf_generation_logs')
@@ -432,6 +434,14 @@ Deno.serve(async (req: Request) => {
 
       if (existingPdf && existingPdf.pdf_base64) {
         console.log('[pending-communication] Found existing PDF! Attaching to pending communication:', existingPdf.id);
+
+        console.log('[pending-communication] Updating PDF email_log to link with parent_log_id:', parentLogData.id);
+        await supabase
+          .from('email_logs')
+          .update({
+            parent_log_id: parentLogData.id,
+          })
+          .eq('id', pdfEmailLogId);
 
         const pdfAttachment = {
           filename: existingPdf.filename,
