@@ -417,6 +417,11 @@ export const Statistics = () => {
 
       const templateData = log.metadata?.template_data || log.metadata?.data || {};
 
+      const orderId = log.metadata?.order_id;
+      const waitForInvoice = log.metadata?.wait_for_invoice;
+      const hasPdfInfo = log.metadata?.pdf_info || pdfBase64;
+
+      let endpoint = 'send-email';
       const payload: any = {
         recipient_email: log.recipient_email,
         subject: log.subject,
@@ -425,12 +430,16 @@ export const Statistics = () => {
         data: templateData
       };
 
-      if (pdfBase64) {
+      if (orderId && waitForInvoice && !hasPdfInfo) {
+        endpoint = 'pending-communication';
+        payload.order_id = orderId;
+        payload.wait_for_invoice = true;
+      } else if (pdfBase64) {
         payload.pdf_base64 = pdfBase64;
         payload.pdf_filename = log.metadata?.pdf_filename || 'document.pdf';
       }
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/${endpoint}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${supabaseAnonKey}`,
