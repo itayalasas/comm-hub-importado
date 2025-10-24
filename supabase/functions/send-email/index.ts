@@ -144,10 +144,10 @@ Deno.serve(async (req: Request) => {
       if (useTLS) connectionConfig.tls = true;
 
       const client = new SMTPClient({ connection: connectionConfig });
-      
-      const actualFromEmail = credentials.smtp_user;
+
+      const actualFromEmail = credentials.from_email || credentials.smtp_user;
       const fromAddress = credentials.from_name ? credentials.from_name + ' <' + actualFromEmail + '>' : actualFromEmail;
-      console.log('[send-email] From address:', fromAddress, '(using smtp_user)');
+      console.log('[send-email] From address:', fromAddress);
 
       const emailConfig: any = {
         from: fromAddress,
