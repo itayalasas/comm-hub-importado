@@ -104,6 +104,8 @@ async function htmlToPdfBase64(html: string): Promise<string> {
       source: html,
       landscape: false,
       use_print: false,
+     "sandbox": true
+
     }),
   });
 
