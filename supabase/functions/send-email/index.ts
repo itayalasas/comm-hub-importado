@@ -109,7 +109,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const { data: credentials, error: credsError } = await supabase
-      .from('smtp_credentials')
+      .from('email_credentials')
       .select('*')
       .eq('application_id', application.id)
       .eq('is_active', true)
