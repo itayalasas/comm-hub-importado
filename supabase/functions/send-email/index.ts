@@ -93,8 +93,8 @@ Deno.serve(async (req: Request) => {
       _pdf_info,
     } = requestData;
 
-    const finalPdfBase64 = _pdf_attachment || pdf_base64;
-    const finalPdfFilename = _pdf_info?.pdf_filename || pdf_filename || 'document.pdf';
+    const finalPdfBase64 = _pdf_attachment?.content || pdf_base64;
+    const finalPdfFilename = _pdf_attachment?.filename || _pdf_info?.pdf_filename || pdf_filename || 'document.pdf';
 
     console.log('=== SEND-EMAIL FUNCTION START ===');
     console.log('Application:', application.name);
@@ -102,6 +102,7 @@ Deno.serve(async (req: Request) => {
     console.log('Recipient:', recipient_email);
     console.log('Has PDF:', !!finalPdfBase64);
     console.log('PDF from _pdf_attachment:', !!_pdf_attachment);
+    console.log('_pdf_attachment structure:', _pdf_attachment ? { filename: _pdf_attachment.filename, hasContent: !!_pdf_attachment.content, contentLength: _pdf_attachment.content?.length } : null);
     console.log('Parent log ID:', parent_log_id);
 
     if (!template_name || !recipient_email) {
