@@ -64,7 +64,6 @@ Deno.serve(async (req: Request) => {
       .from('applications')
       .select('*')
       .eq('api_key', apiKey)
-      .eq('is_active', true)
       .maybeSingle();
 
     if (appError || !application) {
