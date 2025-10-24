@@ -271,6 +271,22 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', logEntry.id);
 
+      if (parent_log_id) {
+        console.log('[send-email] Updating parent log status to opened:', parent_log_id);
+        await supabase
+          .from('email_logs')
+          .update({
+            status: 'opened',
+            metadata: {
+              action: 'email_sent_with_invoice',
+              message: 'Email sent successfully with PDF invoice attached',
+              child_log_id: logEntry.id,
+              completed_at: new Date().toISOString(),
+            },
+          })
+          .eq('id', parent_log_id);
+      }
+
       console.log('Email sent successfully');
 
       return new Response(

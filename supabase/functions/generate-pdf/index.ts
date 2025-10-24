@@ -24,8 +24,12 @@ async function htmlToPdfBase64(html: string): Promise<string> {
   const pdfshiftApiUrl = Deno.env.get('PDFSHIFT_API_URL') || 'https://api.pdfshift.io/v3/convert/pdf';
 
   if (!pdfshiftApiKey) {
-    throw new Error('PDFSHIFT_API_KEY environment variable is not set');
+    console.error('[generate-pdf] PDFSHIFT_API_KEY not configured');
+    throw new Error('PDFSHIFT_API_KEY environment variable is not set. Please configure it in Supabase Edge Functions secrets.');
   }
+
+  console.log('[generate-pdf] Calling PDFShift API...');
+  console.log('[generate-pdf] HTML length:', html.length);
 
   const credentials = btoa(`api:${pdfshiftApiKey}`);
 
@@ -42,12 +46,17 @@ async function htmlToPdfBase64(html: string): Promise<string> {
     }),
   });
 
+  console.log('[generate-pdf] PDFShift response status:', response.status);
+
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('[generate-pdf] PDFShift API error:', errorText);
     throw new Error(`PDFShift API error: ${response.status} - ${errorText}`);
   }
 
   const pdfArrayBuffer = await response.arrayBuffer();
+  console.log('[generate-pdf] Received PDF buffer, size:', pdfArrayBuffer.byteLength, 'bytes');
+
   const uint8Array = new Uint8Array(pdfArrayBuffer);
 
   let binaryString = '';
@@ -57,7 +66,10 @@ async function htmlToPdfBase64(html: string): Promise<string> {
     binaryString += String.fromCharCode.apply(null, Array.from(chunk));
   }
 
-  return btoa(binaryString);
+  const base64 = btoa(binaryString);
+  console.log('[generate-pdf] PDF converted to base64, length:', base64.length);
+
+  return base64;
 }
 
 Deno.serve(async (req: Request) => {
