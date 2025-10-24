@@ -399,6 +399,103 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', parentLogData.id);
 
+      console.log('[pending-communication] Checking if PDF already exists for order_id:', orderId);
+
+      const { data: pdfLogs } = await supabase
+        .from('email_logs')
+        .select('id, metadata')
+        .eq('application_id', application.id)
+        .eq('communication_type', 'pdf_generation')
+        .eq('status', 'sent')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      let existingPdf = null;
+      if (pdfLogs) {
+        for (const log of pdfLogs) {
+          if (log.metadata?.order_id === orderId) {
+            console.log('[pending-communication] Found PDF log for order_id:', orderId, 'log_id:', log.id);
+
+            const { data: pdfData } = await supabase
+              .from('pdf_generation_logs')
+              .select('id, pdf_base64, filename, size_bytes, created_at')
+              .eq('email_log_id', log.id)
+              .maybeSingle();
+
+            if (pdfData) {
+              existingPdf = pdfData;
+              break;
+            }
+          }
+        }
+      }
+
+      if (existingPdf && existingPdf.pdf_base64) {
+        console.log('[pending-communication] Found existing PDF! Attaching to pending communication:', existingPdf.id);
+
+        const pdfAttachment = {
+          filename: existingPdf.filename,
+          content: existingPdf.pdf_base64,
+          encoding: 'base64',
+        };
+
+        await supabase
+          .from('pending_communications')
+          .update({
+            completed_data: {
+              pdf_attachment: pdfAttachment,
+              pdf_generation_log_id: existingPdf.id,
+              pdf_filename: existingPdf.filename,
+              pdf_size_bytes: existingPdf.size_bytes,
+            },
+            status: 'pdf_generated',
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', pendingComm.id);
+
+        console.log('[pending-communication] PDF attached, triggering email send...');
+
+        try {
+          const completeUrl = `${supabaseUrl}/functions/v1/complete-pending-communication`;
+          const completeResponse = await fetch(completeUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+              'x-api-key': apiKey,
+            },
+            body: JSON.stringify({
+              pending_communication_id: pendingComm.id,
+            }),
+          });
+
+          const completeResult = await completeResponse.json();
+
+          if (completeResult.success) {
+            console.log('[pending-communication] Email sent successfully with existing PDF');
+            return new Response(
+              JSON.stringify({
+                success: true,
+                message: 'Email sent successfully with existing PDF',
+                log_id: parentLogData.id,
+                pending_communication_id: pendingComm.id,
+                status: 'sent',
+                pdf_was_ready: true,
+              }),
+              {
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              }
+            );
+          } else {
+            console.error('[pending-communication] Failed to send email:', completeResult);
+          }
+        } catch (emailError) {
+          console.error('[pending-communication] Error sending email:', emailError);
+        }
+      }
+
       return new Response(
         JSON.stringify({
           success: true,
