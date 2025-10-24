@@ -344,9 +344,8 @@ Deno.serve(async (req: Request) => {
         .from('pending_communications')
         .insert({
           application_id: application.id,
-          email_template_id: template.id,
+          template_name: template_name,
           recipient_email,
-          subject: parentLog.subject,
           base_data: emailData,
           pending_fields: ['invoice_pdf'],
           external_system: 'email_system',
@@ -359,7 +358,30 @@ Deno.serve(async (req: Request) => {
 
       if (pendingError) {
         console.error('[pending-communication] Error creating pending communication:', pendingError);
-        throw new Error('Failed to create pending communication');
+
+        await supabase
+          .from('email_logs')
+          .update({
+            status: 'failed',
+            error_message: `Failed to create pending communication: ${pendingError.message}`,
+            metadata: {
+              ...parentLog.metadata,
+              error: pendingError,
+            },
+          })
+          .eq('id', parentLogData.id);
+
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Failed to create pending communication',
+            details: pendingError.message,
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
       }
 
       console.log('[pending-communication] Created parent log and pending communication:', {
