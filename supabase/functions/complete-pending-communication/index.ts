@@ -6,18 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, X-Api-Key',
 };
 
-interface CompleteCommRequest {
-  external_reference_id?: string;
-  pending_communication_id?: string;
-  completed_data?: Record<string, any>;
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
@@ -28,122 +19,58 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const apiKey = req.headers.get('x-api-key');
-
     if (!apiKey) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Missing API key in x-api-key header',
-        }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return new Response(JSON.stringify({ success: false, error: 'Missing API key in x-api-key header' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { data: application, error: appError } = await supabase
-      .from('applications')
-      .select('id, name')
-      .eq('api_key', apiKey)
-      .maybeSingle();
-
-    if (appError || !application) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Invalid API key',
-        }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+    const { data: application } = await supabase.from('applications').select('id, name').eq('api_key', apiKey).maybeSingle();
+    if (!application) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid API key' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const requestData: CompleteCommRequest = await req.json();
+    const requestData: any = await req.json();
     const { external_reference_id, pending_communication_id, completed_data } = requestData;
 
     if (!external_reference_id && !pending_communication_id) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Missing required field: external_reference_id or pending_communication_id',
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return new Response(JSON.stringify({ success: false, error: 'Missing required field: external_reference_id or pending_communication_id' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    let query = supabase
-      .from('pending_communications')
-      .select('*')
-      .eq('application_id', application.id);
-
+    let query = supabase.from('pending_communications').select('*').eq('application_id', application.id);
     if (pending_communication_id) {
       query = query.eq('id', pending_communication_id);
     } else {
       query = query.eq('external_reference_id', external_reference_id);
     }
 
-    const { data: pendingComm, error: fetchError } = await query.maybeSingle();
-
-    if (fetchError || !pendingComm) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Pending communication not found',
-        }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+    const { data: pendingComm } = await query.maybeSingle();
+    if (!pendingComm) {
+      return new Response(JSON.stringify({ success: false, error: 'Pending communication not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (pendingComm.status === 'sent') {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Communication already sent',
-          sent_at: pendingComm.sent_at,
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return new Response(JSON.stringify({ success: false, error: 'Communication already sent', sent_at: pendingComm.sent_at }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const mergedData = {
-      ...pendingComm.base_data,
-      ...completed_data,
-    };
+    const mergedData = { ...pendingComm.base_data, ...completed_data };
 
-    console.log('[complete-pending] Current status:', pendingComm.status);
+    console.log('[complete-pending] Status:', pendingComm.status);
     console.log('[complete-pending] Has PDF attachment:', !!pendingComm.completed_data?.pdf_attachment);
 
     if (pendingComm.status === 'waiting_data') {
-      await supabase
-        .from('pending_communications')
-        .update({
-          completed_data: mergedData,
-          status: 'data_received',
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', pendingComm.id);
-
+      await supabase.from('pending_communications').update({
+        completed_data: mergedData,
+        status: 'data_received',
+        completed_at: new Date().toISOString(),
+      }).eq('id', pendingComm.id);
       console.log('[complete-pending] Status updated to data_received');
     }
 
-    console.log('[complete-pending] Now sending email...');
+    console.log('[complete-pending] Sending email...');
 
-    const sendEmailUrl = `${supabaseUrl}/functions/v1/send-email`;
+    const sendEmailUrl = supabaseUrl + '/functions/v1/send-email';
 
     try {
-      console.log('[complete-pending] Full completed_data:', JSON.stringify(pendingComm.completed_data));
+      console.log('[complete-pending] completed_data:', JSON.stringify(pendingComm.completed_data));
 
       const pdfEmailLogId = pendingComm.completed_data?.pdf_email_log_id || pendingComm.completed_data?.pdf_generation_log_id;
 
@@ -154,9 +81,8 @@ Deno.serve(async (req: Request) => {
         pdf_size_bytes: pendingComm.completed_data?.pdf_size_bytes,
       };
 
-      console.log('[complete-pending] PDF info being passed:', JSON.stringify(pdfInfo));
+      console.log('[complete-pending] PDF info:', JSON.stringify(pdfInfo));
       console.log('[complete-pending] PDF email_log_id:', pdfEmailLogId);
-      console.log('[complete-pending] Has pdf_filename:', !!pdfInfo.pdf_filename);
 
       const requestBody: any = {
         template_name: pendingComm.template_name,
@@ -171,28 +97,22 @@ Deno.serve(async (req: Request) => {
       };
 
       console.log('[complete-pending] Reusing parent log ID:', pendingComm.parent_log_id);
-      console.log('[complete-pending] PDF will be fetched from pdf_generation_logs using email_log_id:', pdfEmailLogId);
+      console.log('[complete-pending] PDF will be fetched using email_log_id:', pdfEmailLogId);
 
       const emailResponse = await fetch(sendEmailUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-        },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
         body: JSON.stringify(requestBody),
       });
 
       const emailResult = await emailResponse.json();
 
       if (emailResult.success) {
-        await supabase
-          .from('pending_communications')
-          .update({
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-            sent_log_id: emailResult.log_id,
-          })
-          .eq('id', pendingComm.id);
+        await supabase.from('pending_communications').update({
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          sent_log_id: emailResult.log_id,
+        }).eq('id', pendingComm.id);
 
         if (pendingComm.webhook_url) {
           try {
@@ -211,102 +131,27 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        return new Response(
-          JSON.stringify({
-            success: true,
-            message: 'Communication completed and email sent successfully',
-            pending_communication_id: pendingComm.id,
-            log_id: emailResult.log_id,
-            features: emailResult.features,
-          }),
-          {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Communication completed and email sent',
+          pending_communication_id: pendingComm.id,
+          log_id: emailResult.log_id,
+        }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } else {
         console.error('[complete-pending] Email send failed:', emailResult);
-
-        console.log('[complete-pending] Error already logged by send-email function');
-
-        await supabase
-          .from('pending_communications')
-          .update({
-            status: 'failed',
-            error_message: emailResult.error || 'Failed to send email',
-          })
-          .eq('id', pendingComm.id);
-
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Failed to send email',
-            details: emailResult.error,
-          }),
-          {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
+        await supabase.from('pending_communications').update({
+          status: 'failed',
+          error_message: emailResult.error || 'Failed to send email',
+        }).eq('id', pendingComm.id);
+        return new Response(JSON.stringify({ success: false, error: 'Failed to send email', details: emailResult.error }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     } catch (sendError: any) {
-      console.error('[complete-pending] Error sending email:', sendError);
-
-      await supabase.from('email_logs').insert({
-        application_id: application.id,
-        template_id: null,
-        recipient_email: pendingComm.recipient_email,
-        subject: `Exception completing pending communication for ${pendingComm.order_id || pendingComm.id}`,
-        status: 'failed',
-        error_message: sendError.message,
-        communication_type: pendingComm.communication_type || 'email',
-        metadata: {
-          pending_communication_id: pendingComm.id,
-          external_reference_id: pendingComm.external_reference_id,
-          order_id: pendingComm.order_id,
-          template_name: pendingComm.template_name,
-          action: 'exception_sending_email',
-          error_details: {
-            name: sendError.name,
-            message: sendError.message,
-            stack: sendError.stack,
-          },
-        },
-      });
-
-      await supabase
-        .from('pending_communications')
-        .update({
-          status: 'failed',
-          error_message: sendError.message,
-        })
-        .eq('id', pendingComm.id);
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Error sending email',
-          details: sendError.message,
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      console.error('[complete-pending] Error:', sendError);
+      await supabase.from('pending_communications').update({ status: 'failed', error_message: sendError.message }).eq('id', pendingComm.id);
+      return new Response(JSON.stringify({ success: false, error: 'Error sending email', details: sendError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
   } catch (error: any) {
-    console.error('[complete-pending] Error processing request:', error);
-
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'Internal server error',
-        details: error.message,
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    console.error('[complete-pending] Error:', error);
+    return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
