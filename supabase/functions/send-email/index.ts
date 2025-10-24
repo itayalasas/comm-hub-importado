@@ -85,7 +85,8 @@ Deno.serve(async (req: Request) => {
 
     let htmlContent = renderTemplate(template.html_content, data);
     let emailSubject = subject || renderTemplate(template.subject || '', data);
-    htmlContent = htmlContent.replace(/\r?\n/g, '\r\n');
+
+    emailSubject = emailSubject.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
 
     const hasPdfAttachment = !!finalPdfBase64;
     let logEntry: any;
@@ -121,28 +122,15 @@ Deno.serve(async (req: Request) => {
 
     if (hasPdfAttachment && pdfPublicUrl) {
       console.log('[send-email] Adding PDF download link to email');
-      const downloadSection = `
-        <div style="margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-radius: 8px; text-align: center; font-family: Arial, sans-serif;">
-          <p style="margin: 0 0 15px 0; color: #333; font-size: 16px;">
-            <strong>\uD83D\uDCC4 Tu factura está adjunta a este correo</strong>
-          </p>
-          <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">
-            También puedes descargarla o verla en línea haciendo clic en el botón:
-          </p>
-          <a href="${pdfPublicUrl}"
-             style="display: inline-block; padding: 12px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px;">
-            \uD83D\uDCE5 Ver/Descargar Factura
-          </a>
-          <p style="margin: 15px 0 0 0; color: #999; font-size: 12px;">
-            Este enlace estará disponible por 90 días
-          </p>
-        </div>
-      `;
+      const downloadSection = '<div style="margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-radius: 8px; text-align: center; font-family: Arial, sans-serif;"><p style="margin: 0 0 15px 0; color: #333; font-size: 16px;"><strong>Tu factura esta adjunta a este correo</strong></p><p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">Tambien puedes descargarla o verla en linea haciendo clic en el boton:</p><a href="' + pdfPublicUrl + '" style="display: inline-block; padding: 12px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px;">Ver/Descargar Factura</a><p style="margin: 15px 0 0 0; color: #999; font-size: 12px;">Este enlace estara disponible por 90 dias</p></div>';
       htmlContent += downloadSection;
     }
 
     const trackingPixelUrl = supabaseUrl + '/functions/v1/track-email/open?log_id=' + logEntry.id;
     htmlContent += '<img src="' + trackingPixelUrl + '" width="1" height="1" style="display:none" />';
+
+    htmlContent = htmlContent.replace(/\r?\n/g, '\r\n');
+    htmlContent = htmlContent.replace(/\r\r\n/g, '\r\n');
 
     try {
       const useTLS = credentials.smtp_port === 465;
