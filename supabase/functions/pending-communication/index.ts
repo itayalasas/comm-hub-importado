@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
+import { renderTemplate } from '../_shared/template-engine.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -312,11 +313,15 @@ Deno.serve(async (req: Request) => {
     if (orderId && waitForInvoice) {
       console.log('[pending-communication] wait_for_invoice=true, creating parent log and pending communication');
 
+      const baseDataWithOrderId = orderId ? { ...emailData, order_id: orderId } : emailData;
+      const subjectTemplate = requestData.subject || template.subject || 'Pending Invoice';
+      const renderedSubject = renderTemplate(subjectTemplate, baseDataWithOrderId);
+
       const parentLog: any = {
         application_id: application.id,
         template_id: template.id,
         recipient_email,
-        subject: requestData.subject || template.subject || 'Pending Invoice',
+        subject: renderedSubject,
         status: 'queued',
         communication_type: 'email_with_pdf',
         pdf_generated: false,
@@ -341,8 +346,6 @@ Deno.serve(async (req: Request) => {
         console.error('[pending-communication] Error creating parent log:', parentLogError);
         throw new Error('Failed to create parent log');
       }
-
-      const baseDataWithOrderId = orderId ? { ...emailData, order_id: orderId } : emailData;
 
       const { data: pendingComm, error: pendingError } = await supabase
         .from('pending_communications')
