@@ -35,6 +35,7 @@ interface EmailLog {
   parent_log_id: string | null;
   communication_type: string;
   pdf_generated: boolean;
+  template_id: string | null;
 }
 
 interface PendingCommunication {
@@ -394,6 +395,20 @@ export const Statistics = () => {
 
       console.log('Reenviando con API key:', currentApp.api_key);
 
+      if (!log.template_id) {
+        throw new Error('El log no tiene un template_id asociado');
+      }
+
+      const { data: template, error: templateError } = await supabase
+        .from('communication_templates')
+        .select('name')
+        .eq('id', log.template_id)
+        .maybeSingle();
+
+      if (templateError || !template) {
+        throw new Error('No se pudo encontrar el template asociado');
+      }
+
       let pdfBase64 = null;
 
       if (log.pdf_generated && log.metadata?.pdf_base64) {
@@ -405,7 +420,7 @@ export const Statistics = () => {
       const payload: any = {
         recipient_email: log.recipient_email,
         subject: log.subject,
-        template_name: log.metadata?.template_name || 'default',
+        template_name: template.name,
         application_id: selectedApp,
         data: templateData
       };
