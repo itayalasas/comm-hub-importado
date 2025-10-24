@@ -168,104 +168,48 @@ Deno.serve(async (req: Request) => {
 
     const hasPdfAttachment = !!finalPdfBase64;
 
-    let logEntry: any;
+    const emailLog: any = {
+      application_id: application.id,
+      template_id: template.id,
+      recipient_email,
+      subject: emailSubject,
+      status: 'pending',
+      communication_type: hasPdfAttachment ? 'email_with_pdf' : 'email',
+      pdf_generated: hasPdfAttachment,
+      metadata: {
+        template_name,
+        data,
+        resend: true,
+        pdf_info: _pdf_info || null,
+      },
+    };
 
     if (parent_log_id) {
-      console.log('[send-email] Using existing parent log:', parent_log_id);
-
-      const { data: existingLog, error: fetchError } = await supabase
-        .from('email_logs')
-        .select('*')
-        .eq('id', parent_log_id)
-        .single();
-
-      if (fetchError || !existingLog) {
-        console.error('[send-email] Failed to fetch parent log:', fetchError);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Parent log not found',
-          }),
-          {
-            status: 404,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
-      }
-
-      const { error: updateError } = await supabase
-        .from('email_logs')
-        .update({
-          template_id: template.id,
-          recipient_email,
-          subject: emailSubject,
-          communication_type: hasPdfAttachment ? 'email_with_pdf' : 'email',
-          pdf_generated: hasPdfAttachment,
-          metadata: {
-            ...existingLog.metadata,
-            template_name,
-            data,
-            pdf_info: _pdf_info || null,
-          },
-        })
-        .eq('id', parent_log_id);
-
-      if (updateError) {
-        console.error('[send-email] Failed to update parent log:', updateError);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Failed to update log entry',
-          }),
-          {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
-      }
-
-      logEntry = { ...existingLog, id: parent_log_id };
-    } else {
-      console.log('[send-email] Creating new log entry');
-
-      const emailLog: any = {
-        application_id: application.id,
-        template_id: template.id,
-        recipient_email,
-        subject: emailSubject,
-        status: 'pending',
-        communication_type: hasPdfAttachment ? 'email_with_pdf' : 'email',
-        pdf_generated: hasPdfAttachment,
-        metadata: {
-          template_name,
-          data,
-          resend: true,
-          pdf_info: _pdf_info || null,
-        },
-      };
-
-      const { data: logData, error: logError } = await supabase
-        .from('email_logs')
-        .insert(emailLog)
-        .select()
-        .single();
-
-      if (logError) {
-        console.error('Error creating log entry:', logError);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Failed to create log entry',
-          }),
-          {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
-      }
-
-      logEntry = logData;
+      emailLog.parent_log_id = parent_log_id;
+      console.log('[send-email] Setting parent_log_id:', parent_log_id);
     }
+
+    const { data: logData, error: logError } = await supabase
+      .from('email_logs')
+      .insert(emailLog)
+      .select()
+      .single();
+
+    if (logError) {
+      console.error('Error creating log entry:', logError);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Failed to create log entry',
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    const logEntry = logData;
 
     const trackingPixel = `<img src="${supabaseUrl}/functions/v1/track-email?log_id=${logEntry.id}&action=open" width="1" height="1" style="display:none" alt="" />`;
 
@@ -315,7 +259,7 @@ Deno.serve(async (req: Request) => {
       const endTime = Date.now();
       const processingTime = endTime - startTime;
 
-      console.log('[send-email] Updating log status to sent:', logEntry.id);
+      console.log('[send-email] Updating child log status to sent:', logEntry.id);
       await supabase
         .from('email_logs')
         .update({
@@ -325,12 +269,25 @@ Deno.serve(async (req: Request) => {
           metadata: {
             ...(logEntry.metadata || {}),
             processing_time_ms: processingTime,
-            action: parent_log_id ? 'email_sent_with_invoice' : 'email_sent',
-            message: parent_log_id ? 'Email sent successfully with PDF invoice attached' : 'Email sent successfully',
-            completed_at: new Date().toISOString(),
           },
         })
         .eq('id', logEntry.id);
+
+      if (parent_log_id) {
+        console.log('[send-email] Updating parent log status to sent:', parent_log_id);
+        await supabase
+          .from('email_logs')
+          .update({
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+            metadata: {
+              action: 'email_sent_with_invoice',
+              message: 'Email sent successfully with PDF invoice attached',
+              completed_at: new Date().toISOString(),
+            },
+          })
+          .eq('id', parent_log_id);
+      }
 
       console.log('Email sent successfully');
 
