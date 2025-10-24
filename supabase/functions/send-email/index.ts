@@ -95,15 +95,6 @@ Deno.serve(async (req: Request) => {
     const finalPdfBase64 = _pdf_attachment?.content || pdf_base64;
     const finalPdfFilename = _pdf_attachment?.filename || _pdf_info?.pdf_filename || pdf_filename || 'document.pdf';
 
-    console.log('=== SEND-EMAIL FUNCTION START ===');
-    console.log('Application:', application.name);
-    console.log('Template:', template_name);
-    console.log('Recipient:', recipient_email);
-    console.log('Has parent_log_id:', !!parent_log_id);
-    console.log('Parent log ID:', parent_log_id);
-    console.log('PDF from _pdf_attachment:', !!_pdf_attachment);
-    console.log('Has PDF:', !!finalPdfBase64);
-
     if (!template_name || !recipient_email) {
       return new Response(
         JSON.stringify({
@@ -164,89 +155,55 @@ Deno.serve(async (req: Request) => {
 
     htmlContent = htmlContent.replace(/\r?\n/g, '\r\n');
 
-    console.log('Rendering email with data:', JSON.stringify(data));
-
     const hasPdfAttachment = !!finalPdfBase64;
 
-    let logEntry: any;
+    const initialLog: any = {
+      application_id: application.id,
+      template_id: template.id,
+      recipient_email,
+      subject: emailSubject,
+      status: 'pending',
+      communication_type: hasPdfAttachment ? 'email_with_pdf' : 'email',
+      pdf_generated: hasPdfAttachment,
+      metadata: {
+        data,
+        action: 'email_queued',
+        message: 'Email queued for sending',
+        template_name,
+        processing_time_ms: Date.now() - startTime,
+      },
+    };
 
-    if (parent_log_id) {
-      console.log('[send-email] Using existing parent_log_id, not creating new log:', parent_log_id);
+    const { data: logData, error: logError } = await supabase
+      .from('email_logs')
+      .insert(initialLog)
+      .select()
+      .single();
 
-      const { data: existingLog, error: fetchError } = await supabase
-        .from('email_logs')
-        .select('*')
-        .eq('id', parent_log_id)
-        .maybeSingle();
+    if (logError) {
+      console.error('Error creating email log:', logError);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Failed to create email log',
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
 
-      if (fetchError || !existingLog) {
-        console.error('[send-email] Failed to fetch parent log:', fetchError);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Parent log not found',
-          }),
-          {
-            status: 404,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
-      }
+    const logEntry = logData;
 
-      logEntry = existingLog;
-      console.log('[send-email] Updating parent log from queued to pending:', parent_log_id);
-
+    if (hasPdfAttachment && _pdf_info?.pdf_log_id) {
       await supabase
         .from('email_logs')
         .update({
-          status: 'pending',
-          metadata: {
-            ...(existingLog.metadata || {}),
-            action: 'email_sending',
-            message: 'Sending email with invoice',
-            pdf_attached: hasPdfAttachment,
-          },
+          parent_log_id: logEntry.id,
+          updated_at: new Date().toISOString(),
         })
-        .eq('id', parent_log_id);
-    } else {
-      const initialLog: any = {
-        application_id: application.id,
-        template_id: template.id,
-        recipient_email,
-        subject: emailSubject,
-        status: 'pending',
-        communication_type: hasPdfAttachment ? 'email_with_pdf' : 'email',
-        pdf_generated: hasPdfAttachment,
-        metadata: {
-          data,
-          action: 'email_queued',
-          message: 'Email queued for sending',
-          template_name,
-          processing_time_ms: Date.now() - startTime,
-        },
-      };
-
-      const { data: newLog, error: logError } = await supabase
-        .from('email_logs')
-        .insert(initialLog)
-        .select()
-        .single();
-
-      if (logError) {
-        console.error('Error creating email log:', logError);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Failed to create email log',
-          }),
-          {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
-      }
-
-      logEntry = newLog;
+        .eq('id', _pdf_info.pdf_log_id);
     }
 
     const trackingPixelUrl = `${supabaseUrl}/functions/v1/track-email/open?log_id=${logEntry.id}`;
@@ -262,14 +219,6 @@ Deno.serve(async (req: Request) => {
 
     try {
       const useTLS = credentials.smtp_port === 465;
-
-      console.log('[send-email] SMTP Configuration:', {
-        host: credentials.smtp_host,
-        port: credentials.smtp_port,
-        user: credentials.smtp_user,
-        from: credentials.from_email,
-        useTLS,
-      });
 
       const client = new SMTPClient({
         connection: {
@@ -301,20 +250,13 @@ Deno.serve(async (req: Request) => {
         console.log('PDF attachment configured:', finalPdfFilename);
       }
 
-      console.log('[send-email] Sending email to:', recipient_email);
-      console.log('[send-email] Email subject:', emailSubject);
-      console.log('[send-email] Has attachments:', !!emailConfig.attachments);
-
-      const sendResult = await client.send(emailConfig);
-      console.log('[send-email] SMTP send result:', JSON.stringify(sendResult));
-
+      console.log('Sending email to:', recipient_email);
+      await client.send(emailConfig);
       await client.close();
-      console.log('[send-email] SMTP connection closed');
 
       const endTime = Date.now();
       const processingTime = endTime - startTime;
 
-      console.log('[send-email] Updating log status to sent:', logEntry.id);
       await supabase
         .from('email_logs')
         .update({
@@ -323,8 +265,8 @@ Deno.serve(async (req: Request) => {
           pdf_attachment_size: finalPdfBase64 ? finalPdfBase64.length : null,
           metadata: {
             ...(logEntry.metadata || {}),
-            action: parent_log_id ? 'email_sent_with_invoice' : 'email_sent',
-            message: parent_log_id
+            action: hasPdfAttachment ? 'email_sent_with_invoice' : 'email_sent',
+            message: hasPdfAttachment
               ? 'Email sent successfully with PDF invoice attached'
               : 'Email sent successfully',
             completed_at: new Date().toISOString(),
