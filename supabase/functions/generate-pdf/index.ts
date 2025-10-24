@@ -19,6 +19,63 @@ function generateFilename(pattern: string, data: Record<string, any>): string {
   return renderTemplate(pattern || 'document.pdf', data);
 }
 
+async function urlToBase64(url: string): Promise<string> {
+  console.log('[generate-pdf] Converting URL to base64:', url);
+
+  try {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      console.error('[generate-pdf] Failed to fetch image:', response.status);
+      throw new Error(`Failed to fetch image: ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+
+    const contentType = response.headers.get('content-type') || 'image/png';
+
+    return `data:${contentType};base64,${base64}`;
+  } catch (error) {
+    console.error('[generate-pdf] Error converting URL to base64:', error);
+    throw error;
+  }
+}
+
+async function convertQrUrlsToBase64(data: any): Promise<any> {
+  if (typeof data !== 'object' || data === null) {
+    return data;
+  }
+
+  if (Array.isArray(data)) {
+    return Promise.all(data.map(item => convertQrUrlsToBase64(item)));
+  }
+
+  const result: any = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (key === 'qr_code' || key === 'qr_url' || key === 'qr_image') {
+      if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+        console.log('[generate-pdf] Converting QR URL to base64 for key:', key);
+        result[key] = await urlToBase64(value);
+      } else {
+        result[key] = value;
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      result[key] = await convertQrUrlsToBase64(value);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
 async function htmlToPdfBase64(html: string): Promise<string> {
   const pdfshiftApiKey = Deno.env.get('PDFSHIFT_API_KEY');
   const pdfshiftApiUrl = Deno.env.get('PDFSHIFT_API_URL') || 'https://api.pdfshift.io/v3/convert/pdf';
@@ -390,7 +447,10 @@ Deno.serve(async (req: Request) => {
     console.log('Rendering HTML template with data...');
     console.log('[generate-pdf] Data structure:', JSON.stringify(data).substring(0, 500));
 
-    const wrappedData = { data };
+    console.log('[generate-pdf] Converting QR URLs to base64...');
+    const processedData = await convertQrUrlsToBase64(data);
+
+    const wrappedData = { data: processedData };
     const htmlContent = renderTemplate(pdfTemplate.html_content, wrappedData);
 
     const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', wrappedData);
