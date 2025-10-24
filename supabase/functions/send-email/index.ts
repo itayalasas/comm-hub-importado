@@ -225,6 +225,14 @@ Deno.serve(async (req: Request) => {
     try {
       const useTLS = credentials.smtp_port === 465;
 
+      console.log('[send-email] SMTP Configuration:', {
+        host: credentials.smtp_host,
+        port: credentials.smtp_port,
+        user: credentials.smtp_user,
+        from: credentials.from_email,
+        tls: useTLS,
+      });
+
       const client = new SMTPClient({
         connection: {
           hostname: credentials.smtp_host,
@@ -249,6 +257,9 @@ Deno.serve(async (req: Request) => {
       };
 
       if (finalPdfBase64 && finalPdfFilename) {
+        const pdfSizeBytes = finalPdfBase64.length;
+        const pdfSizeMB = (pdfSizeBytes / (1024 * 1024)).toFixed(2);
+
         emailConfig.attachments = [
           {
             filename: finalPdfFilename,
@@ -256,12 +267,25 @@ Deno.serve(async (req: Request) => {
             encoding: 'base64',
           },
         ];
-        console.log('PDF attachment configured:', finalPdfFilename);
+        console.log('[send-email] PDF attachment configured:', {
+          filename: finalPdfFilename,
+          size_bytes: pdfSizeBytes,
+          size_mb: pdfSizeMB,
+        });
       }
 
-      console.log('Sending email to:', recipient_email);
-      await client.send(emailConfig);
+      console.log('[send-email] Attempting to send email:', {
+        to: recipient_email,
+        from: fromAddress,
+        subject: emailSubject,
+        has_pdf: !!finalPdfBase64,
+      });
+
+      const sendResult = await client.send(emailConfig);
+      console.log('[send-email] SMTP send result:', sendResult);
+
       await client.close();
+      console.log('[send-email] SMTP connection closed');
 
       const endTime = Date.now();
       const processingTime = endTime - startTime;
