@@ -271,6 +271,22 @@ Deno.serve(async (req: Request) => {
     const { template_id, pdf_template_name, data, pending_communication_id, order_id } = requestData;
 
     if (order_id) {
+      console.log('[generate-pdf] Acquiring lock for order_id:', order_id);
+
+      try {
+        await supabase.from('pdf_generation_locks').insert({
+          order_id,
+          application_id: application.id,
+        });
+        console.log('[generate-pdf] Lock acquired successfully');
+      } catch (lockError: any) {
+        if (lockError.code === '23505') {
+          console.log('[generate-pdf] Lock already exists, checking for existing PDF');
+        } else {
+          console.error('[generate-pdf] Lock error:', lockError);
+        }
+      }
+
       console.log('[generate-pdf] Checking for existing PDF for order_id:', order_id);
 
       const { data: existingPdfLog } = await supabase
@@ -295,6 +311,11 @@ Deno.serve(async (req: Request) => {
 
             if (existingPdf) {
               console.log('[generate-pdf] Returning existing PDF instead of generating duplicate');
+
+              if (order_id) {
+                await supabase.from('pdf_generation_locks').delete().eq('order_id', order_id);
+              }
+
               return new Response(
                 JSON.stringify({
                   success: true,
@@ -715,6 +736,11 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (order_id) {
+      await supabase.from('pdf_generation_locks').delete().eq('order_id', order_id);
+      console.log('[generate-pdf] Lock released for order_id:', order_id);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -739,6 +765,12 @@ Deno.serve(async (req: Request) => {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
       const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const orderId = (error as any).order_id || requestData?.order_id;
+      if (orderId) {
+        await supabase.from('pdf_generation_locks').delete().eq('order_id', orderId);
+        console.log('[generate-pdf] Lock released on error for order_id:', orderId);
+      }
 
       await supabase.from('email_logs').insert({
         application_id: null,
