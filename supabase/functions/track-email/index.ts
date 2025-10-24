@@ -58,18 +58,36 @@ Deno.serve(async (req: Request) => {
     if (path.includes('/click')) {
       const targetUrl = url.searchParams.get('url');
 
-      await supabase
+      console.log('[track-email/click] Click tracking triggered:', {
+        log_id: logId,
+        target_url: targetUrl,
+        timestamp: new Date().toISOString(),
+      });
+
+      const { data: updateResult, error: updateError } = await supabase
         .from('email_logs')
         .update({ clicked_at: new Date().toISOString() })
         .eq('id', logId)
-        .is('clicked_at', null);
+        .is('clicked_at', null)
+        .select();
+
+      if (updateError) {
+        console.error('[track-email/click] Error updating clicked_at:', updateError);
+      } else if (updateResult && updateResult.length > 0) {
+        console.log('[track-email/click] Click tracked successfully for log:', logId);
+      } else {
+        console.log('[track-email/click] Click already tracked or log not found:', logId);
+      }
 
       if (targetUrl) {
+        const decodedUrl = decodeURIComponent(targetUrl);
+        console.log('[track-email/click] Redirecting to:', decodedUrl);
+
         return new Response(null, {
           status: 302,
           headers: {
             ...corsHeaders,
-            'Location': decodeURIComponent(targetUrl),
+            'Location': decodedUrl,
           },
         });
       }

@@ -209,13 +209,18 @@ Deno.serve(async (req: Request) => {
     const trackingPixelUrl = `${supabaseUrl}/functions/v1/track-email/open?log_id=${logEntry.id}`;
     htmlContent += `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none" />`;
 
+    let linksReplaced = 0;
     htmlContent = htmlContent.replace(
       /href="(https?:\/\/[^"]+)"/gi,
       (match, url) => {
+        linksReplaced++;
         const trackingUrl = `${supabaseUrl}/functions/v1/track-email/click?log_id=${logEntry.id}&url=${encodeURIComponent(url)}`;
+        console.log(`[send-email] Replacing link ${linksReplaced}:`, { original: url, tracking: trackingUrl });
         return `href="${trackingUrl}"`;
       }
     );
+
+    console.log(`[send-email] Total links replaced with tracking: ${linksReplaced}`);
 
     try {
       const useTLS = credentials.smtp_port === 465;
