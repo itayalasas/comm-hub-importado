@@ -270,6 +270,57 @@ Deno.serve(async (req: Request) => {
 
     const { template_id, pdf_template_name, data, pending_communication_id, order_id } = requestData;
 
+    if (order_id) {
+      console.log('[generate-pdf] Checking for existing PDF for order_id:', order_id);
+
+      const { data: existingPdfLog } = await supabase
+        .from('email_logs')
+        .select('id, metadata')
+        .eq('application_id', application.id)
+        .eq('communication_type', 'pdf_generation')
+        .eq('status', 'sent')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (existingPdfLog && existingPdfLog.length > 0) {
+        for (const log of existingPdfLog) {
+          if (log.metadata?.order_id === order_id) {
+            console.log('[generate-pdf] ⚠️  PDF already exists for order_id:', order_id, ', log_id:', log.id);
+
+            const { data: existingPdf } = await supabase
+              .from('pdf_generation_logs')
+              .select('*')
+              .eq('email_log_id', log.id)
+              .maybeSingle();
+
+            if (existingPdf) {
+              console.log('[generate-pdf] Returning existing PDF instead of generating duplicate');
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  message: 'PDF already exists for this order',
+                  data: {
+                    pdf_id: existingPdf.id,
+                    pdf_base64: existingPdf.pdf_base64,
+                    filename: existingPdf.filename,
+                    size_bytes: existingPdf.size_bytes,
+                    public_url: existingPdf.public_url,
+                  },
+                  duplicate_prevented: true,
+                }),
+                {
+                  status: 200,
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                }
+              );
+            }
+          }
+        }
+      }
+
+      console.log('[generate-pdf] No existing PDF found, proceeding with generation');
+    }
+
     if (!data) {
       console.error('[generate-pdf] Missing required field: data');
 

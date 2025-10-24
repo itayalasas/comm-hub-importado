@@ -114,6 +114,14 @@ Deno.serve(async (req: Request) => {
           sent_log_id: emailResult.log_id,
         }).eq('id', pendingComm.id);
 
+        if (pendingComm.parent_log_id) {
+          console.log('[complete-pending] Updating parent email log to sent:', pendingComm.parent_log_id);
+          await supabase.from('email_logs').update({
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+          }).eq('id', pendingComm.parent_log_id);
+        }
+
         if (pendingComm.webhook_url) {
           try {
             await fetch(pendingComm.webhook_url, {
