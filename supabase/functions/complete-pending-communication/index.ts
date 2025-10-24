@@ -145,16 +145,17 @@ Deno.serve(async (req: Request) => {
     try {
       console.log('[complete-pending] Full completed_data:', JSON.stringify(pendingComm.completed_data));
 
-      const pdfAttachment = pendingComm.completed_data?.pdf_attachment;
+      const pdfEmailLogId = pendingComm.completed_data?.pdf_email_log_id || pendingComm.completed_data?.pdf_generation_log_id;
+
       const pdfInfo = {
-        pdf_log_id: pendingComm.completed_data?.pdf_generation_log_id,
+        pdf_email_log_id: pdfEmailLogId,
         pdf_template_id: pendingComm.completed_data?.pdf_template_id,
         pdf_filename: pendingComm.completed_data?.pdf_filename,
         pdf_size_bytes: pendingComm.completed_data?.pdf_size_bytes,
       };
 
       console.log('[complete-pending] PDF info being passed:', JSON.stringify(pdfInfo));
-      console.log('[complete-pending] Has pdf_attachment:', !!pdfAttachment);
+      console.log('[complete-pending] PDF email_log_id:', pdfEmailLogId);
       console.log('[complete-pending] Has pdf_filename:', !!pdfInfo.pdf_filename);
 
       const requestBody: any = {
@@ -163,16 +164,14 @@ Deno.serve(async (req: Request) => {
         data: mergedData,
         order_id: pendingComm.order_id || null,
         parent_log_id: pendingComm.parent_log_id || null,
-        _skip_pdf_generation: !!pdfAttachment,
-        _pdf_attachment: pdfAttachment,
+        _skip_pdf_generation: !!pdfEmailLogId,
         _pdf_info: pdfInfo,
         _pending_communication_id: pendingComm.id,
-        _existing_log_id: pendingComm.completed_data?.initial_log_id,
+        _existing_log_id: pendingComm.parent_log_id,
       };
 
-      console.log('[complete-pending] Reusing log ID:', pendingComm.completed_data?.initial_log_id);
-
-      console.log('[complete-pending] Sending email with attachment:', !!pdfAttachment);
+      console.log('[complete-pending] Reusing parent log ID:', pendingComm.parent_log_id);
+      console.log('[complete-pending] PDF will be fetched from pdf_generation_logs using email_log_id:', pdfEmailLogId);
 
       const emailResponse = await fetch(sendEmailUrl, {
         method: 'POST',

@@ -90,10 +90,40 @@ Deno.serve(async (req: Request) => {
       parent_log_id,
       _pdf_attachment,
       _pdf_info,
+      _existing_log_id,
     } = requestData;
 
-    const finalPdfBase64 = _pdf_attachment?.content || pdf_base64;
+    console.log('[send-email] Request params:', {
+      has_existing_log_id: !!_existing_log_id,
+      existing_log_id: _existing_log_id,
+      has_pdf_info: !!_pdf_info,
+      pdf_email_log_id: _pdf_info?.pdf_email_log_id,
+    });
+
+    let finalPdfBase64 = _pdf_attachment?.content || pdf_base64;
     const finalPdfFilename = _pdf_attachment?.filename || _pdf_info?.pdf_filename || pdf_filename || 'document.pdf';
+
+    if (_pdf_info?.pdf_email_log_id && !finalPdfBase64) {
+      console.log('[send-email] No PDF in memory, fetching from pdf_generation_logs using email_log_id:', _pdf_info.pdf_email_log_id);
+
+      const { data: pdfData, error: pdfError } = await supabase
+        .from('pdf_generation_logs')
+        .select('pdf_base64, filename, size_bytes')
+        .eq('email_log_id', _pdf_info.pdf_email_log_id)
+        .maybeSingle();
+
+      if (pdfError) {
+        console.error('[send-email] Error fetching PDF from database:', pdfError);
+      } else if (pdfData && pdfData.pdf_base64) {
+        console.log('[send-email] PDF fetched successfully from database:', {
+          filename: pdfData.filename,
+          size_bytes: pdfData.size_bytes,
+        });
+        finalPdfBase64 = pdfData.pdf_base64;
+      } else {
+        console.error('[send-email] PDF not found in pdf_generation_logs for email_log_id:', _pdf_info.pdf_email_log_id);
+      }
+    }
 
     if (!template_name || !recipient_email) {
       return new Response(
@@ -157,53 +187,85 @@ Deno.serve(async (req: Request) => {
 
     const hasPdfAttachment = !!finalPdfBase64;
 
-    const initialLog: any = {
-      application_id: application.id,
-      template_id: template.id,
-      recipient_email,
-      subject: emailSubject,
-      status: 'pending',
-      communication_type: hasPdfAttachment ? 'email_with_pdf' : 'email',
-      pdf_generated: hasPdfAttachment,
-      metadata: {
-        data,
-        action: 'email_queued',
-        message: 'Email queued for sending',
-        template_name,
-        processing_time_ms: Date.now() - startTime,
-      },
-    };
+    let logEntry: any;
 
-    const { data: logData, error: logError } = await supabase
-      .from('email_logs')
-      .insert(initialLog)
-      .select()
-      .single();
+    if (_existing_log_id) {
+      console.log('[send-email] Using existing log:', _existing_log_id);
 
-    if (logError) {
-      console.error('Error creating email log:', logError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Failed to create email log',
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      const { data: existingLog, error: fetchError } = await supabase
+        .from('email_logs')
+        .select('*')
+        .eq('id', _existing_log_id)
+        .maybeSingle();
+
+      if (fetchError || !existingLog) {
+        console.error('[send-email] Could not fetch existing log, creating new one');
+      } else {
+        logEntry = existingLog;
+        console.log('[send-email] Reusing existing log:', {
+          id: logEntry.id,
+          status: logEntry.status,
+          subject: logEntry.subject,
+        });
+      }
     }
 
-    const logEntry = logData;
+    if (!logEntry) {
+      console.log('[send-email] Creating new email log');
 
-    if (hasPdfAttachment && _pdf_info?.pdf_log_id) {
+      const initialLog: any = {
+        application_id: application.id,
+        template_id: template.id,
+        recipient_email,
+        subject: emailSubject,
+        status: 'pending',
+        communication_type: hasPdfAttachment ? 'email_with_pdf' : 'email',
+        pdf_generated: hasPdfAttachment,
+        metadata: {
+          data,
+          action: 'email_queued',
+          message: 'Email queued for sending',
+          template_name,
+          processing_time_ms: Date.now() - startTime,
+        },
+      };
+
+      const { data: logData, error: logError } = await supabase
+        .from('email_logs')
+        .insert(initialLog)
+        .select()
+        .single();
+
+      if (logError) {
+        console.error('Error creating email log:', logError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Failed to create email log',
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      logEntry = logData;
+    }
+
+    if (hasPdfAttachment && _pdf_info?.pdf_email_log_id) {
+      console.log('[send-email] Linking PDF log as child of email log:', {
+        pdf_log_id: _pdf_info.pdf_email_log_id,
+        parent_log_id: logEntry.id,
+      });
+
       await supabase
         .from('email_logs')
         .update({
           parent_log_id: logEntry.id,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', _pdf_info.pdf_log_id);
+        .eq('id', _pdf_info.pdf_email_log_id);
     }
 
     const trackingPixelUrl = `${supabaseUrl}/functions/v1/track-email/open?log_id=${logEntry.id}`;
