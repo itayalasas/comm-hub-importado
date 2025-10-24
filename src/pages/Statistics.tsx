@@ -3,7 +3,7 @@ import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
-import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send, Check } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send, Check, Search } from 'lucide-react';
 
 interface Stats {
   totalSent: number;
@@ -68,12 +68,19 @@ export const Statistics = () => {
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [childLogs, setChildLogs] = useState<Record<string, EmailLog[]>>({});
   const [loading, setLoading] = useState(true);
+  const [searchEmail, setSearchEmail] = useState('');
+  const [searchDateStart, setSearchDateStart] = useState('');
+  const [searchDateEnd, setSearchDateEnd] = useState('');
 
   useEffect(() => {
     if (user) {
       loadApplications();
     }
   }, [user]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchEmail, searchDateStart, searchDateEnd]);
 
   useEffect(() => {
     if (selectedApp) {
@@ -374,6 +381,30 @@ export const Statistics = () => {
       toast.error('Error al eliminar el registro');
     }
   };
+
+  const filteredLogs = logs.filter((log) => {
+    const emailMatch = searchEmail === '' ||
+      log.recipient_email.toLowerCase().includes(searchEmail.toLowerCase());
+
+    let dateMatch = true;
+    if (searchDateStart || searchDateEnd) {
+      const logDate = new Date(log.sent_at || log.created_at);
+
+      if (searchDateStart) {
+        const startDate = new Date(searchDateStart);
+        startDate.setHours(0, 0, 0, 0);
+        dateMatch = dateMatch && logDate >= startDate;
+      }
+
+      if (searchDateEnd) {
+        const endDate = new Date(searchDateEnd);
+        endDate.setHours(23, 59, 59, 999);
+        dateMatch = dateMatch && logDate <= endDate;
+      }
+    }
+
+    return emailMatch && dateMatch;
+  });
 
   const resendCommunication = async () => {
     if (!resendConfirmLog || !selectedApp) return;
@@ -700,11 +731,62 @@ export const Statistics = () => {
             )}
 
             <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 overflow-hidden">
-              <div className="p-6 border-b border-slate-700">
+              <div className="p-6 border-b border-slate-700 space-y-4">
                 <h3 className="text-lg font-semibold text-white">Historial de Comunicaciones</h3>
+
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por correo electrónico..."
+                      value={searchEmail}
+                      onChange={(e) => setSearchEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <input
+                      type="date"
+                      placeholder="Fecha inicio"
+                      value={searchDateStart}
+                      onChange={(e) => setSearchDateStart(e.target.value)}
+                      className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <input
+                      type="date"
+                      placeholder="Fecha fin"
+                      value={searchDateEnd}
+                      onChange={(e) => setSearchDateEnd(e.target.value)}
+                      className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {(searchEmail || searchDateStart || searchDateEnd) && (
+                  <div className="flex items-center justify-between text-sm text-slate-400">
+                    <span>
+                      Mostrando {filteredLogs.length} de {logs.length} registros
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSearchEmail('');
+                        setSearchDateStart('');
+                        setSearchDateEnd('');
+                      }}
+                      className="text-cyan-400 hover:text-cyan-300 transition-colors"
+                    >
+                      Limpiar filtros
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="overflow-x-auto">
-                {logs.length === 0 ? (
+                {filteredLogs.length === 0 ? (
                   <div className="p-8 text-center text-slate-400">
                     No hay comunicaciones registradas
                   </div>
@@ -730,7 +812,7 @@ export const Statistics = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700/50">
-                      {logs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((log) => {
+                      {filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((log) => {
                         const engagement = getEngagementStatus(log);
                         const isExpanded = expandedLogs.has(log.id);
                         const children = childLogs[log.id] || [];
@@ -855,11 +937,11 @@ export const Statistics = () => {
                   </table>
                 )}
 
-                {logs.length > itemsPerPage && (
+                {filteredLogs.length > itemsPerPage && (
                   <div className="flex items-center justify-between px-6 py-4 border-t border-slate-700">
                     <div className="text-sm text-slate-400">
-                      Mostrando {Math.min((currentPage - 1) * itemsPerPage + 1, logs.length)} a{' '}
-                      {Math.min(currentPage * itemsPerPage, logs.length)} de {logs.length} registros
+                      Mostrando {Math.min((currentPage - 1) * itemsPerPage + 1, filteredLogs.length)} a{' '}
+                      {Math.min(currentPage * itemsPerPage, filteredLogs.length)} de {filteredLogs.length} registros
                     </div>
                     <div className="flex space-x-2">
                       <button
@@ -870,7 +952,7 @@ export const Statistics = () => {
                         Anterior
                       </button>
                       <div className="flex items-center space-x-1">
-                        {Array.from({ length: Math.ceil(logs.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
+                        {Array.from({ length: Math.ceil(filteredLogs.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
                           <button
                             key={`page-${page}`}
                             onClick={() => setCurrentPage(page)}
@@ -885,8 +967,8 @@ export const Statistics = () => {
                         ))}
                       </div>
                       <button
-                        onClick={() => setCurrentPage(Math.min(Math.ceil(logs.length / itemsPerPage), currentPage + 1))}
-                        disabled={currentPage === Math.ceil(logs.length / itemsPerPage)}
+                        onClick={() => setCurrentPage(Math.min(Math.ceil(filteredLogs.length / itemsPerPage), currentPage + 1))}
+                        disabled={currentPage === Math.ceil(filteredLogs.length / itemsPerPage)}
                         className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Siguiente
