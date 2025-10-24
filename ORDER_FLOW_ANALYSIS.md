@@ -95,10 +95,13 @@ POST /functions/v1/pending-communication
 ```
 
 **Resultado (CON LA NUEVA LÓGICA):**
-- ✅ Crea `email_log` con status `queued` (padre)
-- ✅ Crea `pending_communication`
+- ✅ Crea `email_log` con status `queued` (padre) → **parent_log_id**
+- ✅ Crea `pending_communication` con `parent_log_id`
 - 🔍 **Busca si ya existe un PDF con `order_id: 'ORDER-123'`**
 - ✅ **Lo encuentra!** (generado en paso 1)
+- 🔗 **Actualiza el `email_log` del PDF (generado en paso 1):**
+  - Vincula con `parent_log_id` del log padre
+  - **Ahora el PDF aparece como transacción relacionada en el historial**
 - 📝 **Actualiza inmediatamente** el `pending_communication`:
   - `completed_data: { pdf_attachment: {...} }`
   - `status: 'pdf_generated'`
@@ -164,11 +167,13 @@ POST /functions/v1/pending-communication
 [generate-pdf] No pending communication found for order_id: ORDER-123
 [generate-pdf] Generating QR code from text/URL
 [generate-pdf] PDF generated successfully
+[generate-pdf] Created email_log with id: <pdf_log_id> (sin parent_log_id aún)
 
 [pending-communication] Creating parent log and pending communication
 [pending-communication] Checking if PDF already exists for order_id: ORDER-123
-[pending-communication] Found PDF log for order_id: ORDER-123
+[pending-communication] Found PDF log for order_id: ORDER-123, log_id: <pdf_log_id>
 [pending-communication] Found existing PDF! Attaching to pending communication
+[pending-communication] Updating PDF email_log to link with parent_log_id: <parent_log_id>
 [pending-communication] PDF attached, triggering email send
 [complete-pending-communication] Email sent successfully
 [pending-communication] Email sent successfully with existing PDF
@@ -186,4 +191,7 @@ POST /functions/v1/pending-communication
 - ✅ Con logging claro para debug
 - ✅ El orden de las llamadas no importa
 
-**La única diferencia:** En el escenario inverso, el segundo endpoint retorna `pdf_was_ready: true` para indicar que el PDF ya existía.
+**Diferencias clave en el escenario inverso:**
+1. El segundo endpoint retorna `pdf_was_ready: true` para indicar que el PDF ya existía
+2. El `email_log` del PDF se actualiza retroactivamente con el `parent_log_id` para mantener la jerarquía de transacciones
+3. En el historial de comunicaciones, ambas transacciones (PDF + Email) aparecen relacionadas correctamente
