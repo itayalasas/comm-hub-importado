@@ -19,11 +19,40 @@ function generateFilename(pattern: string, data: Record<string, any>): string {
   return renderTemplate(pattern || 'document.pdf', data);
 }
 
+async function generateQrCodeFromText(text: string): Promise<string> {
+  console.log('[generate-pdf] Generating QR code from text:', text.substring(0, 50) + '...');
+
+  try {
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(text)}`;
+
+    const response = await fetch(qrApiUrl);
+
+    if (!response.ok) {
+      throw new Error(`QR API failed with status: ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+
+    return `data:image/png;base64,${base64}`;
+  } catch (error) {
+    console.error('[generate-pdf] Error generating QR code:', error);
+    throw error;
+  }
+}
+
 async function urlToBase64(url: string): Promise<string> {
   console.log('[generate-pdf] Converting URL to base64:', url);
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      redirect: 'follow',
+    });
 
     if (!response.ok) {
       console.error('[generate-pdf] Failed to fetch image:', response.status);
@@ -59,10 +88,24 @@ async function convertQrUrlsToBase64(data: any): Promise<any> {
   const result: any = {};
 
   for (const [key, value] of Object.entries(data)) {
-    if (key === 'qr_code' || key === 'qr_url' || key === 'qr_image') {
-      if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
-        console.log('[generate-pdf] Converting QR URL to base64 for key:', key);
-        result[key] = await urlToBase64(value);
+    if (key === 'qr_code' || key === 'qr_url' || key === 'qr_image' || key === 'qr_text' || key === 'qr_data') {
+      if (typeof value === 'string' && value.length > 0) {
+        if (value.startsWith('http://') || value.startsWith('https://')) {
+          console.log('[generate-pdf] Attempting to download QR image from URL for key:', key);
+          try {
+            result[key] = await urlToBase64(value);
+            console.log('[generate-pdf] Successfully converted URL to base64');
+          } catch (error) {
+            console.warn('[generate-pdf] Failed to download QR from URL, generating QR code from URL text instead');
+            result[key] = await generateQrCodeFromText(value);
+          }
+        } else if (value.startsWith('data:image')) {
+          console.log('[generate-pdf] Value is already a base64 image, keeping as-is');
+          result[key] = value;
+        } else {
+          console.log('[generate-pdf] Generating QR code from text for key:', key);
+          result[key] = await generateQrCodeFromText(value);
+        }
       } else {
         result[key] = value;
       }
