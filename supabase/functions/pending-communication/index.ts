@@ -121,13 +121,18 @@ Deno.serve(async (req: Request) => {
     }
 
     application = app;
+
+    console.log('[pending-communication] RAW REQUEST DATA:', JSON.stringify(requestData, null, 2));
+    console.log('[pending-communication] Request keys:', Object.keys(requestData));
+
     const { template_name, recipient_email, data, base_data } = requestData;
     const emailData = data || base_data || {};
 
-    console.log('[pending-communication] Request data:', {
+    console.log('[pending-communication] Extracted values:', {
       template_name,
       recipient_email,
       hasData: !!emailData,
+      dataKeys: Object.keys(emailData),
     });
 
     if (!template_name || !recipient_email) {
