@@ -315,7 +315,7 @@ Deno.serve(async (req: Request) => {
         template_id: template.id,
         recipient_email,
         subject: requestData.subject || template.subject || 'Pending Invoice',
-        status: 'sent',
+        status: 'queued',
         communication_type: 'email_with_pdf',
         pdf_generated: false,
         metadata: {
