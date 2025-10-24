@@ -234,13 +234,21 @@ Deno.serve(async (req: Request) => {
       logEntry = logData;
     }
 
-    const trackingPixel = `<img src="${supabaseUrl}/functions/v1/track-email?log_id=${logEntry.id}&action=open" width="1" height="1" style="display:none" alt="" />`;
+    const trackingPixel = `<img src="${supabaseUrl}/functions/v1/track-email/open?log_id=${logEntry.id}" width="1" height="1" style="display:none" alt="" />`;
 
     if (htmlContent.includes('</body>')) {
       htmlContent = htmlContent.replace('</body>', `${trackingPixel}</body>`);
     } else {
       htmlContent += trackingPixel;
     }
+
+    htmlContent = htmlContent.replace(
+      /href="(https?:\/\/[^"]+)"/gi,
+      (match, url) => {
+        const trackingUrl = `${supabaseUrl}/functions/v1/track-email/click?log_id=${logEntry.id}&url=${encodeURIComponent(url)}`;
+        return `href="${trackingUrl}"`;
+      }
+    );
 
     try {
       const useTLS = credentials.smtp_port === 465;
