@@ -286,6 +286,7 @@ Deno.serve(async (req: Request) => {
 
     try {
       const useTLS = credentials.smtp_port === 465;
+      const useSTARTTLS = credentials.smtp_port === 587;
 
       console.log('[send-email] SMTP Configuration:', {
         host: credentials.smtp_host,
@@ -293,23 +294,35 @@ Deno.serve(async (req: Request) => {
         user: credentials.smtp_user,
         from: credentials.from_email,
         tls: useTLS,
+        starttls: useSTARTTLS,
       });
+
+      const connectionConfig: any = {
+        hostname: credentials.smtp_host,
+        port: credentials.smtp_port,
+        auth: {
+          username: credentials.smtp_user,
+          password: credentials.smtp_password,
+        },
+      };
+
+      if (useTLS) {
+        connectionConfig.tls = true;
+      } else if (useSTARTTLS) {
+        connectionConfig.tls = false;
+      }
 
       const client = new SMTPClient({
-        connection: {
-          hostname: credentials.smtp_host,
-          port: credentials.smtp_port,
-          tls: useTLS,
-          auth: {
-            username: credentials.smtp_user,
-            password: credentials.smtp_password,
-          },
-        },
+        connection: connectionConfig,
       });
 
+      const actualFromEmail = credentials.smtp_user;
+
       const fromAddress = credentials.from_name
-        ? `${credentials.from_name} <${credentials.from_email}>`
-        : credentials.from_email;
+        ? `${credentials.from_name} <${actualFromEmail}>`
+        : actualFromEmail;
+
+      console.log('[send-email] Using from address:', fromAddress, '(forced to match smtp_user)');
 
       const emailConfig: any = {
         from: fromAddress,
