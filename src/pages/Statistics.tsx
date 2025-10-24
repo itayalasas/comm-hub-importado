@@ -410,9 +410,30 @@ export const Statistics = () => {
       }
 
       let pdfBase64 = null;
+      let pdfFilename = 'document.pdf';
 
-      if (log.pdf_generated && log.metadata?.pdf_base64) {
-        pdfBase64 = log.metadata.pdf_base64;
+      if (log.pdf_generated) {
+        if (log.metadata?.pdf_base64) {
+          pdfBase64 = log.metadata.pdf_base64;
+          pdfFilename = log.metadata?.pdf_filename || 'document.pdf';
+        } else if (log.metadata?.pdf_info?.pdf_log_id) {
+          const pdfLogId = log.metadata.pdf_info.pdf_log_id;
+
+          const { data: pdfLog, error: pdfError } = await supabase
+            .from('email_logs')
+            .select('metadata')
+            .eq('id', pdfLogId)
+            .eq('communication_type', 'pdf_generation')
+            .maybeSingle();
+
+          if (!pdfError && pdfLog?.metadata?.pdf_base64) {
+            pdfBase64 = pdfLog.metadata.pdf_base64;
+            pdfFilename = log.metadata.pdf_info.pdf_filename || pdfLog.metadata?.pdf_filename || 'document.pdf';
+            console.log('PDF recuperado desde log de generación:', pdfLogId);
+          } else {
+            console.error('No se pudo recuperar el PDF desde el log de generación:', pdfLogId);
+          }
+        }
       }
 
       const templateData = log.metadata?.template_data || log.metadata?.data || {};
@@ -436,7 +457,7 @@ export const Statistics = () => {
         payload.wait_for_invoice = true;
       } else if (pdfBase64) {
         payload.pdf_base64 = pdfBase64;
-        payload.pdf_filename = log.metadata?.pdf_filename || 'document.pdf';
+        payload.pdf_filename = pdfFilename;
       }
 
       const response = await fetch(`${supabaseUrl}/functions/v1/${endpoint}`, {
