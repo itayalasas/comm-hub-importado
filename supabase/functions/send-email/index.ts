@@ -56,16 +56,33 @@ Deno.serve(async (req: Request) => {
     let finalPdfBase64 = _pdf_attachment?.content || pdf_base64;
     const finalPdfFilename = _pdf_attachment?.filename || _pdf_info?.pdf_filename || pdf_filename || 'document.pdf';
     let pdfPublicUrl = null;
+    let pdfSizeBytes = 0;
+    const MAX_PDF_ATTACHMENT_SIZE = 1024 * 1024;
 
     if (_pdf_info?.pdf_email_log_id && !finalPdfBase64) {
       console.log('[send-email] Fetching PDF from database, email_log_id:', _pdf_info.pdf_email_log_id);
       const { data: pdfData } = await supabase.from('pdf_generation_logs').select('pdf_base64, filename, size_bytes, public_url').eq('email_log_id', _pdf_info.pdf_email_log_id).maybeSingle();
       if (pdfData?.pdf_base64) {
         console.log('[send-email] PDF fetched from DB, size:', pdfData.size_bytes);
-        finalPdfBase64 = pdfData.pdf_base64;
+        pdfSizeBytes = pdfData.size_bytes || pdfData.pdf_base64.length;
         pdfPublicUrl = pdfData.public_url;
+
+        if (pdfSizeBytes > MAX_PDF_ATTACHMENT_SIZE) {
+          console.log('[send-email] PDF too large to attach (' + pdfSizeBytes + ' bytes), will send link only');
+          finalPdfBase64 = null;
+        } else {
+          finalPdfBase64 = pdfData.pdf_base64;
+        }
       } else {
         console.log('[send-email] PDF not found in database');
+      }
+    }
+
+    if (finalPdfBase64) {
+      pdfSizeBytes = finalPdfBase64.length;
+      if (pdfSizeBytes > MAX_PDF_ATTACHMENT_SIZE) {
+        console.log('[send-email] PDF too large to attach (' + pdfSizeBytes + ' bytes), will send link only');
+        finalPdfBase64 = null;
       }
     }
 
@@ -120,9 +137,11 @@ Deno.serve(async (req: Request) => {
       await supabase.from('email_logs').update({ parent_log_id: logEntry.id }).eq('id', _pdf_info.pdf_email_log_id);
     }
 
-    if (hasPdfAttachment && pdfPublicUrl) {
+    if (pdfPublicUrl) {
       console.log('[send-email] Adding PDF download link to email');
-      const downloadSection = '<div style="margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-radius: 8px; text-align: center; font-family: Arial, sans-serif;"><p style="margin: 0 0 15px 0; color: #333; font-size: 16px;"><strong>Tu factura esta adjunta a este correo</strong></p><p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">Tambien puedes descargarla o verla en linea haciendo clic en el boton:</p><a href="' + pdfPublicUrl + '" style="display: inline-block; padding: 12px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px;">Ver/Descargar Factura</a><p style="margin: 15px 0 0 0; color: #999; font-size: 12px;">Este enlace estara disponible por 90 dias</p></div>';
+      const downloadMessage = hasPdfAttachment ? 'Tu factura esta adjunta a este correo' : 'Descarga tu factura';
+      const downloadSubtext = hasPdfAttachment ? 'Tambien puedes descargarla o verla en linea haciendo clic en el boton:' : 'Haz clic en el boton para ver o descargar tu factura:';
+      const downloadSection = '<div style="margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-radius: 8px; text-align: center; font-family: Arial, sans-serif;"><p style="margin: 0 0 15px 0; color: #333; font-size: 16px;"><strong>' + downloadMessage + '</strong></p><p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">' + downloadSubtext + '</p><a href="' + pdfPublicUrl + '" style="display: inline-block; padding: 12px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px;">Ver/Descargar Factura</a><p style="margin: 15px 0 0 0; color: #999; font-size: 12px;">Este enlace estara disponible por 90 dias</p></div>';
       htmlContent += downloadSection;
     }
 
@@ -157,9 +176,10 @@ Deno.serve(async (req: Request) => {
       };
 
       if (finalPdfBase64 && finalPdfFilename) {
-        const pdfSizeBytes = finalPdfBase64.length;
         emailConfig.attachments = [{ filename: finalPdfFilename, content: finalPdfBase64, encoding: 'base64' }];
         console.log('[send-email] PDF attached:', { filename: finalPdfFilename, size_bytes: pdfSizeBytes });
+      } else if (pdfPublicUrl && !finalPdfBase64) {
+        console.log('[send-email] Sending email with download link only (no attachment)');
       }
 
       console.log('[send-email] Sending email...');
