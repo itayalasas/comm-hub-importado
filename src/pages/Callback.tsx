@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export const Callback = () => {
   const { handleCallback } = useAuth();
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -14,7 +16,7 @@ export const Callback = () => {
     if (errorParam) {
       setError('Error al autenticar. Por favor intenta de nuevo.');
       setTimeout(() => {
-        window.location.href = '/';
+        navigate('/', { replace: true });
       }, 3000);
       return;
     }
@@ -24,23 +26,23 @@ export const Callback = () => {
     if (!authToken) {
       setError('No se recibió código de autenticación.');
       setTimeout(() => {
-        window.location.href = '/';
+        navigate('/', { replace: true });
       }, 3000);
       return;
     }
 
     handleCallback(authToken)
       .then(() => {
-        window.location.href = '/dashboard';
+        navigate('/dashboard', { replace: true });
       })
       .catch((err) => {
         console.error('Error in callback:', err);
         setError('Error al procesar la autenticación.');
         setTimeout(() => {
-          window.location.href = '/';
+          navigate('/', { replace: true });
         }, 3000);
       });
-  }, [handleCallback]);
+  }, [handleCallback, navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
