@@ -100,8 +100,32 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ success: false, error: 'Template not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    let htmlContent = renderTemplate(template.html_content, data);
-    let emailSubject = subject || renderTemplate(template.subject || '', data);
+    const pdfDownloadSection = pdfPublicUrl ? `
+      <tr>
+        <td style="padding: 0 30px 30px;">
+          <div style="border: 2px solid #4B9991; border-radius: 8px; padding: 24px; text-align: center; background: #f9fafb;">
+            <h2 style="margin: 0 0 12px; font-size: 20px; color: #0f172a; font-weight: 700;">
+              Descarga tu factura
+            </h2>
+            <p style="margin: 0 0 20px; font-size: 15px; color: #334155; line-height: 1.5;">
+              Haz clic en el boton para ver o descargar tu factura:
+            </p>
+            <a href="${pdfPublicUrl}" style="display: inline-block; padding: 14px 32px; background: #4B9991; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 15px;">
+              Ver/Descargar Factura
+            </a>
+            <p style="margin: 16px 0 0; font-size: 12px; color: #6b7280;">
+              Este enlace estara disponible por 90 dias
+            </p>
+          </div>
+        </td>
+      </tr>
+    ` : '';
+
+    console.log('[send-email] PDF download section:', pdfPublicUrl ? 'Added to template' : 'Not added (no URL)');
+
+    const enrichedData = { ...data, pdf_download_section: pdfDownloadSection };
+    let htmlContent = renderTemplate(template.html_content, enrichedData);
+    let emailSubject = subject || renderTemplate(template.subject || '', enrichedData);
 
     emailSubject = emailSubject.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -135,44 +159,6 @@ Deno.serve(async (req: Request) => {
     if (hasPdfAttachment && _pdf_info?.pdf_email_log_id) {
       console.log('[send-email] Linking PDF log as child');
       await supabase.from('email_logs').update({ parent_log_id: logEntry.id }).eq('id', _pdf_info.pdf_email_log_id);
-    }
-
-    if (pdfPublicUrl) {
-      console.log('[send-email] Adding PDF download link to email');
-      const downloadMessage = hasPdfAttachment ? 'Tu factura esta adjunta a este correo' : 'Descarga tu factura';
-      const downloadSubtext = hasPdfAttachment ? 'Tambien puedes descargarla o verla en linea haciendo clic en el boton:' : 'Haz clic en el boton para ver o descargar tu factura:';
-      const downloadSection = `
-        <tr>
-          <td style="padding: 0 30px 30px;">
-            <div style="border: 2px solid #4B9991; border-radius: 8px; padding: 24px; text-align: center; background: #f9fafb;">
-              <h2 style="margin: 0 0 12px; font-size: 20px; color: #0f172a; font-weight: 700;">
-                ${downloadMessage}
-              </h2>
-              <p style="margin: 0 0 20px; font-size: 15px; color: #334155; line-height: 1.5;">
-                ${downloadSubtext}
-              </p>
-              <a href="${pdfPublicUrl}" style="display: inline-block; padding: 14px 32px; background: #4B9991; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 15px; transition: background 0.3s;">
-                Ver/Descargar Factura
-              </a>
-              <p style="margin: 16px 0 0; font-size: 12px; color: #6b7280;">
-                Este enlace estara disponible por 90 dias
-              </p>
-            </div>
-          </td>
-        </tr>
-      `;
-
-      const bodyEndIndex = htmlContent.lastIndexOf('</table>');
-      if (bodyEndIndex !== -1) {
-        const footerStartIndex = htmlContent.lastIndexOf('<tr>', bodyEndIndex);
-        if (footerStartIndex !== -1) {
-          htmlContent = htmlContent.slice(0, footerStartIndex) + downloadSection + htmlContent.slice(footerStartIndex);
-        } else {
-          htmlContent = htmlContent.slice(0, bodyEndIndex) + downloadSection + htmlContent.slice(bodyEndIndex);
-        }
-      } else {
-        htmlContent += downloadSection;
-      }
     }
 
     const trackingPixelUrl = supabaseUrl + '/functions/v1/track-email/open?log_id=' + logEntry.id;
