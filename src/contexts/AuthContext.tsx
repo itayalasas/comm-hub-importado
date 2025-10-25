@@ -1,9 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-
-const AUTH_URL = import.meta.env.VITE_AUTH_URL;
-const AUTH_APP_ID = import.meta.env.VITE_AUTH_APP_ID;
-const AUTH_API_KEY = import.meta.env.VITE_AUTH_API_KEY;
-const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI;
+import { configManager } from '../lib/config';
 
 interface User {
   sub: string;
@@ -51,19 +47,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const login = () => {
-    const authUrl = `${AUTH_URL}/login?` +
-      `app_id=${AUTH_APP_ID}&` +
-      `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
-      `api_key=${AUTH_API_KEY}`;
+    const authUrl = `${configManager.authUrl}/login?` +
+      `app_id=${configManager.authAppId}&` +
+      `redirect_uri=${encodeURIComponent(configManager.redirectUri)}&` +
+      `api_key=${configManager.authApiKey}`;
 
     window.location.href = authUrl;
   };
 
   const register = () => {
-    const authUrl = `${AUTH_URL}/register?` +
-      `app_id=${AUTH_APP_ID}&` +
-      `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
-      `api_key=${AUTH_API_KEY}`;
+    const authUrl = `${configManager.authUrl}/register?` +
+      `app_id=${configManager.authAppId}&` +
+      `redirect_uri=${encodeURIComponent(configManager.redirectUri)}&` +
+      `api_key=${configManager.authApiKey}`;
 
     window.location.href = authUrl;
   };
@@ -98,17 +94,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       let accessToken = tokenOrCode;
 
       if (!tokenOrCode.startsWith('eyJ')) {
-        const tokenResponse = await fetch(`${AUTH_URL}/oauth/token`, {
+        const tokenResponse = await fetch(`${configManager.authUrl}/oauth/token`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${AUTH_API_KEY}`,
+            'Authorization': `Bearer ${configManager.authApiKey}`,
           },
           body: JSON.stringify({
             grant_type: 'authorization_code',
             code: tokenOrCode,
-            redirect_uri: REDIRECT_URI,
-            client_id: AUTH_APP_ID,
+            redirect_uri: configManager.redirectUri,
+            client_id: configManager.authAppId,
           }),
         });
 
