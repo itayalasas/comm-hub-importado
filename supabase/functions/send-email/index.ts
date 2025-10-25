@@ -128,6 +128,7 @@ Deno.serve(async (req: Request) => {
     let emailSubject = subject || renderTemplate(template.subject || '', enrichedData);
 
     emailSubject = emailSubject.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+    htmlContent = htmlContent.trim();
 
     const hasPdfAttachment = !!finalPdfBase64;
     let logEntry: any;
@@ -184,8 +185,7 @@ Deno.serve(async (req: Request) => {
       const client = new SMTPClient({ connection: connectionConfig });
 
       const emailConfig: any = {
-        from: actualFromEmail,
-        fromName: fromName,
+        from: `"${fromName}" <${actualFromEmail}>`,
         to: recipient_email,
         subject: emailSubject,
         content: 'text/html; charset=utf-8',
