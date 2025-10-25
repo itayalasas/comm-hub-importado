@@ -141,8 +141,38 @@ Deno.serve(async (req: Request) => {
       console.log('[send-email] Adding PDF download link to email');
       const downloadMessage = hasPdfAttachment ? 'Tu factura esta adjunta a este correo' : 'Descarga tu factura';
       const downloadSubtext = hasPdfAttachment ? 'Tambien puedes descargarla o verla en linea haciendo clic en el boton:' : 'Haz clic en el boton para ver o descargar tu factura:';
-      const downloadSection = '<div style="margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-radius: 8px; text-align: center; font-family: Arial, sans-serif;"><p style="margin: 0 0 15px 0; color: #333; font-size: 16px;"><strong>' + downloadMessage + '</strong></p><p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">' + downloadSubtext + '</p><a href="' + pdfPublicUrl + '" style="display: inline-block; padding: 12px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px;">Ver/Descargar Factura</a><p style="margin: 15px 0 0 0; color: #999; font-size: 12px;">Este enlace estara disponible por 90 dias</p></div>';
-      htmlContent += downloadSection;
+      const downloadSection = `
+        <tr>
+          <td style="padding: 0 30px 30px;">
+            <div style="border: 2px solid #4B9991; border-radius: 8px; padding: 24px; text-align: center; background: #f9fafb;">
+              <h2 style="margin: 0 0 12px; font-size: 20px; color: #0f172a; font-weight: 700;">
+                ${downloadMessage}
+              </h2>
+              <p style="margin: 0 0 20px; font-size: 15px; color: #334155; line-height: 1.5;">
+                ${downloadSubtext}
+              </p>
+              <a href="${pdfPublicUrl}" style="display: inline-block; padding: 14px 32px; background: #4B9991; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 15px; transition: background 0.3s;">
+                Ver/Descargar Factura
+              </a>
+              <p style="margin: 16px 0 0; font-size: 12px; color: #6b7280;">
+                Este enlace estara disponible por 90 dias
+              </p>
+            </div>
+          </td>
+        </tr>
+      `;
+
+      const bodyEndIndex = htmlContent.lastIndexOf('</table>');
+      if (bodyEndIndex !== -1) {
+        const footerStartIndex = htmlContent.lastIndexOf('<tr>', bodyEndIndex);
+        if (footerStartIndex !== -1) {
+          htmlContent = htmlContent.slice(0, footerStartIndex) + downloadSection + htmlContent.slice(footerStartIndex);
+        } else {
+          htmlContent = htmlContent.slice(0, bodyEndIndex) + downloadSection + htmlContent.slice(bodyEndIndex);
+        }
+      } else {
+        htmlContent += downloadSection;
+      }
     }
 
     const trackingPixelUrl = supabaseUrl + '/functions/v1/track-email/open?log_id=' + logEntry.id;
