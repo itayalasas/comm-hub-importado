@@ -1,10 +1,27 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { configManager } from './config';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+let supabaseInstance: SupabaseClient | null = null;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
+export function getSupabase(): SupabaseClient {
+  if (!supabaseInstance) {
+    if (!configManager.isLoaded()) {
+      throw new Error('Configuration not loaded. Ensure app is initialized.');
+    }
+
+    const supabaseUrl = configManager.supabaseUrl;
+    const supabaseAnonKey = configManager.supabaseAnonKey;
+
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+  }
+
+  return supabaseInstance;
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    const instance = getSupabase();
+    const value = (instance as any)[prop];
+    return typeof value === 'function' ? value.bind(instance) : value;
+  }
+});
