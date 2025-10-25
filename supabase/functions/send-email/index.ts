@@ -128,7 +128,7 @@ Deno.serve(async (req: Request) => {
     let emailSubject = subject || renderTemplate(template.subject || '', enrichedData);
 
     emailSubject = emailSubject.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-    htmlContent = htmlContent.trim();
+    htmlContent = htmlContent.trim().replace(/\n/g, ' ').replace(/\r/g, '');
 
     const hasPdfAttachment = !!finalPdfBase64;
     let logEntry: any;
@@ -164,8 +164,6 @@ Deno.serve(async (req: Request) => {
 
     const trackingPixelUrl = supabaseUrl + '/functions/v1/track-email/open?log_id=' + logEntry.id;
     htmlContent += '<img src="' + trackingPixelUrl + '" width="1" height="1" style="display:none" />';
-
-    htmlContent = htmlContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
 
     try {
       const useTLS = credentials.smtp_port === 465;

@@ -254,6 +254,15 @@ Deno.serve(async (req: Request) => {
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      } else {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Failed to send email',
+            details: completeResult,
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     }
 
