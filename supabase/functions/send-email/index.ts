@@ -164,6 +164,8 @@ Deno.serve(async (req: Request) => {
     const trackingPixelUrl = supabaseUrl + '/functions/v1/track-email/open?log_id=' + logEntry.id;
     htmlContent += '<img src="' + trackingPixelUrl + '" width="1" height="1" style="display:none" />';
 
+    htmlContent = htmlContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
+
     try {
       const useTLS = credentials.smtp_port === 465;
       console.log('[send-email] SMTP config:', { host: credentials.smtp_host, port: credentials.smtp_port, user: credentials.smtp_user, tls: useTLS });
@@ -186,8 +188,8 @@ Deno.serve(async (req: Request) => {
         fromName: fromName,
         to: recipient_email,
         subject: emailSubject,
+        content: 'text/html; charset=utf-8',
         html: htmlContent,
-        encoding: 'utf-8',
       };
 
       console.log('[send-email] Email config:', { from: actualFromEmail, fromName: fromName, to: recipient_email, subject: emailSubject, hasHtml: !!htmlContent });
