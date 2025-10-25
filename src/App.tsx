@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastContainer } from './components/ToastContainer';
 import { Landing } from './pages/Landing';
@@ -9,15 +9,9 @@ import { Statistics } from './pages/Statistics';
 import { Settings } from './pages/Settings';
 import Documentation from './pages/Documentation';
 
-const Router = () => {
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuth, isLoading } = useAuth();
-  const path = window.location.pathname;
-
-  useEffect(() => {
-    if (!isLoading && isAuth && path === '/') {
-      window.location.href = '/dashboard';
-    }
-  }, [isAuth, isLoading, path]);
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -27,37 +21,85 @@ const Router = () => {
     );
   }
 
-  if (path === '/callback') {
-    return <Callback />;
-  }
-
   if (!isAuth) {
-    return <Landing />;
+    return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  switch (path) {
-    case '/dashboard':
-      return <Dashboard />;
-    case '/templates':
-      return <Templates />;
-    case '/statistics':
-      return <Statistics />;
-    case '/documentation':
-      return <Documentation />;
-    case '/settings':
-      return <Settings />;
-    default:
-      return <Dashboard />;
+  return <>{children}</>;
+};
+
+const HomeRedirect = () => {
+  const { isAuth, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white">Cargando...</div>
+      </div>
+    );
   }
+
+  return isAuth ? <Navigate to="/dashboard" replace /> : <Landing />;
+};
+
+const AppRoutes = () => {
+  return (
+    <Routes>
+      <Route path="/" element={<HomeRedirect />} />
+      <Route path="/callback" element={<Callback />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/templates"
+        element={
+          <ProtectedRoute>
+            <Templates />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/statistics"
+        element={
+          <ProtectedRoute>
+            <Statistics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/documentation"
+        element={
+          <ProtectedRoute>
+            <Documentation />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <Settings />
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
+  );
 };
 
 function App() {
   return (
-    <AuthProvider>
-      <ToastContainer>
-        <Router />
-      </ToastContainer>
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <ToastContainer>
+          <AppRoutes />
+        </ToastContainer>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 

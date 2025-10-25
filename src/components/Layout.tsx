@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { Mail, LayoutDashboard, FileText, Settings, BarChart3, LogOut, Book } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -9,6 +10,7 @@ interface LayoutProps {
 
 export const Layout = ({ children, currentPage }: LayoutProps) => {
   const { user, logout } = useAuth();
+  const location = useLocation();
 
   const navigation = [
     { name: 'Dashboard', icon: LayoutDashboard, page: 'dashboard' },
@@ -49,11 +51,11 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
           <nav className="p-4 space-y-2">
             {navigation.map((item) => {
               const Icon = item.icon;
-              const isActive = currentPage === item.page;
+              const isActive = location.pathname === `/${item.page}` || currentPage === item.page;
               return (
-                <a
+                <Link
                   key={item.name}
-                  href={`/${item.page}`}
+                  to={`/${item.page}`}
                   className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-cyan-500/10 text-cyan-400'
@@ -62,7 +64,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
                 >
                   <Icon className="w-5 h-5" />
                   <span className="font-medium">{item.name}</span>
-                </a>
+                </Link>
               );
             })}
           </nav>
