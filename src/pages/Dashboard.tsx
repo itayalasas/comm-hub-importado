@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,7 +12,8 @@ import {
   TrendingUp,
   Activity,
   Server,
-  Zap
+  Zap,
+  ArrowRight
 } from 'lucide-react';
 
 interface Stats {
@@ -45,6 +47,7 @@ interface ServiceStatus {
 
 export const Dashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({
@@ -150,7 +153,7 @@ export const Dashboard = () => {
         .select('id, recipient_email, subject, status, created_at, communication_type')
         .eq('application_id', selectedApp)
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(5);
 
       if (error) throw error;
       setRecentActivity(data || []);
@@ -315,8 +318,17 @@ export const Dashboard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white">Actividad Reciente</h2>
-              <Activity className="w-5 h-5 text-cyan-400" />
+              <div className="flex items-center space-x-2">
+                <Activity className="w-5 h-5 text-cyan-400" />
+                <h2 className="text-xl font-semibold text-white">Actividad Reciente</h2>
+              </div>
+              <button
+                onClick={() => navigate('/statistics')}
+                className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-sm"
+              >
+                <span>Ver todo</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
             </div>
 
             <div className="space-y-3">
