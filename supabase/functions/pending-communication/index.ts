@@ -109,7 +109,7 @@ Deno.serve(async (req: Request) => {
       const emailDataWithOrderId = { ...emailData, order_id: orderId };
       const renderedSubject = requestData.subject || renderTemplate(template.subject || 'Pending Invoice', emailDataWithOrderId);
 
-      const { data: parentLogData } = await supabase
+      const { data: parentLogData, error: parentLogError } = await supabase
         .from('email_logs')
         .insert({
           application_id: application.id,
@@ -130,7 +130,15 @@ Deno.serve(async (req: Request) => {
         .select()
         .single();
 
-      const { data: pendingComm } = await supabase
+      if (parentLogError || !parentLogData) {
+        console.error('[pending-communication] Failed to create parent log:', parentLogError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to create email log', details: parentLogError?.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: pendingComm, error: pendingError } = await supabase
         .from('pending_communications')
         .insert({
           application_id: application.id,
@@ -145,6 +153,14 @@ Deno.serve(async (req: Request) => {
         })
         .select()
         .single();
+
+      if (pendingError || !pendingComm) {
+        console.error('[pending-communication] Failed to create pending communication:', pendingError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to create pending communication', details: pendingError?.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       console.log('[pending-communication] Checking for existing PDF for order_id:', orderId);
 
