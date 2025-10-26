@@ -3,11 +3,12 @@ import { Layout } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
-import { User, Mail, Server, Eye, EyeOff, Plus } from 'lucide-react';
+import { User, Mail, Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2 } from 'lucide-react';
 
 interface Application {
   id: string;
   name: string;
+  api_key: string;
 }
 
 interface SMTPCredentials {
@@ -26,10 +27,12 @@ export const Settings = () => {
   const toast = useToast();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const [defaultApp, setDefaultApp] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<SMTPCredentials | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [copiedKey, setCopiedKey] = useState(false);
   const [formData, setFormData] = useState<SMTPCredentials>({
     smtp_host: '',
     smtp_port: 587,
@@ -58,14 +61,24 @@ export const Settings = () => {
 
       const { data, error } = await supabase
         .from('applications')
-        .select('id, name')
+        .select('id, name, api_key')
         .eq('user_id', user.sub)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       setApplications(data || []);
-      if (data && data.length > 0) {
+
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('default_application_id')
+        .eq('user_id', user.sub)
+        .maybeSingle();
+
+      if (prefs?.default_application_id) {
+        setDefaultApp(prefs.default_application_id);
+        setSelectedApp(prefs.default_application_id);
+      } else if (data && data.length > 0) {
         setSelectedApp(data[0].id);
       }
     } catch (error) {
@@ -174,6 +187,42 @@ export const Settings = () => {
     setShowModal(true);
   };
 
+  const setAsDefault = async (appId: string) => {
+    try {
+      if (!user?.sub) return;
+
+      const { data: existing } = await supabase
+        .from('user_preferences')
+        .select('user_id')
+        .eq('user_id', user.sub)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from('user_preferences')
+          .update({ default_application_id: appId })
+          .eq('user_id', user.sub);
+      } else {
+        await supabase
+          .from('user_preferences')
+          .insert({ user_id: user.sub, default_application_id: appId });
+      }
+
+      setDefaultApp(appId);
+      toast.success('Aplicación por defecto actualizada');
+    } catch (error) {
+      console.error('Error setting default app:', error);
+      toast.error('Error al guardar la configuración');
+    }
+  };
+
+  const copyApiKey = (apiKey: string) => {
+    navigator.clipboard.writeText(apiKey);
+    setCopiedKey(true);
+    toast.success('API Key copiada al portapapeles');
+    setTimeout(() => setCopiedKey(false), 2000);
+  };
+
   if (loading) {
     return (
       <Layout currentPage="settings">
@@ -223,7 +272,76 @@ export const Settings = () => {
         </div>
 
         {applications.length > 0 && (
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+          <>
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+              <div className="flex items-center space-x-2 mb-6">
+                <Key className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-lg font-semibold text-white">Aplicaciones y API Keys</h3>
+              </div>
+
+              <div className="space-y-3">
+                {applications.map((app) => (
+                  <div
+                    key={app.id}
+                    className={`bg-slate-900/50 border rounded-lg p-4 transition-all ${
+                      defaultApp === app.id
+                        ? 'border-cyan-500 bg-cyan-500/5'
+                        : 'border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center space-x-3">
+                        <h4 className="text-white font-semibold">{app.name}</h4>
+                        {defaultApp === app.id && (
+                          <span className="flex items-center space-x-1 px-2 py-1 bg-cyan-500/20 text-cyan-400 text-xs rounded-full">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Por defecto</span>
+                          </span>
+                        )}
+                      </div>
+                      {defaultApp !== app.id && (
+                        <button
+                          onClick={() => setAsDefault(app.id)}
+                          className="text-xs px-3 py-1 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors"
+                        >
+                          Marcar como predeterminada
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">API Key</div>
+                        <div className="flex items-center space-x-2">
+                          <code className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-cyan-400 font-mono overflow-x-auto">
+                            {app.api_key}
+                          </code>
+                          <button
+                            onClick={() => copyApiKey(app.api_key)}
+                            className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition-colors"
+                            title="Copiar API Key"
+                          >
+                            {copiedKey ? (
+                              <CheckCircle2 className="w-4 h-4 text-green-400" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">ID de Aplicación</div>
+                        <code className="block px-3 py-2 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-mono overflow-x-auto">
+                          {app.id}
+                        </code>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-2">
                 <Server className="w-5 h-5 text-cyan-400" />
@@ -304,6 +422,7 @@ export const Settings = () => {
               </div>
             )}
           </div>
+          </>
         )}
       </div>
 

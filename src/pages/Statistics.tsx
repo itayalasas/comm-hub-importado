@@ -160,6 +160,12 @@ export const Statistics = () => {
     try {
       if (!user?.sub) return;
 
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('default_application_id')
+        .eq('user_id', user.sub)
+        .maybeSingle();
+
       const { data, error } = await supabase
         .from('applications')
         .select('id, name, api_key')
@@ -169,7 +175,10 @@ export const Statistics = () => {
       if (error) throw error;
 
       setApplications(data || []);
-      if (data && data.length > 0) {
+
+      if (prefs?.default_application_id) {
+        setSelectedApp(prefs.default_application_id);
+      } else if (data && data.length > 0) {
         setSelectedApp(data[0].id);
       }
     } catch (error) {
