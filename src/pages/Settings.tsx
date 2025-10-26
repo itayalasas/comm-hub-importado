@@ -194,27 +194,34 @@ export const Settings = () => {
 
   const setAsDefault = async (appId: string) => {
     try {
-      if (!user?.sub) return;
+      if (!user?.sub) {
+        console.error('No user ID available');
+        return;
+      }
 
-      const { data: existing } = await supabase
+      const { error } = await supabase
         .from('user_preferences')
-        .select('user_id')
-        .eq('user_id', user.sub)
-        .maybeSingle();
+        .upsert(
+          {
+            user_id: user.sub,
+            default_application_id: appId,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: 'user_id',
+          }
+        );
 
-      if (existing) {
-        await supabase
-          .from('user_preferences')
-          .update({ default_application_id: appId })
-          .eq('user_id', user.sub);
-      } else {
-        await supabase
-          .from('user_preferences')
-          .insert({ user_id: user.sub, default_application_id: appId });
+      if (error) {
+        console.error('Error in upsert:', error);
+        throw error;
       }
 
       setDefaultApp(appId);
+      setSelectedApp(appId);
       toast.success('Aplicación por defecto actualizada');
+
+      console.log('Default app set successfully:', appId);
     } catch (error) {
       console.error('Error setting default app:', error);
       toast.error('Error al guardar la configuración');
