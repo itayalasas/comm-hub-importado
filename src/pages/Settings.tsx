@@ -31,8 +31,13 @@ export const Settings = () => {
   const [credentials, setCredentials] = useState<SMTPCredentials | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showNewAppModal, setShowNewAppModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [newAppData, setNewAppData] = useState({
+    name: '',
+    domain: '',
+  });
   const [formData, setFormData] = useState<SMTPCredentials>({
     smtp_host: '',
     smtp_port: 587,
@@ -223,6 +228,39 @@ export const Settings = () => {
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
+  const createApplication = async () => {
+    if (!newAppData.name || !user?.sub) return;
+
+    try {
+      const appId = `app_${Math.random().toString(36).substr(2, 9)}`;
+      const apiKey = `ak_${Math.random().toString(36).substr(2, 32)}`;
+
+      const { data, error } = await supabase
+        .from('applications')
+        .insert({
+          user_id: user.sub,
+          name: newAppData.name,
+          app_id: appId,
+          domain: newAppData.domain || null,
+          api_key: apiKey,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await setAsDefault(data.id);
+
+      toast.success('Aplicación creada y marcada como favorita');
+      setShowNewAppModal(false);
+      setNewAppData({ name: '', domain: '' });
+      loadApplications();
+    } catch (error) {
+      console.error('Error creating application:', error);
+      toast.error('Error al crear la aplicación');
+    }
+  };
+
   if (loading) {
     return (
       <Layout currentPage="settings">
@@ -271,16 +309,34 @@ export const Settings = () => {
           </div>
         </div>
 
-        {applications.length > 0 && (
-          <>
-            <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
-              <div className="flex items-center space-x-2 mb-6">
-                <Key className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-lg font-semibold text-white">Aplicaciones y API Keys</h3>
-              </div>
+        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-2">
+              <Key className="w-5 h-5 text-cyan-400" />
+              <h3 className="text-lg font-semibold text-white">Aplicaciones y API Keys</h3>
+            </div>
+            <button
+              onClick={() => setShowNewAppModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nueva Aplicación</span>
+            </button>
+          </div>
 
-              <div className="space-y-3">
-                {applications.map((app) => (
+          {applications.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-slate-400 mb-4">No tienes aplicaciones creadas</p>
+              <button
+                onClick={() => setShowNewAppModal(true)}
+                className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+              >
+                Crear Primera Aplicación
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {applications.map((app) => (
                   <div
                     key={app.id}
                     className={`bg-slate-900/50 border rounded-lg p-4 transition-all ${
@@ -338,10 +394,12 @@ export const Settings = () => {
                     </div>
                   </div>
                 ))}
-              </div>
             </div>
+          )}
+        </div>
 
-            <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+        {applications.length > 0 && (
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-2">
                 <Server className="w-5 h-5 text-cyan-400" />
@@ -422,9 +480,68 @@ export const Settings = () => {
               </div>
             )}
           </div>
-          </>
         )}
       </div>
+
+      {showNewAppModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-md">
+            <div className="p-6 border-b border-slate-700">
+              <h2 className="text-xl font-bold text-white">Nueva Aplicación</h2>
+              <p className="text-sm text-slate-400 mt-1">
+                Se marcará automáticamente como favorita
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Nombre de la Aplicación *
+                </label>
+                <input
+                  type="text"
+                  value={newAppData.name}
+                  onChange={(e) => setNewAppData({ ...newAppData, name: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                  placeholder="Mi Aplicación"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Dominio (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={newAppData.domain}
+                  onChange={(e) => setNewAppData({ ...newAppData, domain: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                  placeholder="example.com"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t border-slate-700">
+              <button
+                onClick={() => {
+                  setShowNewAppModal(false);
+                  setNewAppData({ name: '', domain: '' });
+                }}
+                className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={createApplication}
+                disabled={!newAppData.name}
+                className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Crear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
