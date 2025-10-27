@@ -235,12 +235,18 @@ export const Settings = () => {
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
+  const generateSecureKey = () => {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  };
+
   const createApplication = async () => {
     if (!newAppData.name || !user?.sub) return;
 
     try {
-      const appId = `app_${Math.random().toString(36).substr(2, 9)}`;
-      const apiKey = `ak_${Math.random().toString(36).substr(2, 32)}`;
+      const appId = crypto.randomUUID();
+      const apiKey = `sk_${generateSecureKey()}`;
 
       const { data, error } = await supabase
         .from('applications')
