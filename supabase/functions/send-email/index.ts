@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import nodemailer from 'npm:nodemailer@6.9.7';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -173,38 +173,35 @@ Deno.serve(async (req: Request) => {
       const fromName = credentials.from_name || 'DogCatify';
       console.log('[send-email] From email:', actualFromEmail, 'Name:', fromName);
 
-      const transporter = nodemailer.createTransport({
-        host: credentials.smtp_host,
+      const connectionConfig: any = {
+        hostname: credentials.smtp_host,
         port: credentials.smtp_port,
-        secure: useTLS,
-        auth: {
-          user: credentials.smtp_user,
-          pass: credentials.smtp_password,
-        },
-      });
+        auth: { username: credentials.smtp_user, password: credentials.smtp_password },
+      };
+      if (useTLS) connectionConfig.tls = true;
+
+      const client = new SMTPClient({ connection: connectionConfig });
 
       const emailConfig: any = {
         from: `"${fromName}" <${actualFromEmail}>`,
         to: recipient_email,
         subject: emailSubject,
+        content: 'text/html; charset=utf-8',
         html: htmlContent,
       };
 
       console.log('[send-email] Email config:', { from: actualFromEmail, fromName: fromName, to: recipient_email, subject: emailSubject, hasHtml: !!htmlContent });
 
       if (finalPdfBase64 && finalPdfFilename) {
-        emailConfig.attachments = [{
-          filename: finalPdfFilename,
-          content: finalPdfBase64,
-          encoding: 'base64'
-        }];
+        emailConfig.attachments = [{ filename: finalPdfFilename, content: finalPdfBase64, encoding: 'base64' }];
         console.log('[send-email] PDF attached:', { filename: finalPdfFilename, size_bytes: pdfSizeBytes });
       } else if (pdfPublicUrl && !finalPdfBase64) {
         console.log('[send-email] Sending email with download link only (no attachment)');
       }
 
       console.log('[send-email] Sending email...');
-      await transporter.sendMail(emailConfig);
+      await client.send(emailConfig);
+      await client.close();
       console.log('[send-email] Email sent successfully');
 
       await supabase.from('email_logs').update({
