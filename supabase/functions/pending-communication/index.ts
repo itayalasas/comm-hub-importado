@@ -150,6 +150,7 @@ Deno.serve(async (req: Request) => {
           external_reference_id: orderId,
           order_id: orderId,
           parent_log_id: parentLogData.id,
+          status: 'waiting_data',
         })
         .select()
         .single();
