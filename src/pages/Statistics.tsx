@@ -26,6 +26,13 @@ interface EmailLog {
   recipient_email: string;
   subject: string;
   status: string;
+  delivery_status?: string | null;
+  bounce_type?: string | null;
+  bounce_reason?: string | null;
+  delivered_at?: string | null;
+  bounced_at?: string | null;
+  complained_at?: string | null;
+  resend_email_id?: string | null;
   sent_at: string | null;
   opened_at: string | null;
   clicked_at: string | null;
@@ -192,7 +199,7 @@ export const Statistics = () => {
     try {
       const { data: logs, error } = await supabase
         .from('email_logs')
-        .select('status, opened_at, clicked_at, communication_type, pdf_generated')
+        .select('status, delivery_status, opened_at, clicked_at, communication_type, pdf_generated')
         .eq('application_id', appId);
 
       if (error) throw error;
@@ -203,9 +210,9 @@ export const Statistics = () => {
         .eq('application_id', appId)
         .in('status', ['waiting_data', 'processing', 'pdf_generated']);
 
-      const sent = logs?.filter((l) => l.status === 'sent').length || 0;
-      const failed = logs?.filter((l) => l.status === 'failed').length || 0;
-      const logsPending = logs?.filter((l) => l.status === 'pending').length || 0;
+      const sent = logs?.filter((l) => l.delivery_status === 'delivered' || (l.status === 'sent' && !l.delivery_status)).length || 0;
+      const failed = logs?.filter((l) => l.status === 'failed' || l.delivery_status === 'bounced' || l.delivery_status === 'complained').length || 0;
+      const logsPending = logs?.filter((l) => l.status === 'pending' || l.delivery_status === 'delivery_delayed').length || 0;
       const commsPending = pendingData?.length || 0;
       const opened = logs?.filter((l) => l.opened_at !== null).length || 0;
       const clicked = logs?.filter((l) => l.clicked_at !== null).length || 0;
@@ -295,6 +302,21 @@ export const Statistics = () => {
       color: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
       icon: <FileText className="w-4 h-4" />
     };
+    if (log.delivery_status === 'bounced' || log.bounced_at) return {
+      label: 'Bounced',
+      color: 'text-red-400 bg-red-500/10 border-red-500/20',
+      icon: <XCircle className="w-4 h-4" />
+    };
+    if (log.delivery_status === 'complained' || log.complained_at) return {
+      label: 'Spam',
+      color: 'text-red-400 bg-red-500/10 border-red-500/20',
+      icon: <XCircle className="w-4 h-4" />
+    };
+    if (log.status === 'failed') return {
+      label: 'Failed',
+      color: 'text-red-400 bg-red-500/10 border-red-500/20',
+      icon: <XCircle className="w-4 h-4" />
+    };
     if (log.clicked_at) return {
       label: 'Clicked',
       color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
@@ -305,15 +327,20 @@ export const Statistics = () => {
       color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
       icon: <Eye className="w-4 h-4" />
     };
+    if (log.delivery_status === 'delivered' || log.delivered_at) return {
+      label: 'Delivered',
+      color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+      icon: <CheckCircle className="w-4 h-4" />
+    };
     if (log.sent_at && log.status === 'sent') return {
       label: 'Sent',
       color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
       icon: <CheckCircle className="w-4 h-4" />
     };
-    if (log.status === 'failed') return {
-      label: 'Failed',
-      color: 'text-red-400 bg-red-500/10 border-red-500/20',
-      icon: <XCircle className="w-4 h-4" />
+    if (log.delivery_status === 'delivery_delayed') return {
+      label: 'Delayed',
+      color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+      icon: <Clock className="w-4 h-4" />
     };
     return {
       label: 'Pending',
