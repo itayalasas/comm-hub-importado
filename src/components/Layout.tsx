@@ -13,12 +13,12 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
   const location = useLocation();
 
   const navigation = [
-    { name: 'Dashboard', icon: LayoutDashboard, page: 'dashboard' },
-    { name: 'Templates', icon: FileText, page: 'templates' },
-    { name: 'Estadísticas', icon: BarChart3, page: 'statistics' },
-    { name: 'Documentación', icon: Book, page: 'documentation' },
-    { name: 'Configuración', icon: Settings, page: 'settings' },
-  ].filter(item => hasMenuAccess(item.page));
+    { name: 'Dashboard', icon: LayoutDashboard, page: 'dashboard', route: 'dashboard', permissionKey: 'dashboard' },
+    { name: 'Templates', icon: FileText, page: 'templates', route: 'templates', permissionKey: 'templates' },
+    { name: 'Estadísticas', icon: BarChart3, page: 'statistics', route: 'statistics', permissionKey: 'estadisticas' },
+    { name: 'Documentación', icon: Book, page: 'documentation', route: 'documentation', permissionKey: 'documentacion' },
+    { name: 'Configuración', icon: Settings, page: 'settings', route: 'settings', permissionKey: 'configuracion' },
+  ].filter(item => hasMenuAccess(item.permissionKey));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -50,11 +50,11 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
           <nav className="p-4 space-y-2">
             {navigation.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === `/${item.page}` || currentPage === item.page;
+              const isActive = location.pathname === `/${item.route}` || currentPage === item.page;
               return (
                 <Link
                   key={item.name}
-                  to={`/${item.page}`}
+                  to={`/${item.route}`}
                   className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-cyan-500/10 text-cyan-400'
