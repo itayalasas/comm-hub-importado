@@ -244,6 +244,17 @@ Deno.serve(async (req: Request) => {
 
         const resendData = await resendResponse.json();
         console.log('[send-email] Email sent successfully via Resend, ID:', resendData.id);
+
+        await supabase.from('email_logs').update({
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          resend_email_id: resendData.id,
+          delivery_status: 'sent',
+          pdf_attachment_size: finalPdfBase64 ? finalPdfBase64.length : null,
+          metadata: { action: hasPdfAttachment ? 'email_sent_with_invoice' : 'email_sent', completed_at: new Date().toISOString(), processing_time_ms: Date.now() - startTime },
+        }).eq('id', logEntry.id);
+
+        return new Response(JSON.stringify({ success: true, message: 'Email sent successfully', log_id: logEntry.id, resend_email_id: resendData.id, processing_time_ms: Date.now() - startTime }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       await supabase.from('email_logs').update({
