@@ -83,7 +83,7 @@ const AppRoutes = () => {
       <Route
         path="/statistics"
         element={
-          <ProtectedRoute requiredMenu="estad_sticas">
+          <ProtectedRoute requiredMenu="statistics">
             <Statistics />
           </ProtectedRoute>
         }
@@ -91,7 +91,7 @@ const AppRoutes = () => {
       <Route
         path="/documentation"
         element={
-          <ProtectedRoute requiredMenu="documentacion">
+          <ProtectedRoute requiredMenu="documentation">
             <Documentation />
           </ProtectedRoute>
         }
@@ -99,7 +99,7 @@ const AppRoutes = () => {
       <Route
         path="/settings"
         element={
-          <ProtectedRoute requiredMenu="configuracion">
+          <ProtectedRoute requiredMenu="settings">
             <Settings />
           </ProtectedRoute>
         }
