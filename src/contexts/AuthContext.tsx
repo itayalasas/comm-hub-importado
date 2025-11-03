@@ -155,13 +155,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const hasPermission = (menu: string, permission: MenuPermission): boolean => {
-    if (!user || !user.permissions) return false;
+    if (!user || !user.permissions) {
+      console.log(`hasPermission(${menu}, ${permission}): No user or permissions`);
+      return false;
+    }
     const menuPermissions = user.permissions[menu];
-    return menuPermissions ? menuPermissions.includes(permission) : false;
+    const result = menuPermissions ? menuPermissions.includes(permission) : false;
+    console.log(`hasPermission(${menu}, ${permission}):`, result, 'menuPermissions:', menuPermissions);
+    return result;
   };
 
   const hasMenuAccess = (menu: string): boolean => {
-    return hasPermission(menu, 'read');
+    const result = hasPermission(menu, 'read');
+    console.log(`hasMenuAccess(${menu}):`, result);
+    return result;
   };
 
   return (
