@@ -15,9 +15,9 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
   const navigation = [
     { name: 'Dashboard', icon: LayoutDashboard, page: 'dashboard', route: 'dashboard', permissionKey: 'dashboard' },
     { name: 'Templates', icon: FileText, page: 'templates', route: 'templates', permissionKey: 'templates' },
-    { name: 'Estadísticas', icon: BarChart3, page: 'statistics', route: 'statistics', permissionKey: 'estadisticas' },
-    { name: 'Documentación', icon: Book, page: 'documentation', route: 'documentation', permissionKey: 'documentacion' },
-    { name: 'Configuración', icon: Settings, page: 'settings', route: 'settings', permissionKey: 'configuracion' },
+    { name: 'Estadísticas', icon: BarChart3, page: 'statistics', route: 'statistics', permissionKey: 'statistics' },
+    { name: 'Documentación', icon: Book, page: 'documentation', route: 'documentation', permissionKey: 'documentation' },
+    { name: 'Configuración', icon: Settings, page: 'settings', route: 'settings', permissionKey: 'settings' },
   ].filter(item => hasMenuAccess(item.permissionKey));
 
   return (
