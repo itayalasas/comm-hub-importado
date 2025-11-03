@@ -1,3 +1,6 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -14,26 +17,51 @@ Deno.serve(async (req: Request) => {
 
   try {
     const start = Date.now();
-    
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    if (!resendApiKey) {
-      throw new Error('RESEND_API_KEY not configured');
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase credentials not configured');
     }
 
-    const response = await fetch('https://api.resend.com/domains', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${resendApiKey}`,
-      },
-    });
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: credentials, error } = await supabase
+      .from('email_credentials')
+      .select('id, smtp_host, smtp_port, is_active')
+      .eq('is_active', true)
+      .maybeSingle();
 
     const responseTime = Date.now() - start;
-    const isHealthy = response.ok;
+
+    if (error) {
+      throw new Error(`Database error: ${error.message}`);
+    }
+
+    if (!credentials) {
+      return new Response(
+        JSON.stringify({
+          status: 'down',
+          responseTime,
+          error: 'No active SMTP credentials configured',
+          timestamp: new Date().toISOString(),
+        }),
+        {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    }
 
     return new Response(
       JSON.stringify({
-        status: isHealthy ? 'operational' : 'degraded',
+        status: 'operational',
         responseTime,
+        smtp_configured: true,
         timestamp: new Date().toISOString(),
       }),
       {
