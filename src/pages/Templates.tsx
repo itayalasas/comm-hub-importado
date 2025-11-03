@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { verifyApplicationOwnership } from '../lib/security';
 import { useToast } from '../components/Toast';
-import { Plus, Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -48,6 +48,7 @@ export const Templates = () => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalTemplates, setTotalTemplates] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
   const templatesPerPage = 6;
 
   const [formData, setFormData] = useState({
@@ -77,6 +78,7 @@ export const Templates = () => {
   useEffect(() => {
     if (selectedApp) {
       setCurrentPage(1);
+      setSearchTerm('');
       loadTemplates(selectedApp);
     }
   }, [selectedApp]);
@@ -85,7 +87,7 @@ export const Templates = () => {
     if (selectedApp) {
       loadTemplates(selectedApp);
     }
-  }, [currentPage]);
+  }, [currentPage, searchTerm]);
 
   const loadApplications = async () => {
     try {
@@ -129,22 +131,33 @@ export const Templates = () => {
         return;
       }
 
-      const { count } = await supabase
+      let countQuery = supabase
         .from('communication_templates')
         .select('*', { count: 'exact', head: true })
         .eq('application_id', appId);
 
+      if (searchTerm) {
+        countQuery = countQuery.ilike('name', `%${searchTerm}%`);
+      }
+
+      const { count } = await countQuery;
       setTotalTemplates(count || 0);
 
       const from = (currentPage - 1) * templatesPerPage;
       const to = from + templatesPerPage - 1;
 
-      const { data, error } = await supabase
+      let dataQuery = supabase
         .from('communication_templates')
         .select('*')
         .eq('application_id', appId)
         .order('created_at', { ascending: false })
         .range(from, to);
+
+      if (searchTerm) {
+        dataQuery = dataQuery.ilike('name', `%${searchTerm}%`);
+      }
+
+      const { data, error } = await dataQuery;
 
       if (error) throw error;
       setTemplates(data || []);
@@ -360,17 +373,64 @@ export const Templates = () => {
               ))}
             </div>
 
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                <Search className="w-5 h-5 text-slate-400" />
+              </div>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Buscar templates por nombre..."
+                className="w-full pl-12 pr-12 py-3 bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setCurrentPage(1);
+                  }}
+                  className="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
             <div className="space-y-4">
               {templates.length === 0 ? (
                 <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-8 text-center">
-                  <Code className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                  <p className="text-slate-400 mb-4">No hay templates para esta aplicación</p>
-                  <button
-                    onClick={() => openEditor()}
-                    className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
-                  >
-                    Crear Primer Template
-                  </button>
+                  {searchTerm ? (
+                    <>
+                      <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                      <p className="text-slate-400 mb-4">
+                        No se encontraron templates con el nombre "{searchTerm}"
+                      </p>
+                      <button
+                        onClick={() => {
+                          setSearchTerm('');
+                          setCurrentPage(1);
+                        }}
+                        className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                      >
+                        Limpiar búsqueda
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Code className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                      <p className="text-slate-400 mb-4">No hay templates para esta aplicación</p>
+                      <button
+                        onClick={() => openEditor()}
+                        className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+                      >
+                        Crear Primer Template
+                      </button>
+                    </>
+                  )}
                 </div>
               ) : (
                 <>
