@@ -42,8 +42,9 @@ Deno.serve(async (req: Request) => {
     if (!credentials) {
       return new Response(
         JSON.stringify({
-          status: 'down',
+          status: 'operational',
           responseTime,
+          configured: false,
           error: 'No active email credentials configured',
           timestamp: new Date().toISOString(),
         }),
