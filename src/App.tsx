@@ -9,6 +9,14 @@ import { Statistics } from './pages/Statistics';
 import { Settings } from './pages/Settings';
 import Documentation from './pages/Documentation';
 
+const ROUTE_TO_PERMISSION_MAP: Record<string, string> = {
+  'dashboard': 'dashboard',
+  'templates': 'templates',
+  'statistics': 'estadisticas',
+  'documentation': 'documentacion',
+  'settings': 'configuracion',
+};
+
 const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode; requiredMenu?: string }) => {
   const { isAuth, isLoading, hasMenuAccess } = useAuth();
   const location = useLocation();
@@ -25,21 +33,31 @@ const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode;
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  if (requiredMenu && !hasMenuAccess(requiredMenu)) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-white text-center">
-          <h2 className="text-2xl font-bold mb-4">Acceso Denegado</h2>
-          <p className="text-slate-400">No tienes permisos para acceder a esta sección</p>
-          <button
-            onClick={() => window.history.back()}
-            className="mt-6 px-6 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg transition-colors"
-          >
-            Volver
-          </button>
+  if (requiredMenu) {
+    const permissionKey = ROUTE_TO_PERMISSION_MAP[requiredMenu] || requiredMenu;
+    console.log('=== PROTECTED ROUTE CHECK ===');
+    console.log('Required Menu (route):', requiredMenu);
+    console.log('Permission Key (mapped):', permissionKey);
+
+    if (!hasMenuAccess(permissionKey)) {
+      console.log('ACCESS DENIED for', permissionKey);
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+          <div className="text-white text-center">
+            <h2 className="text-2xl font-bold mb-4">Acceso Denegado</h2>
+            <p className="text-slate-400">No tienes permisos para acceder a esta sección</p>
+            <p className="text-xs text-slate-500 mt-2">Ruta: {requiredMenu} → Permiso: {permissionKey}</p>
+            <button
+              onClick={() => window.history.back()}
+              className="mt-6 px-6 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg transition-colors"
+            >
+              Volver
+            </button>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+    console.log('ACCESS GRANTED for', permissionKey);
   }
 
   return <>{children}</>;
