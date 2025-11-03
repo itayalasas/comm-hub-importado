@@ -164,10 +164,10 @@ export const Dashboard = () => {
 
   const checkServiceHealth = async () => {
     const healthChecks: ServiceStatus[] = [
-      { name: 'API', status: 'operational', responseTime: 45 },
-      { name: 'Base de Datos', status: 'operational', responseTime: 12 },
-      { name: 'Email Service', status: 'operational', responseTime: 120 },
-      { name: 'PDF Generator', status: 'operational', responseTime: 350 },
+      { name: 'API', status: 'down', responseTime: 0 },
+      { name: 'Base de Datos', status: 'down', responseTime: 0 },
+      { name: 'Email Service', status: 'down', responseTime: 0 },
+      { name: 'PDF Generator', status: 'down', responseTime: 0 },
     ];
 
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -180,14 +180,21 @@ export const Dashboard = () => {
 
       if (error) {
         healthChecks[0].status = 'degraded';
-        healthChecks[1].status = 'degraded';
-      } else {
         healthChecks[0].responseTime = responseTime;
+        healthChecks[1].status = 'degraded';
+        healthChecks[1].responseTime = responseTime;
+      } else {
+        healthChecks[0].status = 'operational';
+        healthChecks[0].responseTime = responseTime;
+        healthChecks[1].status = 'operational';
         healthChecks[1].responseTime = Math.floor(responseTime / 3);
       }
-    } catch {
+    } catch (err) {
+      console.error('API/DB health check failed:', err);
       healthChecks[0].status = 'down';
+      healthChecks[0].responseTime = 0;
       healthChecks[1].status = 'down';
+      healthChecks[1].responseTime = 0;
     }
 
     try {
@@ -196,17 +203,29 @@ export const Dashboard = () => {
         headers: {
           'Authorization': `Bearer ${supabaseKey}`,
         },
+        signal: AbortSignal.timeout(10000),
       });
+
+      const responseTime = Date.now() - emailStart;
 
       if (emailResponse.ok) {
         const emailData = await emailResponse.json();
-        healthChecks[2].status = emailData.status;
-        healthChecks[2].responseTime = emailData.responseTime;
+
+        if (emailData.status === 'operational' && emailData.configured) {
+          healthChecks[2].status = 'operational';
+        } else if (emailData.status === 'down' || !emailData.configured) {
+          healthChecks[2].status = 'down';
+        } else {
+          healthChecks[2].status = 'degraded';
+        }
+
+        healthChecks[2].responseTime = emailData.responseTime || responseTime;
       } else {
-        healthChecks[2].status = 'degraded';
-        healthChecks[2].responseTime = Date.now() - emailStart;
+        healthChecks[2].status = 'down';
+        healthChecks[2].responseTime = responseTime;
       }
-    } catch {
+    } catch (err) {
+      console.error('Email service health check failed:', err);
       healthChecks[2].status = 'down';
       healthChecks[2].responseTime = 0;
     }
@@ -217,17 +236,29 @@ export const Dashboard = () => {
         headers: {
           'Authorization': `Bearer ${supabaseKey}`,
         },
+        signal: AbortSignal.timeout(10000),
       });
+
+      const responseTime = Date.now() - pdfStart;
 
       if (pdfResponse.ok) {
         const pdfData = await pdfResponse.json();
-        healthChecks[3].status = pdfData.status;
-        healthChecks[3].responseTime = pdfData.responseTime;
+
+        if (pdfData.status === 'operational' || pdfData.status === 'healthy') {
+          healthChecks[3].status = 'operational';
+        } else if (pdfData.status === 'down') {
+          healthChecks[3].status = 'down';
+        } else {
+          healthChecks[3].status = 'degraded';
+        }
+
+        healthChecks[3].responseTime = pdfData.responseTime || responseTime;
       } else {
-        healthChecks[3].status = 'degraded';
-        healthChecks[3].responseTime = Date.now() - pdfStart;
+        healthChecks[3].status = 'down';
+        healthChecks[3].responseTime = responseTime;
       }
-    } catch {
+    } catch (err) {
+      console.error('PDF service health check failed:', err);
       healthChecks[3].status = 'down';
       healthChecks[3].responseTime = 0;
     }
@@ -435,23 +466,25 @@ export const Dashboard = () => {
               <Server className="w-5 h-5 text-cyan-400" />
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               {services.map((service, idx) => (
                 <div key={idx} className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-3">
                       <div
-                        className={`w-2 h-2 rounded-full ${getStatusColor(
+                        className={`w-3 h-3 rounded-full ${getStatusColor(
                           service.status
-                        )}`}
+                        )} ${service.status === 'operational' ? 'animate-pulse' : ''}`}
                       />
                       <span className="text-sm text-white font-medium">{service.name}</span>
                     </div>
-                    <span className="text-xs text-slate-400">{service.responseTime}ms</span>
+                    <span className="text-xs text-slate-400">
+                      {service.responseTime > 0 ? `${service.responseTime}ms` : '0ms'}
+                    </span>
                   </div>
-                  <div className="h-1 bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
                     <div
-                      className={`h-full ${
+                      className={`h-full transition-all duration-500 ${
                         service.status === 'operational'
                           ? 'bg-green-500'
                           : service.status === 'degraded'
@@ -459,7 +492,11 @@ export const Dashboard = () => {
                           : 'bg-red-500'
                       }`}
                       style={{
-                        width: service.status === 'operational' ? '100%' : '50%',
+                        width: service.status === 'operational'
+                          ? '100%'
+                          : service.status === 'degraded'
+                          ? '60%'
+                          : '20%',
                       }}
                     />
                   </div>
@@ -470,8 +507,22 @@ export const Dashboard = () => {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-400">Estado General</span>
                   <div className="flex items-center space-x-2">
-                    <Zap className="w-4 h-4 text-green-400" />
-                    <span className="text-green-400 font-medium">Operacional</span>
+                    {services.some(s => s.status === 'down') ? (
+                      <>
+                        <XCircle className="w-4 h-4 text-red-400" />
+                        <span className="text-red-400 font-medium">Fuera de Servicio</span>
+                      </>
+                    ) : services.some(s => s.status === 'degraded') ? (
+                      <>
+                        <Activity className="w-4 h-4 text-yellow-400" />
+                        <span className="text-yellow-400 font-medium">Degradado</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 text-green-400" />
+                        <span className="text-green-400 font-medium">Operacional</span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
