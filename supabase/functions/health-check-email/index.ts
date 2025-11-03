@@ -8,7 +8,14 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req: Request) => {
+  console.log('[health-check-email] Request received:', {
+    method: req.method,
+    url: req.url,
+    headers: Object.fromEntries(req.headers.entries()),
+  });
+
   if (req.method === "OPTIONS") {
+    console.log('[health-check-email] Responding to OPTIONS');
     return new Response(null, {
       status: 200,
       headers: corsHeaders,
@@ -16,6 +23,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    console.log('[health-check-email] Starting health check');
     const start = Date.now();
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -64,14 +72,18 @@ Deno.serve(async (req: Request) => {
       ? !!(firstCredential.smtp_host && firstCredential.smtp_port)
       : !!firstCredential.resend_api_key;
 
+    const responseData = {
+      status: 'operational',
+      responseTime,
+      provider: providerType,
+      configured: isConfigured,
+      timestamp: new Date().toISOString(),
+    };
+
+    console.log('[health-check-email] Sending success response:', responseData);
+
     return new Response(
-      JSON.stringify({
-        status: 'operational',
-        responseTime,
-        provider: providerType,
-        configured: isConfigured,
-        timestamp: new Date().toISOString(),
-      }),
+      JSON.stringify(responseData),
       {
         status: 200,
         headers: {
@@ -81,13 +93,19 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
+    console.error('[health-check-email] Error occurred:', error);
+
+    const errorData = {
+      status: 'down',
+      responseTime: 0,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString(),
+    };
+
+    console.log('[health-check-email] Sending error response:', errorData);
+
     return new Response(
-      JSON.stringify({
-        status: 'down',
-        responseTime: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      }),
+      JSON.stringify(errorData),
       {
         status: 200,
         headers: {
