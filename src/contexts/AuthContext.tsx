@@ -51,7 +51,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const storedToken = localStorage.getItem('access_token');
 
     if (storedUser && storedToken) {
-      setUser(JSON.parse(storedUser));
+      const parsedUser = JSON.parse(storedUser);
+      console.log('=== LOADING USER FROM LOCALSTORAGE ===');
+      console.log('User:', parsedUser.email);
+      console.log('Role:', parsedUser.role);
+      console.log('All Permissions:', JSON.stringify(parsedUser.permissions, null, 2));
+      console.log('Menus with access:', Object.keys(parsedUser.permissions || {}));
+      setUser(parsedUser);
     }
     setIsLoading(false);
   }, []);
@@ -145,6 +151,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         role: decodedToken.role,
         permissions: decodedToken.permissions || {},
       };
+
+      console.log('=== USER PERMISSIONS LOADED ===');
+      console.log('User:', userInfo.email);
+      console.log('Role:', userInfo.role);
+      console.log('All Permissions:', JSON.stringify(userInfo.permissions, null, 2));
+      console.log('Menus with access:', Object.keys(userInfo.permissions || {}));
 
       localStorage.setItem('user', JSON.stringify(userInfo));
       setUser(userInfo);
