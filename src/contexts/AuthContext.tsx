@@ -1,11 +1,19 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { configManager } from '../lib/config';
 
+type MenuPermission = 'create' | 'read' | 'update' | 'delete';
+
+type MenuPermissions = {
+  [menuSlug: string]: MenuPermission[];
+};
+
 interface User {
   sub: string;
   name: string;
   email: string;
   picture?: string;
+  role?: string;
+  permissions?: MenuPermissions;
 }
 
 interface AuthContextType {
@@ -16,6 +24,8 @@ interface AuthContextType {
   register: () => void;
   logout: () => void;
   handleCallback: (tokenOrCode: string) => Promise<void>;
+  hasPermission: (menu: string, permission: MenuPermission) => boolean;
+  hasMenuAccess: (menu: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -132,6 +142,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         name: decodedToken.name || decodedToken.username || 'Usuario',
         email: decodedToken.email || '',
         picture: decodedToken.picture || decodedToken.avatar,
+        role: decodedToken.role,
+        permissions: decodedToken.permissions || {},
       };
 
       localStorage.setItem('user', JSON.stringify(userInfo));
@@ -140,6 +152,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       console.error('Error in handleCallback:', error);
       throw error;
     }
+  };
+
+  const hasPermission = (menu: string, permission: MenuPermission): boolean => {
+    if (!user || !user.permissions) return false;
+    const menuPermissions = user.permissions[menu];
+    return menuPermissions ? menuPermissions.includes(permission) : false;
+  };
+
+  const hasMenuAccess = (menu: string): boolean => {
+    return hasPermission(menu, 'read');
   };
 
   return (
@@ -152,6 +174,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         register,
         logout,
         handleCallback,
+        hasPermission,
+        hasMenuAccess,
       }}
     >
       {children}
