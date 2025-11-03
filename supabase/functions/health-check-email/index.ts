@@ -29,7 +29,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: credentials, error } = await supabase
       .from('email_credentials')
-      .select('id, smtp_host, smtp_port, is_active')
+      .select('id, provider_type, smtp_host, smtp_port, resend_api_key, is_active')
       .eq('is_active', true)
       .maybeSingle();
 
@@ -44,7 +44,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           status: 'down',
           responseTime,
-          error: 'No active SMTP credentials configured',
+          error: 'No active email credentials configured',
           timestamp: new Date().toISOString(),
         }),
         {
@@ -57,11 +57,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const providerType = credentials.provider_type || 'smtp';
+    const isConfigured = providerType === 'smtp'
+      ? !!(credentials.smtp_host && credentials.smtp_port)
+      : !!credentials.resend_api_key;
+
     return new Response(
       JSON.stringify({
         status: 'operational',
         responseTime,
-        smtp_configured: true,
+        provider: providerType,
+        configured: isConfigured,
         timestamp: new Date().toISOString(),
       }),
       {

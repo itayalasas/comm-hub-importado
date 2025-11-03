@@ -11,12 +11,14 @@ interface Application {
   api_key: string;
 }
 
-interface SMTPCredentials {
+interface EmailCredentials {
   id?: string;
+  provider_type: 'smtp' | 'resend';
   smtp_host: string;
   smtp_port: number;
   smtp_user: string;
   smtp_password: string;
+  resend_api_key: string;
   from_email: string;
   from_name: string;
   is_active: boolean;
@@ -28,7 +30,7 @@ export const Settings = () => {
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [defaultApp, setDefaultApp] = useState<string | null>(null);
-  const [credentials, setCredentials] = useState<SMTPCredentials | null>(null);
+  const [credentials, setCredentials] = useState<EmailCredentials | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showNewAppModal, setShowNewAppModal] = useState(false);
@@ -38,11 +40,13 @@ export const Settings = () => {
     name: '',
     domain: '',
   });
-  const [formData, setFormData] = useState<SMTPCredentials>({
+  const [formData, setFormData] = useState<EmailCredentials>({
+    provider_type: 'smtp',
     smtp_host: '',
     smtp_port: 587,
     smtp_user: '',
     smtp_password: '',
+    resend_api_key: '',
     from_email: '',
     from_name: '',
     is_active: true,
@@ -108,10 +112,12 @@ export const Settings = () => {
       if (data) {
         setFormData({
           id: data.id,
-          smtp_host: data.smtp_host,
-          smtp_port: data.smtp_port,
-          smtp_user: data.smtp_user,
-          smtp_password: data.smtp_password,
+          provider_type: data.provider_type || 'smtp',
+          smtp_host: data.smtp_host || '',
+          smtp_port: data.smtp_port || 587,
+          smtp_user: data.smtp_user || '',
+          smtp_password: data.smtp_password || '',
+          resend_api_key: data.resend_api_key || '',
           from_email: data.from_email,
           from_name: data.from_name || '',
           is_active: data.is_active,
@@ -126,18 +132,31 @@ export const Settings = () => {
     if (!selectedApp) return;
 
     try {
+      const updateData: any = {
+        provider_type: formData.provider_type,
+        from_email: formData.from_email,
+        from_name: formData.from_name || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (formData.provider_type === 'smtp') {
+        updateData.smtp_host = formData.smtp_host;
+        updateData.smtp_port = formData.smtp_port;
+        updateData.smtp_user = formData.smtp_user;
+        updateData.smtp_password = formData.smtp_password;
+        updateData.resend_api_key = null;
+      } else {
+        updateData.resend_api_key = formData.resend_api_key;
+        updateData.smtp_host = null;
+        updateData.smtp_port = null;
+        updateData.smtp_user = null;
+        updateData.smtp_password = null;
+      }
+
       if (credentials?.id) {
         const { error } = await supabase
           .from('email_credentials')
-          .update({
-            smtp_host: formData.smtp_host,
-            smtp_port: formData.smtp_port,
-            smtp_user: formData.smtp_user,
-            smtp_password: formData.smtp_password,
-            from_email: formData.from_email,
-            from_name: formData.from_name || null,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq('id', credentials.id);
 
         if (error) throw error;
@@ -145,12 +164,7 @@ export const Settings = () => {
       } else {
         const { error } = await supabase.from('email_credentials').insert({
           application_id: selectedApp,
-          smtp_host: formData.smtp_host,
-          smtp_port: formData.smtp_port,
-          smtp_user: formData.smtp_user,
-          smtp_password: formData.smtp_password,
-          from_email: formData.from_email,
-          from_name: formData.from_name || null,
+          ...updateData,
           is_active: true,
         });
 
@@ -170,20 +184,24 @@ export const Settings = () => {
     if (credentials) {
       setFormData({
         id: credentials.id,
-        smtp_host: credentials.smtp_host,
-        smtp_port: credentials.smtp_port,
-        smtp_user: credentials.smtp_user,
-        smtp_password: credentials.smtp_password,
+        provider_type: credentials.provider_type || 'smtp',
+        smtp_host: credentials.smtp_host || '',
+        smtp_port: credentials.smtp_port || 587,
+        smtp_user: credentials.smtp_user || '',
+        smtp_password: credentials.smtp_password || '',
+        resend_api_key: credentials.resend_api_key || '',
         from_email: credentials.from_email,
         from_name: credentials.from_name,
         is_active: credentials.is_active,
       });
     } else {
       setFormData({
+        provider_type: 'smtp',
         smtp_host: '',
         smtp_port: 587,
         smtp_user: '',
         smtp_password: '',
+        resend_api_key: '',
         from_email: '',
         from_name: '',
         is_active: true,
@@ -416,7 +434,9 @@ export const Settings = () => {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-2">
                 <Server className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-lg font-semibold text-white">Credenciales SMTP</h3>
+                <h3 className="text-lg font-semibold text-white">
+                  Configuración de Email {credentials && `(${credentials.provider_type === 'smtp' ? 'SMTP' : 'Resend'})`}
+                </h3>
               </div>
               <button
                 onClick={openModal}
@@ -430,7 +450,7 @@ export const Settings = () => {
                 ) : (
                   <>
                     <Plus className="w-4 h-4" />
-                    <span>Configurar SMTP</span>
+                    <span>Configurar Email</span>
                   </>
                 )}
               </button>
@@ -454,24 +474,44 @@ export const Settings = () => {
 
             {credentials ? (
               <div className="space-y-3">
-                <div className="grid md:grid-cols-2 gap-3">
-                  <div className="bg-slate-900/50 rounded-lg p-3">
-                    <div className="text-xs text-slate-500 mb-1">Host SMTP</div>
-                    <div className="text-sm text-white font-mono">{credentials.smtp_host}</div>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-lg p-3">
-                    <div className="text-xs text-slate-500 mb-1">Puerto</div>
-                    <div className="text-sm text-white font-mono">{credentials.smtp_port}</div>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-lg p-3">
-                    <div className="text-xs text-slate-500 mb-1">Usuario SMTP</div>
-                    <div className="text-sm text-white font-mono">{credentials.smtp_user}</div>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-lg p-3">
-                    <div className="text-xs text-slate-500 mb-1">Email Remitente</div>
-                    <div className="text-sm text-white font-mono">{credentials.from_email}</div>
+                <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3 mb-3">
+                  <div className="text-xs text-cyan-400 mb-1">Proveedor Activo</div>
+                  <div className="text-sm text-white font-semibold">
+                    {credentials.provider_type === 'smtp' ? 'SMTP' : 'Resend'}
                   </div>
                 </div>
+
+                {credentials.provider_type === 'smtp' ? (
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div className="bg-slate-900/50 rounded-lg p-3">
+                      <div className="text-xs text-slate-500 mb-1">Host SMTP</div>
+                      <div className="text-sm text-white font-mono">{credentials.smtp_host}</div>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-lg p-3">
+                      <div className="text-xs text-slate-500 mb-1">Puerto</div>
+                      <div className="text-sm text-white font-mono">{credentials.smtp_port}</div>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-lg p-3">
+                      <div className="text-xs text-slate-500 mb-1">Usuario SMTP</div>
+                      <div className="text-sm text-white font-mono">{credentials.smtp_user}</div>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-lg p-3">
+                      <div className="text-xs text-slate-500 mb-1">Email Remitente</div>
+                      <div className="text-sm text-white font-mono">{credentials.from_email}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div className="bg-slate-900/50 rounded-lg p-3">
+                      <div className="text-xs text-slate-500 mb-1">API Key</div>
+                      <div className="text-sm text-white font-mono">••••••••{credentials.resend_api_key?.slice(-8)}</div>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-lg p-3">
+                      <div className="text-xs text-slate-500 mb-1">Email Remitente</div>
+                      <div className="text-sm text-white font-mono">{credentials.from_email}</div>
+                    </div>
+                  </div>
+                )}
                 {credentials.from_name && (
                   <div className="bg-slate-900/50 rounded-lg p-3">
                     <div className="text-xs text-slate-500 mb-1">Nombre Remitente</div>
@@ -482,13 +522,13 @@ export const Settings = () => {
             ) : (
               <div className="text-center py-8">
                 <p className="text-slate-400 mb-4">
-                  No hay credenciales SMTP configuradas para esta aplicación
+                  No hay credenciales de email configuradas para esta aplicación
                 </p>
                 <button
                   onClick={openModal}
                   className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
                 >
-                  Configurar SMTP
+                  Configurar Email
                 </button>
               </div>
             )}
@@ -561,11 +601,45 @@ export const Settings = () => {
           <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-700">
               <h2 className="text-xl font-bold text-white">
-                {credentials ? 'Editar Credenciales SMTP' : 'Configurar SMTP'}
+                {credentials ? 'Editar Configuración de Email' : 'Configurar Email'}
               </h2>
             </div>
 
             <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-3">
+                  Proveedor de Email
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, provider_type: 'smtp' })}
+                    className={`p-4 rounded-lg border-2 transition-all ${
+                      formData.provider_type === 'smtp'
+                        ? 'border-cyan-500 bg-cyan-500/10'
+                        : 'border-slate-700 bg-slate-900/50 hover:border-slate-600'
+                    }`}
+                  >
+                    <div className="text-white font-semibold mb-1">SMTP</div>
+                    <div className="text-xs text-slate-400">Servidor SMTP tradicional</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, provider_type: 'resend' })}
+                    className={`p-4 rounded-lg border-2 transition-all ${
+                      formData.provider_type === 'resend'
+                        ? 'border-cyan-500 bg-cyan-500/10'
+                        : 'border-slate-700 bg-slate-900/50 hover:border-slate-600'
+                    }`}
+                  >
+                    <div className="text-white font-semibold mb-1">Resend</div>
+                    <div className="text-xs text-slate-400">API moderna de email</div>
+                  </button>
+                </div>
+              </div>
+
+              {formData.provider_type === 'smtp' ? (
+                <>
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -660,6 +734,55 @@ export const Settings = () => {
                   placeholder="Mi Empresa"
                 />
               </div>
+              </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Resend API Key
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.resend_api_key}
+                      onChange={(e) => setFormData({ ...formData, resend_api_key: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500 font-mono"
+                      placeholder="re_xxxxxxxxxxxx"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">
+                      Obtén tu API key en <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">resend.com/api-keys</a>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Email Remitente
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.from_email}
+                      onChange={(e) => setFormData({ ...formData, from_email: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                      placeholder="noreply@tudominio.com"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">
+                      Debe ser una dirección de tu dominio verificado en Resend
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Nombre Remitente (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.from_name}
+                      onChange={(e) => setFormData({ ...formData, from_name: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                      placeholder="Mi Empresa"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex justify-end space-x-3 p-6 border-t border-slate-700">
@@ -672,10 +795,9 @@ export const Settings = () => {
               <button
                 onClick={saveCredentials}
                 disabled={
-                  !formData.smtp_host ||
-                  !formData.smtp_user ||
-                  !formData.smtp_password ||
-                  !formData.from_email
+                  formData.provider_type === 'smtp'
+                    ? (!formData.smtp_host || !formData.smtp_user || !formData.smtp_password || !formData.from_email)
+                    : (!formData.resend_api_key || !formData.from_email)
                 }
                 className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
