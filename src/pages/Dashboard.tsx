@@ -200,17 +200,23 @@ export const Dashboard = () => {
 
     try {
       const emailStart = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
       const emailResponse = await fetch(`${supabaseUrl}/functions/v1/health-check-email`, {
         headers: {
           'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
         },
-        signal: AbortSignal.timeout(10000),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       const responseTime = Date.now() - emailStart;
 
       if (emailResponse.ok) {
         const emailData = await emailResponse.json();
+        console.log('Email health check response:', emailData);
 
         if (emailData.status === 'operational' && emailData.configured) {
           healthChecks[2].status = 'operational';
@@ -228,6 +234,7 @@ export const Dashboard = () => {
 
         healthChecks[2].responseTime = emailData.responseTime || responseTime;
       } else {
+        console.error('Email health check failed with status:', emailResponse.status);
         healthChecks[2].status = 'down';
         healthChecks[2].responseTime = responseTime;
         healthChecks[2].message = 'Error de conexión';
@@ -236,39 +243,50 @@ export const Dashboard = () => {
       console.error('Email service health check failed:', err);
       healthChecks[2].status = 'down';
       healthChecks[2].responseTime = 0;
+      healthChecks[2].message = err instanceof Error ? err.message : 'Error desconocido';
     }
 
     try {
       const pdfStart = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
       const pdfResponse = await fetch(`${supabaseUrl}/functions/v1/health-check-pdf`, {
         headers: {
           'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
         },
-        signal: AbortSignal.timeout(10000),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       const responseTime = Date.now() - pdfStart;
 
       if (pdfResponse.ok) {
         const pdfData = await pdfResponse.json();
+        console.log('PDF health check response:', pdfData);
 
         if (pdfData.status === 'operational' || pdfData.status === 'healthy') {
           healthChecks[3].status = 'operational';
         } else if (pdfData.status === 'down') {
           healthChecks[3].status = 'down';
+          healthChecks[3].message = pdfData.error || 'Servicio caído';
         } else {
           healthChecks[3].status = 'degraded';
         }
 
         healthChecks[3].responseTime = pdfData.responseTime || responseTime;
       } else {
+        console.error('PDF health check failed with status:', pdfResponse.status);
         healthChecks[3].status = 'down';
         healthChecks[3].responseTime = responseTime;
+        healthChecks[3].message = 'Error de conexión';
       }
     } catch (err) {
       console.error('PDF service health check failed:', err);
       healthChecks[3].status = 'down';
       healthChecks[3].responseTime = 0;
+      healthChecks[3].message = err instanceof Error ? err.message : 'Error desconocido';
     }
 
     setServices(healthChecks);
