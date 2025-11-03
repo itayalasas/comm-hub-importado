@@ -1,4 +1,4 @@
-import { Mail, Shield, Check, ArrowRight, Sparkles } from 'lucide-react';
+import { Shield, Check, ArrowRight, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const Landing = () => {
@@ -13,18 +13,13 @@ export const Landing = () => {
           <div className="flex items-center space-x-3 mb-16">
             <div className="relative">
               <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-30"></div>
-              <Mail className="w-10 h-10 text-cyan-400 relative" />
+              <img src="/logo.svg" alt="CommHub" className="h-10 relative" />
             </div>
-            <div>
-              <span className="text-2xl font-bold text-white">
-                CommHub
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-3 h-3 text-cyan-400/50" />
+              <span className="text-[10px] text-slate-400 font-medium tracking-wider">
+                BY DOGCATIFY
               </span>
-              <div className="flex items-center space-x-1 -mt-1">
-                <Sparkles className="w-3 h-3 text-cyan-400/50" />
-                <span className="text-[10px] text-slate-400 font-medium tracking-wider">
-                  BY DOGCATIFY
-                </span>
-              </div>
             </div>
           </div>
 

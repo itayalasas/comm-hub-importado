@@ -1,0 +1,8 @@
+<svg width="200" height="40" viewBox="0 0 200 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Mail Icon -->
+  <rect x="4" y="10" width="24" height="18" rx="2" stroke="#06B6D4" stroke-width="2" fill="none"/>
+  <path d="M4 12 L16 20 L28 12" stroke="#06B6D4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- CommHub Text -->
+  <text x="38" y="27" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="white">CommHub</text>
+</svg>
