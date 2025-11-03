@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { verifyApplicationOwnership } from '../lib/security';
 import { useToast } from '../components/Toast';
-import { Plus, Edit, Trash2, Eye, Code, FileText, Image, QrCode } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -46,6 +46,9 @@ export const Templates = () => {
   const [previewData, setPreviewData] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalTemplates, setTotalTemplates] = useState(0);
+  const templatesPerPage = 6;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -73,9 +76,16 @@ export const Templates = () => {
 
   useEffect(() => {
     if (selectedApp) {
+      setCurrentPage(1);
       loadTemplates(selectedApp);
     }
   }, [selectedApp]);
+
+  useEffect(() => {
+    if (selectedApp) {
+      loadTemplates(selectedApp);
+    }
+  }, [currentPage]);
 
   const loadApplications = async () => {
     try {
@@ -119,11 +129,22 @@ export const Templates = () => {
         return;
       }
 
+      const { count } = await supabase
+        .from('communication_templates')
+        .select('*', { count: 'exact', head: true })
+        .eq('application_id', appId);
+
+      setTotalTemplates(count || 0);
+
+      const from = (currentPage - 1) * templatesPerPage;
+      const to = from + templatesPerPage - 1;
+
       const { data, error } = await supabase
         .from('communication_templates')
         .select('*')
         .eq('application_id', appId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
       if (error) throw error;
       setTemplates(data || []);
@@ -352,76 +373,144 @@ export const Templates = () => {
                   </button>
                 </div>
               ) : (
-                templates.map((template) => (
-                  <div
-                    key={template.id}
-                    className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-white mb-2">{template.name}</h3>
-                        {template.description && (
-                          <p className="text-slate-400 mb-3">{template.description}</p>
-                        )}
-                        <div className="flex items-center space-x-4 text-sm">
-                          <span className={`px-3 py-1 rounded-full ${
-                            template.template_type === 'pdf'
-                              ? 'bg-amber-500/10 text-amber-400'
-                              : 'bg-cyan-500/10 text-cyan-400'
-                          }`}>
-                            {template.template_type === 'pdf' ? 'PDF' : 'Email'}
-                          </span>
-                          {template.has_attachment && (
-                            <span className="flex items-center space-x-1 text-emerald-400" title="Genera PDF adjunto">
-                              <FileText className="w-4 h-4" />
-                              <span className="text-xs">PDF</span>
-                            </span>
-                          )}
-                          {template.has_logo && (
-                            <span className="flex items-center space-x-1 text-blue-400" title="Incluye logo">
-                              <Image className="w-4 h-4" />
-                              <span className="text-xs">Logo</span>
-                            </span>
-                          )}
-                          {template.has_qr && (
-                            <span className="flex items-center space-x-1 text-purple-400" title="Código QR">
-                              <QrCode className="w-4 h-4" />
-                              <span className="text-xs">QR</span>
-                            </span>
-                          )}
-                          {template.variables && template.variables.length > 0 && (
-                            <span className="text-slate-500">
-                              Variables: {template.variables.join(', ')}
-                            </span>
-                          )}
+                <>
+                  <div className="grid gap-4">
+                    {templates.map((template) => (
+                      <div
+                        key={template.id}
+                        className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-white mb-2">{template.name}</h3>
+                            {template.description && (
+                              <p className="text-slate-400 mb-3">{template.description}</p>
+                            )}
+                            <div className="flex items-center space-x-4 text-sm">
+                              <span className={`px-3 py-1 rounded-full ${
+                                template.template_type === 'pdf'
+                                  ? 'bg-amber-500/10 text-amber-400'
+                                  : 'bg-cyan-500/10 text-cyan-400'
+                              }`}>
+                                {template.template_type === 'pdf' ? 'PDF' : 'Email'}
+                              </span>
+                              {template.has_attachment && (
+                                <span className="flex items-center space-x-1 text-emerald-400" title="Genera PDF adjunto">
+                                  <FileText className="w-4 h-4" />
+                                  <span className="text-xs">PDF</span>
+                                </span>
+                              )}
+                              {template.has_logo && (
+                                <span className="flex items-center space-x-1 text-blue-400" title="Incluye logo">
+                                  <Image className="w-4 h-4" />
+                                  <span className="text-xs">Logo</span>
+                                </span>
+                              )}
+                              {template.has_qr && (
+                                <span className="flex items-center space-x-1 text-purple-400" title="Código QR">
+                                  <QrCode className="w-4 h-4" />
+                                  <span className="text-xs">QR</span>
+                                </span>
+                              )}
+                              {template.variables && template.variables.length > 0 && (
+                                <span className="text-slate-500">
+                                  Variables: {template.variables.join(', ')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => openPreview(template)}
+                              className="p-2 text-slate-400 hover:text-cyan-400 transition-colors"
+                              title="Vista previa"
+                            >
+                              <Eye className="w-5 h-5" />
+                            </button>
+                            <button
+                              onClick={() => openEditor(template)}
+                              className="p-2 text-slate-400 hover:text-cyan-400 transition-colors"
+                              title="Editar"
+                            >
+                              <Edit className="w-5 h-5" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm(template.id)}
+                              className="p-2 text-slate-400 hover:text-red-400 transition-colors"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex space-x-2">
+                    ))}
+                  </div>
+
+                  {totalTemplates > templatesPerPage && (
+                    <div className="flex items-center justify-between bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4">
+                      <div className="text-sm text-slate-400">
+                        Mostrando {((currentPage - 1) * templatesPerPage) + 1} - {Math.min(currentPage * templatesPerPage, totalTemplates)} de {totalTemplates} templates
+                      </div>
+                      <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => openPreview(template)}
-                          className="p-2 text-slate-400 hover:text-cyan-400 transition-colors"
-                          title="Vista previa"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                          className={`p-2 rounded-lg transition-colors ${
+                            currentPage === 1
+                              ? 'text-slate-600 cursor-not-allowed'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                          }`}
                         >
-                          <Eye className="w-5 h-5" />
+                          <ChevronLeft className="w-5 h-5" />
                         </button>
+
+                        <div className="flex items-center space-x-1">
+                          {Array.from({ length: Math.ceil(totalTemplates / templatesPerPage) }, (_, i) => i + 1).map((page) => {
+                            const totalPages = Math.ceil(totalTemplates / templatesPerPage);
+                            if (
+                              page === 1 ||
+                              page === totalPages ||
+                              (page >= currentPage - 1 && page <= currentPage + 1)
+                            ) {
+                              return (
+                                <button
+                                  key={page}
+                                  onClick={() => setCurrentPage(page)}
+                                  className={`w-10 h-10 rounded-lg transition-colors ${
+                                    currentPage === page
+                                      ? 'bg-cyan-500 text-white'
+                                      : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {page}
+                                </button>
+                              );
+                            } else if (
+                              page === currentPage - 2 ||
+                              page === currentPage + 2
+                            ) {
+                              return <span key={page} className="text-slate-600">...</span>;
+                            }
+                            return null;
+                          })}
+                        </div>
+
                         <button
-                          onClick={() => openEditor(template)}
-                          className="p-2 text-slate-400 hover:text-cyan-400 transition-colors"
-                          title="Editar"
+                          onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalTemplates / templatesPerPage), prev + 1))}
+                          disabled={currentPage === Math.ceil(totalTemplates / templatesPerPage)}
+                          className={`p-2 rounded-lg transition-colors ${
+                            currentPage === Math.ceil(totalTemplates / templatesPerPage)
+                              ? 'text-slate-600 cursor-not-allowed'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                          }`}
                         >
-                          <Edit className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirm(template.id)}
-                          className="p-2 text-slate-400 hover:text-red-400 transition-colors"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-5 h-5" />
+                          <ChevronRight className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
-                  </div>
-                ))
+                  )}
+                </>
               )}
             </div>
           </>
