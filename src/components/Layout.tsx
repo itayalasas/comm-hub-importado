@@ -9,16 +9,18 @@ interface LayoutProps {
 }
 
 export const Layout = ({ children, currentPage }: LayoutProps) => {
-  const { user, logout } = useAuth();
+  const { user, logout, hasMenuAccess } = useAuth();
   const location = useLocation();
 
-  const navigation = [
+  const allNavigation = [
     { name: 'Dashboard', icon: LayoutDashboard, page: 'dashboard' },
     { name: 'Templates', icon: FileText, page: 'templates' },
     { name: 'Estadísticas', icon: BarChart3, page: 'statistics' },
     { name: 'Documentación', icon: Book, page: 'documentation' },
     { name: 'Configuración', icon: Settings, page: 'settings' },
   ];
+
+  const navigation = allNavigation.filter(item => hasMenuAccess(item.page));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
