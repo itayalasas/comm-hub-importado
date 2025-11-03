@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { verifyApplicationOwnership } from '../lib/security';
 import { useToast } from '../components/Toast';
+import { usePermissions } from '../hooks/usePermissions';
 import { Plus, Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 
 interface Application {
@@ -37,6 +38,7 @@ interface Template {
 export const Templates = () => {
   const { user } = useAuth();
   const toast = useToast();
+  const { canCreate, canUpdate, canDelete } = usePermissions('templates');
   const [applications, setApplications] = useState<Application[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
@@ -334,7 +336,7 @@ export const Templates = () => {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-white">Templates</h1>
-          {selectedApp && (
+          {selectedApp && canCreate && (
             <button
               onClick={() => openEditor()}
               className="flex items-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
@@ -423,12 +425,14 @@ export const Templates = () => {
                     <>
                       <Code className="w-12 h-12 text-slate-600 mx-auto mb-4" />
                       <p className="text-slate-400 mb-4">No hay templates para esta aplicación</p>
-                      <button
-                        onClick={() => openEditor()}
-                        className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
-                      >
-                        Crear Primer Template
-                      </button>
+                      {canCreate && (
+                        <button
+                          onClick={() => openEditor()}
+                          className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+                        >
+                          Crear Primer Template
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -487,20 +491,24 @@ export const Templates = () => {
                             >
                               <Eye className="w-5 h-5" />
                             </button>
-                            <button
-                              onClick={() => openEditor(template)}
-                              className="p-2 text-slate-400 hover:text-cyan-400 transition-colors"
-                              title="Editar"
-                            >
-                              <Edit className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => setDeleteConfirm(template.id)}
-                              className="p-2 text-slate-400 hover:text-red-400 transition-colors"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
+                            {canUpdate && (
+                              <button
+                                onClick={() => openEditor(template)}
+                                className="p-2 text-slate-400 hover:text-cyan-400 transition-colors"
+                                title="Editar"
+                              >
+                                <Edit className="w-5 h-5" />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => setDeleteConfirm(template.id)}
+                                className="p-2 text-slate-400 hover:text-red-400 transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
