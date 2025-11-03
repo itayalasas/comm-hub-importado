@@ -170,6 +170,9 @@ export const Dashboard = () => {
       { name: 'PDF Generator', status: 'operational', responseTime: 350 },
     ];
 
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
     try {
       const start = Date.now();
       const { error } = await supabase.from('applications').select('id').limit(1);
@@ -185,6 +188,48 @@ export const Dashboard = () => {
     } catch {
       healthChecks[0].status = 'down';
       healthChecks[1].status = 'down';
+    }
+
+    try {
+      const emailStart = Date.now();
+      const emailResponse = await fetch(`${supabaseUrl}/functions/v1/health-check-email`, {
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+      });
+
+      if (emailResponse.ok) {
+        const emailData = await emailResponse.json();
+        healthChecks[2].status = emailData.status;
+        healthChecks[2].responseTime = emailData.responseTime;
+      } else {
+        healthChecks[2].status = 'degraded';
+        healthChecks[2].responseTime = Date.now() - emailStart;
+      }
+    } catch {
+      healthChecks[2].status = 'down';
+      healthChecks[2].responseTime = 0;
+    }
+
+    try {
+      const pdfStart = Date.now();
+      const pdfResponse = await fetch(`${supabaseUrl}/functions/v1/health-check-pdf`, {
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+      });
+
+      if (pdfResponse.ok) {
+        const pdfData = await pdfResponse.json();
+        healthChecks[3].status = pdfData.status;
+        healthChecks[3].responseTime = pdfData.responseTime;
+      } else {
+        healthChecks[3].status = 'degraded';
+        healthChecks[3].responseTime = Date.now() - pdfStart;
+      }
+    } catch {
+      healthChecks[3].status = 'down';
+      healthChecks[3].responseTime = 0;
     }
 
     setServices(healthChecks);
