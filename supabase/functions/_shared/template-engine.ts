@@ -31,6 +31,21 @@ function processEach(html: string, data: TemplateData): string {
       let itemHtml = template;
 
       if (typeof item === 'object' && item !== null) {
+        const ifGtRegex = /\{\{#if_gt\s+([a-zA-Z0-9_.]+)\s+(\d+(?:\.\d+)?)\}\}([\s\S]*?)(\{\{\/if_gt\}\}|\{\{else\}\}[\s\S]*?\{\{\/if_gt\}\})/g;
+        itemHtml = itemHtml.replace(ifGtRegex, (m, varPath, threshold, ifContent, elseBlock) => {
+          const value = item[varPath];
+          const numValue = parseFloat(String(value));
+          const numThreshold = parseFloat(threshold);
+          const isGreater = !isNaN(numValue) && numValue > numThreshold;
+
+          if (elseBlock.startsWith('{{else}}')) {
+            const elseContent = elseBlock.replace('{{else}}', '').replace('{{/if_gt}}', '');
+            return isGreater ? ifContent : elseContent;
+          } else {
+            return isGreater ? ifContent : '';
+          }
+        });
+
         for (const [key, value] of Object.entries(item)) {
           const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
           const displayValue = value !== undefined && value !== null ? String(value) : '';
