@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, svix-id, svix-timestamp, svix-signature',
 };
 
 interface ResendWebhookEvent {
@@ -23,6 +23,61 @@ interface ResendWebhookEvent {
   };
 }
 
+async function verifyWebhookSignature(
+  payload: string,
+  headers: Headers
+): Promise<boolean> {
+  const WEBHOOK_SECRET = Deno.env.get('RESEND_WEBHOOK_SECRET');
+  
+  if (!WEBHOOK_SECRET) {
+    console.warn('RESEND_WEBHOOK_SECRET not configured - skipping signature verification');
+    return true;
+  }
+
+  const svixId = headers.get('svix-id');
+  const svixTimestamp = headers.get('svix-timestamp');
+  const svixSignature = headers.get('svix-signature');
+
+  if (!svixId || !svixTimestamp || !svixSignature) {
+    console.error('Missing Svix headers');
+    return false;
+  }
+
+  const signedContent = `${svixId}.${svixTimestamp}.${payload}`;
+  
+  const secret = WEBHOOK_SECRET.startsWith('whsec_') 
+    ? WEBHOOK_SECRET.slice(6) 
+    : WEBHOOK_SECRET;
+
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(signedContent);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+  
+  const base64Signature = btoa(String.fromCharCode(...new Uint8Array(signature)));
+  
+  const signatures = svixSignature.split(' ');
+  
+  for (const versionedSignature of signatures) {
+    const [version, signatureToCompare] = versionedSignature.split(',');
+    if (version === 'v1' && signatureToCompare === base64Signature) {
+      return true;
+    }
+  }
+
+  console.error('Signature verification failed');
+  return false;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -32,13 +87,25 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const payload = await req.text();
+    
+    const isValid = await verifyWebhookSignature(payload, req.headers);
+    
+    if (!isValid) {
+      console.error('Invalid webhook signature');
+      return new Response(
+        JSON.stringify({ error: 'Invalid signature' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const event: ResendWebhookEvent = JSON.parse(payload);
+    
+    console.log('Received Resend webhook:', event.type, 'for email:', event.data.email_id);
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    const event: ResendWebhookEvent = await req.json();
-    
-    console.log('Received Resend webhook:', event.type, 'for email:', event.data.email_id);
 
     const recipientEmail = event.data.to[0];
 
