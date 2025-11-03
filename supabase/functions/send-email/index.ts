@@ -92,8 +92,11 @@ Deno.serve(async (req: Request) => {
 
     const { data: credentials } = await supabase.from('email_credentials').select('*').eq('application_id', application.id).eq('is_active', true).maybeSingle();
     if (!credentials) {
-      return new Response(JSON.stringify({ success: false, error: 'SMTP credentials not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ success: false, error: 'Email credentials not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+
+    const providerType = credentials.provider_type || 'smtp';
+    console.log('[send-email] Using provider:', providerType);
 
     const { data: template } = await supabase.from('communication_templates').select('*').eq('name', template_name).eq('application_id', application.id).eq('template_type', 'email').eq('is_active', true).maybeSingle();
     if (!template) {
@@ -166,43 +169,82 @@ Deno.serve(async (req: Request) => {
     htmlContent += '<img src="' + trackingPixelUrl + '" width="1" height="1" style="display:none" />';
 
     try {
-      const useTLS = credentials.smtp_port === 465;
-      console.log('[send-email] SMTP config:', { host: credentials.smtp_host, port: credentials.smtp_port, user: credentials.smtp_user, tls: useTLS });
-
-      const actualFromEmail = credentials.from_email || credentials.smtp_user;
-      const fromName = credentials.from_name || 'DogCatify';
+      const actualFromEmail = credentials.from_email;
+      const fromName = credentials.from_name || application.name || 'DogCatify';
       console.log('[send-email] From email:', actualFromEmail, 'Name:', fromName);
 
-      const connectionConfig: any = {
-        hostname: credentials.smtp_host,
-        port: credentials.smtp_port,
-        auth: { username: credentials.smtp_user, password: credentials.smtp_password },
-      };
-      if (useTLS) connectionConfig.tls = true;
+      if (providerType === 'smtp') {
+        const useTLS = credentials.smtp_port === 465;
+        console.log('[send-email] SMTP config:', { host: credentials.smtp_host, port: credentials.smtp_port, user: credentials.smtp_user, tls: useTLS });
 
-      const client = new SMTPClient({ connection: connectionConfig });
+        const connectionConfig: any = {
+          hostname: credentials.smtp_host,
+          port: credentials.smtp_port,
+          auth: { username: credentials.smtp_user, password: credentials.smtp_password },
+        };
+        if (useTLS) connectionConfig.tls = true;
 
-      const emailConfig: any = {
-        from: `"${fromName}" <${actualFromEmail}>`,
-        to: recipient_email,
-        subject: emailSubject,
-        content: 'text/html; charset=utf-8',
-        html: htmlContent,
-      };
+        const client = new SMTPClient({ connection: connectionConfig });
 
-      console.log('[send-email] Email config:', { from: actualFromEmail, fromName: fromName, to: recipient_email, subject: emailSubject, hasHtml: !!htmlContent });
+        const emailConfig: any = {
+          from: `"${fromName}" <${actualFromEmail}>`,
+          to: recipient_email,
+          subject: emailSubject,
+          content: 'text/html; charset=utf-8',
+          html: htmlContent,
+        };
 
-      if (finalPdfBase64 && finalPdfFilename) {
-        emailConfig.attachments = [{ filename: finalPdfFilename, content: finalPdfBase64, encoding: 'base64' }];
-        console.log('[send-email] PDF attached:', { filename: finalPdfFilename, size_bytes: pdfSizeBytes });
-      } else if (pdfPublicUrl && !finalPdfBase64) {
-        console.log('[send-email] Sending email with download link only (no attachment)');
+        console.log('[send-email] SMTP Email config:', { from: actualFromEmail, fromName: fromName, to: recipient_email, subject: emailSubject });
+
+        if (finalPdfBase64 && finalPdfFilename) {
+          emailConfig.attachments = [{ filename: finalPdfFilename, content: finalPdfBase64, encoding: 'base64' }];
+          console.log('[send-email] PDF attached:', { filename: finalPdfFilename, size_bytes: pdfSizeBytes });
+        } else if (pdfPublicUrl && !finalPdfBase64) {
+          console.log('[send-email] Sending email with download link only (no attachment)');
+        }
+
+        console.log('[send-email] Sending via SMTP...');
+        await client.send(emailConfig);
+        await client.close();
+        console.log('[send-email] Email sent successfully via SMTP');
+      } else {
+        console.log('[send-email] Resend config:', { api_key_length: credentials.resend_api_key?.length });
+
+        const resendPayload: any = {
+          from: fromName ? `${fromName} <${actualFromEmail}>` : actualFromEmail,
+          to: [recipient_email],
+          subject: emailSubject,
+          html: htmlContent,
+        };
+
+        if (finalPdfBase64 && finalPdfFilename) {
+          resendPayload.attachments = [{
+            filename: finalPdfFilename,
+            content: finalPdfBase64,
+          }];
+          console.log('[send-email] PDF attached:', { filename: finalPdfFilename, size_bytes: pdfSizeBytes });
+        } else if (pdfPublicUrl && !finalPdfBase64) {
+          console.log('[send-email] Sending email with download link only (no attachment)');
+        }
+
+        console.log('[send-email] Sending via Resend...');
+        const resendResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${credentials.resend_api_key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(resendPayload),
+        });
+
+        if (!resendResponse.ok) {
+          const errorData = await resendResponse.json();
+          throw new Error(`Resend API error: ${errorData.message || resendResponse.statusText}`);
+        }
+
+        const resendData = await resendResponse.json();
+        console.log('[send-email] Email sent successfully via Resend, ID:', resendData.id);
       }
-
-      console.log('[send-email] Sending email...');
-      await client.send(emailConfig);
-      await client.close();
-      console.log('[send-email] Email sent successfully');
 
       await supabase.from('email_logs').update({
         status: 'sent',
