@@ -12,15 +12,13 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
   const { user, logout, hasMenuAccess } = useAuth();
   const location = useLocation();
 
-  const allNavigation = [
-    { name: 'Dashboard', icon: LayoutDashboard, page: 'dashboard', permissionKey: 'dashboard' },
-    { name: 'Templates', icon: FileText, page: 'templates', permissionKey: 'templates' },
-    { name: 'Estadísticas', icon: BarChart3, page: 'statistics', permissionKey: 'estad_sticas' },
-    { name: 'Documentación', icon: Book, page: 'documentation', permissionKey: 'documentacion' },
-    { name: 'Configuración', icon: Settings, page: 'settings', permissionKey: 'configuracion' },
-  ];
-
-  const navigation = allNavigation.filter(item => hasMenuAccess(item.permissionKey));
+  const navigation = [
+    { name: 'Dashboard', icon: LayoutDashboard, page: 'dashboard' },
+    { name: 'Templates', icon: FileText, page: 'templates' },
+    { name: 'Estadísticas', icon: BarChart3, page: 'statistics' },
+    { name: 'Documentación', icon: Book, page: 'documentation' },
+    { name: 'Configuración', icon: Settings, page: 'settings' },
+  ].filter(item => hasMenuAccess(item.page));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
