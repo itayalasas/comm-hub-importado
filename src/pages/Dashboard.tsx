@@ -41,8 +41,9 @@ interface RecentActivity {
 
 interface ServiceStatus {
   name: string;
-  status: 'operational' | 'degraded' | 'down';
+  status: 'operational' | 'degraded' | 'down' | 'unconfigured';
   responseTime: number;
+  message?: string;
 }
 
 export const Dashboard = () => {
@@ -164,10 +165,10 @@ export const Dashboard = () => {
 
   const checkServiceHealth = async () => {
     const healthChecks: ServiceStatus[] = [
-      { name: 'API', status: 'down', responseTime: 0 },
-      { name: 'Base de Datos', status: 'down', responseTime: 0 },
-      { name: 'Email Service', status: 'down', responseTime: 0 },
-      { name: 'PDF Generator', status: 'down', responseTime: 0 },
+      { name: 'API', status: 'down', responseTime: 0, message: '' },
+      { name: 'Base de Datos', status: 'down', responseTime: 0, message: '' },
+      { name: 'Email Service', status: 'down', responseTime: 0, message: '' },
+      { name: 'PDF Generator', status: 'down', responseTime: 0, message: '' },
     ];
 
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -213,16 +214,23 @@ export const Dashboard = () => {
 
         if (emailData.status === 'operational' && emailData.configured) {
           healthChecks[2].status = 'operational';
-        } else if (emailData.status === 'down' || !emailData.configured) {
+          healthChecks[2].message = `${emailData.provider?.toUpperCase() || 'Email'} configurado`;
+        } else if (emailData.status === 'operational' && !emailData.configured) {
+          healthChecks[2].status = 'unconfigured';
+          healthChecks[2].message = 'No configurado';
+        } else if (emailData.status === 'down') {
           healthChecks[2].status = 'down';
+          healthChecks[2].message = emailData.error || 'Servicio caído';
         } else {
           healthChecks[2].status = 'degraded';
+          healthChecks[2].message = 'Degradado';
         }
 
         healthChecks[2].responseTime = emailData.responseTime || responseTime;
       } else {
         healthChecks[2].status = 'down';
         healthChecks[2].responseTime = responseTime;
+        healthChecks[2].message = 'Error de conexión';
       }
     } catch (err) {
       console.error('Email service health check failed:', err);
@@ -279,7 +287,7 @@ export const Dashboard = () => {
     }
   };
 
-  const getStatusColor = (status: 'operational' | 'degraded' | 'down') => {
+  const getStatusColor = (status: 'operational' | 'degraded' | 'down' | 'unconfigured') => {
     switch (status) {
       case 'operational':
         return 'bg-green-500';
@@ -287,6 +295,8 @@ export const Dashboard = () => {
         return 'bg-yellow-500';
       case 'down':
         return 'bg-red-500';
+      case 'unconfigured':
+        return 'bg-slate-500';
     }
   };
 
@@ -482,23 +492,39 @@ export const Dashboard = () => {
                       {service.responseTime > 0 ? `${service.responseTime}ms` : '0ms'}
                     </span>
                   </div>
-                  <div className="h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ${
-                        service.status === 'operational'
-                          ? 'bg-green-500'
-                          : service.status === 'degraded'
-                          ? 'bg-yellow-500'
-                          : 'bg-red-500'
-                      }`}
-                      style={{
-                        width: service.status === 'operational'
-                          ? '100%'
-                          : service.status === 'degraded'
-                          ? '60%'
-                          : '20%',
-                      }}
-                    />
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 h-1.5 bg-slate-700/50 rounded-full overflow-hidden mr-3">
+                      <div
+                        className={`h-full transition-all duration-500 ${
+                          service.status === 'operational'
+                            ? 'bg-green-500'
+                            : service.status === 'degraded'
+                            ? 'bg-yellow-500'
+                            : service.status === 'unconfigured'
+                            ? 'bg-slate-500'
+                            : 'bg-red-500'
+                        }`}
+                        style={{
+                          width: service.status === 'operational'
+                            ? '100%'
+                            : service.status === 'degraded'
+                            ? '60%'
+                            : service.status === 'unconfigured'
+                            ? '40%'
+                            : '20%',
+                        }}
+                      />
+                    </div>
+                    {service.message && (
+                      <span className={`text-xs font-medium ${
+                        service.status === 'operational' ? 'text-green-400' :
+                        service.status === 'degraded' ? 'text-yellow-400' :
+                        service.status === 'unconfigured' ? 'text-slate-400' :
+                        'text-red-400'
+                      }`}>
+                        {service.message}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -516,6 +542,11 @@ export const Dashboard = () => {
                       <>
                         <Activity className="w-4 h-4 text-yellow-400" />
                         <span className="text-yellow-400 font-medium">Degradado</span>
+                      </>
+                    ) : services.some(s => s.status === 'unconfigured') ? (
+                      <>
+                        <Activity className="w-4 h-4 text-slate-400" />
+                        <span className="text-slate-400 font-medium">Configuración Pendiente</span>
                       </>
                     ) : (
                       <>
