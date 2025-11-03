@@ -31,7 +31,7 @@ Deno.serve(async (req: Request) => {
       .from('email_credentials')
       .select('id, provider_type, smtp_host, smtp_port, resend_api_key, is_active')
       .eq('is_active', true)
-      .maybeSingle();
+      .limit(1);
 
     const responseTime = Date.now() - start;
 
@@ -39,7 +39,7 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Database error: ${error.message}`);
     }
 
-    if (!credentials) {
+    if (!credentials || credentials.length === 0) {
       return new Response(
         JSON.stringify({
           status: 'operational',
@@ -58,10 +58,11 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const providerType = credentials.provider_type || 'smtp';
+    const firstCredential = credentials[0];
+    const providerType = firstCredential.provider_type || 'smtp';
     const isConfigured = providerType === 'smtp'
-      ? !!(credentials.smtp_host && credentials.smtp_port)
-      : !!credentials.resend_api_key;
+      ? !!(firstCredential.smtp_host && firstCredential.smtp_port)
+      : !!firstCredential.resend_api_key;
 
     return new Response(
       JSON.stringify({
