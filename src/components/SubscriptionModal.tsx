@@ -22,8 +22,8 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const trialEnded = subscription?.trial_end && new Date(subscription.trial_end) < new Date();
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto mx-auto">
         <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-6 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <CreditCard className="w-6 h-6 text-cyan-400" />
