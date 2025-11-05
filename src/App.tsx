@@ -12,7 +12,7 @@ import Documentation from './pages/Documentation';
 
 
 const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode; requiredMenu?: string }) => {
-  const { isAuth, isLoading, hasMenuAccess } = useAuth();
+  const { isAuth, isLoading, hasMenuAccess, logout } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -63,12 +63,27 @@ const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode;
             </p>
           </div>
 
-          <button
-            onClick={() => window.location.href = '/'}
-            className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg transition-colors"
-          >
-            Volver al inicio
-          </button>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => {
+                const availableMenus = Object.keys(userObj?.permissions || {});
+                if (availableMenus.length > 0) {
+                  window.location.href = `/${availableMenus[0]}`;
+                } else {
+                  logout();
+                }
+              }}
+              className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg transition-colors"
+            >
+              Ir a mis secciones
+            </button>
+            <button
+              onClick={logout}
+              className="px-6 py-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+            >
+              Cerrar sesión
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -78,7 +93,7 @@ const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode;
 };
 
 const HomeRedirect = () => {
-  const { isAuth, isLoading } = useAuth();
+  const { isAuth, isLoading, user, hasMenuAccess } = useAuth();
 
   if (isLoading) {
     return (
@@ -88,7 +103,21 @@ const HomeRedirect = () => {
     );
   }
 
-  return isAuth ? <Navigate to="/dashboard" replace /> : <Home />;
+  if (isAuth && user) {
+    const menuPriority = ['dashboard', 'templates', 'statistics', 'documentation', 'settings'];
+
+    for (const menu of menuPriority) {
+      if (hasMenuAccess(menu)) {
+        console.log(`🏠 Redirecting to first available menu: /${menu}`);
+        return <Navigate to={`/${menu}`} replace />;
+      }
+    }
+
+    console.warn('⚠️ User has no menu access, redirecting to login');
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Home />;
 };
 
 const AppRoutes = () => {

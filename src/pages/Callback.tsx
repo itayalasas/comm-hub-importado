@@ -49,6 +49,8 @@ export const Callback = () => {
         const storedUser = localStorage.getItem('user');
         const storedSubscription = localStorage.getItem('subscription');
 
+        let redirectPath = '/';
+
         if (storedUser) {
           const user = JSON.parse(storedUser);
           console.log('=== DEBUG: USUARIO AUTENTICADO ===');
@@ -56,6 +58,25 @@ export const Callback = () => {
           console.log('Role:', user.role);
           console.log('Permisos completos:', JSON.stringify(user.permissions, null, 2));
           console.log('Menús disponibles:', Object.keys(user.permissions || {}));
+
+          const availableMenus = Object.keys(user.permissions || {});
+          if (availableMenus.length > 0) {
+            const menuMapping: Record<string, string> = {
+              'analytics': 'dashboard',
+              'inicio': 'dashboard',
+              'plantillas': 'templates',
+              'estadisticas': 'statistics',
+              'stats': 'statistics',
+              'documentacion': 'documentation',
+              'docs': 'documentation',
+              'configuracion': 'settings',
+              'config': 'settings',
+            };
+
+            const firstMenu = availableMenus[0];
+            redirectPath = `/${menuMapping[firstMenu] || firstMenu}`;
+            console.log(`🎯 Redirecting to first available menu: ${redirectPath}`);
+          }
         }
 
         if (storedSubscription) {
@@ -68,7 +89,7 @@ export const Callback = () => {
           console.warn('No subscription found in localStorage');
         }
 
-        navigate('/dashboard', { replace: true });
+        navigate(redirectPath, { replace: true });
       })
       .catch((err) => {
         console.error('Error in callback:', err);
