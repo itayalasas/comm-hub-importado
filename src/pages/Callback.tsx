@@ -13,6 +13,11 @@ export const Callback = () => {
     const code = params.get('code');
     const errorParam = params.get('error');
 
+    console.log('=== CALLBACK DEBUG ===');
+    console.log('Token:', token ? 'present' : 'null');
+    console.log('Code:', code ? 'present' : 'null');
+    console.log('All params:', Object.fromEntries(params.entries()));
+
     if (errorParam) {
       setError('Error al autenticar. Por favor intenta de nuevo.');
       setTimeout(() => {
@@ -34,6 +39,8 @@ export const Callback = () => {
     handleCallback(authToken)
       .then(() => {
         const storedUser = localStorage.getItem('user');
+        const storedSubscription = localStorage.getItem('subscription');
+
         if (storedUser) {
           const user = JSON.parse(storedUser);
           console.log('=== DEBUG: USUARIO AUTENTICADO ===');
@@ -42,6 +49,17 @@ export const Callback = () => {
           console.log('Permisos completos:', JSON.stringify(user.permissions, null, 2));
           console.log('Menús disponibles:', Object.keys(user.permissions || {}));
         }
+
+        if (storedSubscription) {
+          const subscription = JSON.parse(storedSubscription);
+          console.log('=== DEBUG: SUSCRIPCIÓN ===');
+          console.log('Status:', subscription.status);
+          console.log('Plan:', subscription.plan_name);
+          console.log('Trial End:', subscription.trial_end);
+        } else {
+          console.warn('No subscription found in localStorage');
+        }
+
         navigate('/dashboard', { replace: true });
       })
       .catch((err) => {
