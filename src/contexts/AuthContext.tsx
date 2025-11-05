@@ -7,6 +7,16 @@ type MenuPermissions = {
   [menuSlug: string]: MenuPermission[];
 };
 
+interface Feature {
+  code: string;
+  name: string;
+  description: string;
+  value: string;
+  value_type: 'number' | 'boolean' | 'string';
+  unit?: string;
+  category: string;
+}
+
 interface Subscription {
   id: string;
   status: string;
@@ -18,15 +28,11 @@ interface Subscription {
   period_start: string;
   period_end: string;
   entitlements: {
-    features: {
-      api_access: boolean;
-      advanced_reports: boolean;
-      priority_support: boolean;
-    };
-    max_users: number;
-    max_storage_gb: number;
+    features: Feature[];
   };
 }
+
+export type { Feature, Subscription };
 
 interface User {
   sub: string;
