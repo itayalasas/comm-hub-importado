@@ -3,6 +3,8 @@ import { Layout } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
+import { UpgradeModal } from '../components/UpgradeModal';
 import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2 } from 'lucide-react';
 
 interface Application {
@@ -27,6 +29,7 @@ interface EmailCredentials {
 export const Settings = () => {
   const { user } = useAuth();
   const toast = useToast();
+  const { checkApplicationLimit, refreshCounts } = useSubscriptionLimits();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [defaultApp, setDefaultApp] = useState<string | null>(null);
@@ -34,6 +37,7 @@ export const Settings = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showNewAppModal, setShowNewAppModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState(false);
   const [newAppData, setNewAppData] = useState({
@@ -259,8 +263,24 @@ export const Settings = () => {
     return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
   };
 
+  const handleNewApplicationClick = () => {
+    const limitCheck = checkApplicationLimit();
+
+    if (limitCheck.limitReached) {
+      setShowUpgradeModal(true);
+    } else {
+      setShowNewAppModal(true);
+    }
+  };
+
   const createApplication = async () => {
     if (!newAppData.name || !user?.sub) return;
+
+    const limitCheck = checkApplicationLimit();
+    if (limitCheck.limitReached) {
+      setShowUpgradeModal(true);
+      return;
+    }
 
     try {
       const appId = crypto.randomUUID();
@@ -281,6 +301,7 @@ export const Settings = () => {
       if (error) throw error;
 
       await setAsDefault(data.id);
+      await refreshCounts();
 
       toast.success('Aplicación creada y marcada como favorita');
       setShowNewAppModal(false);
@@ -319,7 +340,7 @@ export const Settings = () => {
               <h3 className="text-lg font-semibold text-white">Aplicaciones y API Keys</h3>
             </div>
             <button
-              onClick={() => setShowNewAppModal(true)}
+              onClick={handleNewApplicationClick}
               className="flex items-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />
@@ -331,7 +352,7 @@ export const Settings = () => {
             <div className="text-center py-8">
               <p className="text-slate-400 mb-4">No tienes aplicaciones creadas</p>
               <button
-                onClick={() => setShowNewAppModal(true)}
+                onClick={handleNewApplicationClick}
                 className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
               >
                 Crear Primera Aplicación
@@ -779,6 +800,25 @@ export const Settings = () => {
           </div>
         </div>
       )}
+
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        currentLimit={checkApplicationLimit().maxLimit}
+        featureName="applications"
+        nextPlan={{
+          name: "Pro",
+          price: 49,
+          currency: "USD",
+          features: [
+            "10 Applications",
+            "Unlimited Templates",
+            "50,000 Emails per month",
+            "Priority Support",
+            "Advanced Analytics"
+          ]
+        }}
+      />
     </Layout>
   );
 };

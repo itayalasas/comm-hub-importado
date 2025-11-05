@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { X, CreditCard, Calendar, Package, TrendingUp } from 'lucide-react';
+import { X, CreditCard, Calendar, Package } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface SubscriptionModalProps {
@@ -115,52 +115,17 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                 <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
                   <div className="flex items-center space-x-3 mb-2">
                     <Package className="w-5 h-5 text-cyan-400" />
-                    <h4 className="font-semibold text-white">Recursos</h4>
+                    <h4 className="font-semibold text-white">Límites y Características</h4>
                   </div>
-                  <p className="text-sm text-slate-400 mb-1">
-                    Usuarios: {subscription.entitlements.max_users}
-                  </p>
-                  <p className="text-sm text-slate-400">
-                    Almacenamiento: {subscription.entitlements.max_storage_gb} GB
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
-                <div className="flex items-center space-x-3 mb-3">
-                  <TrendingUp className="w-5 h-5 text-cyan-400" />
-                  <h4 className="font-semibold text-white">Características</h4>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-300">Acceso API</span>
-                    <span className={`text-sm font-semibold ${
-                      subscription.entitlements.features.api_access
-                        ? 'text-green-400'
-                        : 'text-slate-500'
-                    }`}>
-                      {subscription.entitlements.features.api_access ? '✓ Incluido' : '✗ No incluido'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-300">Reportes Avanzados</span>
-                    <span className={`text-sm font-semibold ${
-                      subscription.entitlements.features.advanced_reports
-                        ? 'text-green-400'
-                        : 'text-slate-500'
-                    }`}>
-                      {subscription.entitlements.features.advanced_reports ? '✓ Incluido' : '✗ No incluido'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-300">Soporte Prioritario</span>
-                    <span className={`text-sm font-semibold ${
-                      subscription.entitlements.features.priority_support
-                        ? 'text-green-400'
-                        : 'text-slate-500'
-                    }`}>
-                      {subscription.entitlements.features.priority_support ? '✓ Incluido' : '✗ No incluido'}
-                    </span>
+                  <div className="space-y-2">
+                    {subscription.entitlements.features.map((feature) => (
+                      <div key={feature.code} className="flex items-center justify-between">
+                        <span className="text-sm text-slate-300">{feature.name}</span>
+                        <span className="text-sm font-semibold text-cyan-400">
+                          {feature.value} {feature.unit || ''}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
