@@ -20,7 +20,7 @@ export const Login = () => {
             <div className="flex items-center space-x-2">
               <Sparkles className="w-3 h-3 text-cyan-400/50" />
               <span className="text-[10px] text-slate-400 font-medium tracking-wider">
-                BY AYAlA IT
+                BY AYALAIT
               </span>
             </div>
           </div>
