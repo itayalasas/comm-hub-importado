@@ -45,6 +45,7 @@ export default function Documentation() {
   const sections = [
     { id: 'introduction', title: 'Introducción', icon: Book },
     { id: 'authentication', title: 'Autenticación', icon: Code },
+    { id: 'email-config', title: 'Configuración de Email', icon: Code },
     { id: 'endpoints', title: 'Endpoints', icon: Code },
     { id: 'templates', title: 'Variables de Template', icon: Code },
     { id: 'examples', title: 'Ejemplos de Integración', icon: Code },
@@ -397,6 +398,317 @@ export default function Documentation() {
               <li>• Webhooks para notificaciones</li>
               <li>• Tracking de emails enviados</li>
             </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderEmailConfig = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-4">Configuración de Email</h2>
+        <p className="text-slate-300 mb-4">
+          El sistema soporta dos proveedores de email: SMTP (genérico) y Resend. Puedes configurar tu proveedor preferido desde la sección de <strong>Configuración</strong>.
+        </p>
+      </div>
+
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-6">
+        <div className="flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="text-blue-400 font-semibold mb-2">Proveedores Soportados</h3>
+            <ul className="text-slate-300 space-y-2 text-sm">
+              <li>• <strong>SMTP:</strong> Compatible con cualquier servidor SMTP (Gmail, Office 365, SendGrid, etc.)</li>
+              <li>• <strong>Resend:</strong> API moderna con webhooks para tracking avanzado</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Opción 1: Configuración SMTP</h3>
+        <p className="text-slate-300 mb-4 text-sm">
+          El protocolo SMTP funciona con prácticamente cualquier proveedor de email. Aquí están algunos de los más populares:
+        </p>
+
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <h4 className="text-cyan-400 font-semibold mb-3 flex items-center gap-2">
+              Gmail / Google Workspace
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-slate-400 mb-1">Host:</p>
+                  <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">smtp.gmail.com</code>
+                </div>
+                <div>
+                  <p className="text-slate-400 mb-1">Puerto:</p>
+                  <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">587</code>
+                </div>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Usuario:</p>
+                <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">tu-email@gmail.com</code>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Contraseña:</p>
+                <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">Contraseña de aplicación (no tu contraseña normal)</code>
+              </div>
+              <div className="mt-3 bg-amber-500/10 border border-amber-500/30 rounded p-3">
+                <p className="text-amber-400 text-xs font-semibold mb-1">⚠️ Configuración Requerida:</p>
+                <ol className="text-slate-300 text-xs space-y-1 ml-4">
+                  <li>1. Activa la verificación en 2 pasos en tu cuenta de Google</li>
+                  <li>2. Ve a: <a href="https://myaccount.google.com/apppasswords" target="_blank" className="text-cyan-400 underline">myaccount.google.com/apppasswords</a></li>
+                  <li>3. Genera una "Contraseña de aplicación" para "Correo"</li>
+                  <li>4. Usa esa contraseña de 16 caracteres en la configuración SMTP</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <h4 className="text-cyan-400 font-semibold mb-3 flex items-center gap-2">
+              Microsoft 365 / Outlook
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-slate-400 mb-1">Host:</p>
+                  <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">smtp.office365.com</code>
+                </div>
+                <div>
+                  <p className="text-slate-400 mb-1">Puerto:</p>
+                  <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">587</code>
+                </div>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Usuario:</p>
+                <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">tu-email@outlook.com</code>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Contraseña:</p>
+                <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">Tu contraseña de Microsoft 365</code>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <h4 className="text-cyan-400 font-semibold mb-3 flex items-center gap-2">
+              SendGrid
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-slate-400 mb-1">Host:</p>
+                  <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">smtp.sendgrid.net</code>
+                </div>
+                <div>
+                  <p className="text-slate-400 mb-1">Puerto:</p>
+                  <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">587</code>
+                </div>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Usuario:</p>
+                <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">apikey</code>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Contraseña:</p>
+                <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">Tu API Key de SendGrid</code>
+              </div>
+              <div className="mt-3 bg-blue-500/10 border border-blue-500/30 rounded p-3">
+                <p className="text-blue-400 text-xs">
+                  💡 Obtén tu API Key en: <a href="https://app.sendgrid.com/settings/api_keys" target="_blank" className="text-cyan-400 underline">Settings → API Keys</a>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <h4 className="text-cyan-400 font-semibold mb-3 flex items-center gap-2">
+              Amazon SES
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-slate-400 mb-1">Host:</p>
+                  <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">email-smtp.us-east-1.amazonaws.com</code>
+                </div>
+                <div>
+                  <p className="text-slate-400 mb-1">Puerto:</p>
+                  <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">587</code>
+                </div>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Usuario:</p>
+                <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">Tu SMTP Username de AWS</code>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Contraseña:</p>
+                <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">Tu SMTP Password de AWS</code>
+              </div>
+              <div className="mt-3 bg-blue-500/10 border border-blue-500/30 rounded p-3">
+                <p className="text-blue-400 text-xs">
+                  💡 El host varía según tu región AWS (us-east-1, eu-west-1, etc.)
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Opción 2: Configuración Resend</h3>
+        <p className="text-slate-300 mb-4 text-sm">
+          Resend es una API moderna de email con excelente deliverability y tracking avanzado.
+        </p>
+
+        <div className="space-y-4">
+          <div className="bg-green-500/10 border border-green-500/30 rounded p-4">
+            <h4 className="text-green-400 font-semibold mb-2">✨ Ventajas de Resend</h4>
+            <ul className="text-slate-300 text-sm space-y-1">
+              <li>• Webhooks automáticos para tracking de emails (entregado, abierto, clicado)</li>
+              <li>• Mejor deliverability que SMTP tradicional</li>
+              <li>• API simple y moderna</li>
+              <li>• Dashboard con estadísticas en tiempo real</li>
+              <li>• Plan gratuito: 3,000 emails/mes, 100 emails/día</li>
+            </ul>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <h4 className="text-cyan-400 font-semibold mb-3">Paso 1: Crear cuenta en Resend</h4>
+            <ol className="text-slate-300 text-sm space-y-2 ml-4">
+              <li>1. Ve a <a href="https://resend.com/signup" target="_blank" className="text-cyan-400 underline">resend.com/signup</a></li>
+              <li>2. Crea una cuenta gratuita</li>
+              <li>3. Verifica tu email</li>
+            </ol>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <h4 className="text-cyan-400 font-semibold mb-3">Paso 2: Obtener API Key</h4>
+            <ol className="text-slate-300 text-sm space-y-2 ml-4">
+              <li>1. En el dashboard de Resend, ve a "API Keys"</li>
+              <li>2. Haz clic en "Create API Key"</li>
+              <li>3. Dale un nombre (ej: "Production")</li>
+              <li>4. Selecciona permisos: "Sending access"</li>
+              <li>5. Copia la API Key (empieza con <code className="text-cyan-400">re_</code>)</li>
+            </ol>
+            <div className="mt-3 bg-amber-500/10 border border-amber-500/30 rounded p-3">
+              <p className="text-amber-400 text-xs">
+                ⚠️ Guarda la API Key de forma segura. Solo se muestra una vez.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <h4 className="text-cyan-400 font-semibold mb-3">Paso 3: Configurar dominio (Opcional pero recomendado)</h4>
+            <ol className="text-slate-300 text-sm space-y-2 ml-4">
+              <li>1. En Resend, ve a "Domains"</li>
+              <li>2. Haz clic en "Add Domain"</li>
+              <li>3. Ingresa tu dominio (ej: <code className="text-cyan-400">tuempresa.com</code>)</li>
+              <li>4. Agrega los registros DNS proporcionados:
+                <ul className="ml-4 mt-2 space-y-1">
+                  <li>• SPF (TXT)</li>
+                  <li>• DKIM (TXT)</li>
+                  <li>• DMARC (TXT) - opcional</li>
+                </ul>
+              </li>
+              <li>5. Espera a que se verifique el dominio (puede tomar hasta 24 horas)</li>
+            </ol>
+            <div className="mt-3 bg-blue-500/10 border border-blue-500/30 rounded p-3">
+              <p className="text-blue-400 text-xs">
+                💡 Sin dominio verificado, puedes usar <code className="text-cyan-400">onboarding@resend.dev</code> pero los emails pueden ir a spam.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <h4 className="text-cyan-400 font-semibold mb-3">Paso 4: Configurar Webhooks (Opcional)</h4>
+            <p className="text-slate-300 text-sm mb-3">
+              Los webhooks te permiten recibir notificaciones en tiempo real sobre el estado de tus emails.
+            </p>
+            <ol className="text-slate-300 text-sm space-y-2 ml-4">
+              <li>1. En Resend, ve a "Webhooks"</li>
+              <li>2. Haz clic en "Add Endpoint"</li>
+              <li>3. Ingresa la URL del webhook:
+                <div className="mt-2 bg-slate-800 p-2 rounded">
+                  <code className="text-cyan-400 text-xs break-all">{supabaseUrl}/functions/v1/resend-webhook</code>
+                </div>
+              </li>
+              <li>4. Selecciona los eventos:
+                <ul className="ml-4 mt-2 space-y-1">
+                  <li>• <code className="text-green-400">email.delivered</code> - Email entregado</li>
+                  <li>• <code className="text-blue-400">email.opened</code> - Email abierto</li>
+                  <li>• <code className="text-purple-400">email.clicked</code> - Link clicado</li>
+                  <li>• <code className="text-red-400">email.bounced</code> - Email rebotado</li>
+                  <li>• <code className="text-amber-400">email.complained</code> - Marcado como spam</li>
+                </ul>
+              </li>
+              <li>5. Guarda el endpoint</li>
+            </ol>
+            <div className="mt-3 bg-green-500/10 border border-green-500/30 rounded p-3">
+              <p className="text-green-400 text-xs">
+                ✓ Los webhooks actualizarán automáticamente el estado de tus emails en tiempo real
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <h4 className="text-cyan-400 font-semibold mb-3">Paso 5: Configurar en el Sistema</h4>
+            <ol className="text-slate-300 text-sm space-y-2 ml-4">
+              <li>1. Ve a <strong>Configuración</strong> en el sistema</li>
+              <li>2. Selecciona <strong>"Resend"</strong> como proveedor de email</li>
+              <li>3. Pega tu API Key de Resend</li>
+              <li>4. Configura el remitente:
+                <ul className="ml-4 mt-2 space-y-1">
+                  <li>• <strong>From Email:</strong> <code className="text-cyan-400">noreply@tudominio.com</code></li>
+                  <li>• <strong>From Name:</strong> <code className="text-cyan-400">Tu Empresa</code></li>
+                </ul>
+              </li>
+              <li>5. Guarda la configuración</li>
+              <li>6. Prueba enviando un email de prueba</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-6">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="text-amber-400 font-semibold mb-2">Recomendaciones de Seguridad</h3>
+            <ul className="text-slate-300 text-sm space-y-1">
+              <li>• Nunca compartas tus API Keys o contraseñas SMTP</li>
+              <li>• Usa contraseñas de aplicación específicas (no tu contraseña principal)</li>
+              <li>• Configura SPF, DKIM y DMARC para mejor deliverability</li>
+              <li>• Monitorea tus límites de envío diarios</li>
+              <li>• Verifica tu dominio para evitar que los emails vayan a spam</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-6">
+        <div className="flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="text-blue-400 font-semibold mb-2">¿Cuál elegir?</h3>
+            <div className="text-slate-300 text-sm space-y-2">
+              <p><strong>Usa SMTP si:</strong></p>
+              <ul className="ml-4 space-y-1">
+                <li>• Ya tienes un proveedor de email existente</li>
+                <li>• Necesitas usar un servidor de correo corporativo</li>
+                <li>• Prefieres mayor control sobre la infraestructura</li>
+              </ul>
+              <p className="mt-3"><strong>Usa Resend si:</strong></p>
+              <ul className="ml-4 space-y-1">
+                <li>• Necesitas webhooks y tracking avanzado</li>
+                <li>• Quieres mejor deliverability out-of-the-box</li>
+                <li>• Prefieres una API moderna y simple</li>
+                <li>• Quieres estadísticas en tiempo real</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -1043,6 +1355,8 @@ Content-Type: application/json`}
         return renderIntroduction();
       case 'authentication':
         return renderAuthentication();
+      case 'email-config':
+        return renderEmailConfig();
       case 'endpoints':
         return renderEndpoints();
       case 'templates':
