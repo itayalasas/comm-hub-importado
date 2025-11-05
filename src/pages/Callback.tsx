@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -6,8 +6,16 @@ export const Callback = () => {
   const { handleCallback } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const hasProcessed = useRef(false);
 
   useEffect(() => {
+    if (hasProcessed.current) {
+      console.log('Callback already processed, skipping...');
+      return;
+    }
+
+    hasProcessed.current = true;
+
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     const code = params.get('code');
