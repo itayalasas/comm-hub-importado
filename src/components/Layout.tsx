@@ -1,8 +1,9 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, Settings, BarChart3, LogOut, Book } from 'lucide-react';
+import { LayoutDashboard, FileText, Settings, BarChart3, Book } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
+import { UserMenu } from './UserMenu';
 
 interface LayoutProps {
   children: ReactNode;
@@ -10,7 +11,7 @@ interface LayoutProps {
 }
 
 export const Layout = ({ children, currentPage }: LayoutProps) => {
-  const { user, logout, hasMenuAccess } = useAuth();
+  const { hasMenuAccess } = useAuth();
   const location = useLocation();
 
   const navigation = [
@@ -29,19 +30,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
             <div className="flex items-center">
               <img src="/logo.svg" alt="CommHub" className="h-8" />
             </div>
-            <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <div className="text-sm font-medium text-white">{user?.name}</div>
-                <div className="text-xs text-slate-400">{user?.email}</div>
-              </div>
-              <button
-                onClick={logout}
-                className="p-2 text-slate-400 hover:text-white transition-colors"
-                title="Cerrar sesión"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
+            <UserMenu />
           </div>
         </div>
       </nav>
