@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Eye, Code, FileText, Image, QrCode, Plus, Trash2 } from 'lucide-react';
+import { X, Eye, Code, FileText, Image, QrCode, Plus, Trash2, Maximize2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
+import { HTMLEditor } from './HTMLEditor';
 
 interface TemplateEditorProps {
   formData: any;
@@ -32,6 +33,7 @@ const defaultVariables: PredefinedVariable[] = [
 export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEditing, applicationId }: TemplateEditorProps) => {
   const toast = useToast();
   const [showPreview, setShowPreview] = useState(false);
+  const [showHTMLEditor, setShowHTMLEditor] = useState(false);
   const [customVariables, setCustomVariables] = useState<PredefinedVariable[]>([]);
   const [showAddVariable, setShowAddVariable] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -329,6 +331,14 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
                   </label>
                   <div className="flex space-x-2">
                     <button
+                      onClick={() => setShowHTMLEditor(true)}
+                      className="flex items-center space-x-1 px-3 py-1.5 text-xs rounded transition-colors bg-purple-500 hover:bg-purple-600 text-white"
+                      title="Abrir editor avanzado"
+                    >
+                      <Maximize2 className="w-3 h-3" />
+                      <span>Editor Avanzado</span>
+                    </button>
+                    <button
                       onClick={() => setShowPreview(!showPreview)}
                       className={`flex items-center space-x-1 px-3 py-1 text-xs rounded transition-colors ${
                         showPreview
@@ -354,7 +364,13 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
                   />
                 )}
                 <p className="text-xs text-slate-500 mt-2">
-                  Usa dobles llaves para variables dinámicas: {`{{nombre_variable}}`}
+                  Usa dobles llaves para variables dinámicas: {`{{nombre_variable}}`}.
+                  <button
+                    onClick={() => setShowHTMLEditor(true)}
+                    className="ml-1 text-purple-400 hover:text-purple-300 underline"
+                  >
+                    Abre el editor avanzado
+                  </button> para una mejor experiencia de edición.
                 </p>
               </div>
 
@@ -727,6 +743,17 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
             </div>
           </div>
         </div>
+      )}
+
+      {showHTMLEditor && (
+        <HTMLEditor
+          value={formData.html_content}
+          onChange={(newContent) => {
+            setFormData({ ...formData, html_content: newContent });
+          }}
+          onClose={() => setShowHTMLEditor(false)}
+          variables={allVariables}
+        />
       )}
     </div>
   );
