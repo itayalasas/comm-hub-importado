@@ -28,16 +28,25 @@ const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode;
   }
 
   if (requiredMenu && !hasMenuAccess(requiredMenu)) {
+    const userPermissions = (window as any).localStorage.getItem('user');
+    const permissions = userPermissions ? JSON.parse(userPermissions).permissions : {};
+
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-white text-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+        <div className="text-white text-center max-w-md">
           <h2 className="text-2xl font-bold mb-4">Acceso Denegado</h2>
-          <p className="text-slate-400">No tienes permisos para acceder a esta sección</p>
+          <p className="text-slate-400 mb-4">No tienes permisos para acceder a la sección: <strong className="text-cyan-400">{requiredMenu}</strong></p>
+          <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 mb-6 text-left">
+            <p className="text-sm text-slate-400 mb-2">Tus permisos actuales:</p>
+            <pre className="text-xs text-slate-300 overflow-auto max-h-40">
+              {JSON.stringify(permissions, null, 2)}
+            </pre>
+          </div>
           <button
-            onClick={() => window.history.back()}
-            className="mt-6 px-6 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg transition-colors"
+            onClick={() => window.location.href = '/'}
+            className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg transition-colors"
           >
-            Volver
+            Volver al inicio
           </button>
         </div>
       </div>

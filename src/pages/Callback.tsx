@@ -33,13 +33,22 @@ export const Callback = () => {
 
     handleCallback(authToken)
       .then(() => {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          console.log('=== DEBUG: USUARIO AUTENTICADO ===');
+          console.log('Email:', user.email);
+          console.log('Role:', user.role);
+          console.log('Permisos completos:', JSON.stringify(user.permissions, null, 2));
+          console.log('Menús disponibles:', Object.keys(user.permissions || {}));
+        }
         navigate('/dashboard', { replace: true });
       })
       .catch((err) => {
         console.error('Error in callback:', err);
         setError('Error al procesar la autenticación.');
         setTimeout(() => {
-          navigate('/', { replace: true });
+          navigate('/login', { replace: true });
         }, 3000);
       });
   }, [handleCallback, navigate]);
