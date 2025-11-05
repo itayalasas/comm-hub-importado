@@ -180,34 +180,55 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       const decodedToken = decodeJWT(accessToken);
 
-      if (!decodedToken) {
-        throw new Error('Failed to decode token');
-      }
+      let userInfo: User;
 
-      if (decodedToken.subscription) {
-        console.log('=== SUBSCRIPTION INFO FROM TOKEN ===');
-        console.log('Status:', decodedToken.subscription.status);
-        console.log('Plan:', decodedToken.subscription.plan_name);
-        console.log('Trial Start:', decodedToken.subscription.trial_start);
-        console.log('Trial End:', decodedToken.subscription.trial_end);
-        console.log('Full subscription:', JSON.stringify(decodedToken.subscription, null, 2));
-        localStorage.setItem('subscription', JSON.stringify(decodedToken.subscription));
-        setSubscription(decodedToken.subscription);
-      } else if (authResponse?.data?.subscription) {
-        console.log('=== SUBSCRIPTION INFO FROM AUTH RESPONSE ===');
-        console.log('Status:', authResponse.data.subscription.status);
-        console.log('Plan:', authResponse.data.subscription.plan_name);
-        console.log('Trial End:', authResponse.data.subscription.trial_end);
-      }
+      if (!decodedToken && authResponse?.data) {
+        console.log('=== TOKEN NO ES JWT, USANDO DATA DE AUTH RESPONSE ===');
+        userInfo = {
+          sub: authResponse.data.user_id || authResponse.data.sub || authResponse.data.id || 'unknown',
+          name: authResponse.data.name || authResponse.data.username || 'Usuario',
+          email: authResponse.data.email || '',
+          picture: authResponse.data.picture || authResponse.data.avatar,
+          role: authResponse.data.role,
+          permissions: authResponse.data.permissions || {},
+        };
 
-      const userInfo: User = {
-        sub: decodedToken.sub || decodedToken.user_id || decodedToken.id,
-        name: decodedToken.name || decodedToken.username || 'Usuario',
-        email: decodedToken.email || '',
-        picture: decodedToken.picture || decodedToken.avatar,
-        role: decodedToken.role,
-        permissions: decodedToken.permissions || {},
-      };
+        if (authResponse.data.subscription) {
+          console.log('=== SUBSCRIPTION INFO FROM AUTH RESPONSE ===');
+          console.log('Status:', authResponse.data.subscription.status);
+          console.log('Plan:', authResponse.data.subscription.plan_name);
+          console.log('Trial End:', authResponse.data.subscription.trial_end);
+          localStorage.setItem('subscription', JSON.stringify(authResponse.data.subscription));
+          setSubscription(authResponse.data.subscription);
+        }
+      } else if (decodedToken) {
+        if (decodedToken.subscription) {
+          console.log('=== SUBSCRIPTION INFO FROM TOKEN ===');
+          console.log('Status:', decodedToken.subscription.status);
+          console.log('Plan:', decodedToken.subscription.plan_name);
+          console.log('Trial Start:', decodedToken.subscription.trial_start);
+          console.log('Trial End:', decodedToken.subscription.trial_end);
+          console.log('Full subscription:', JSON.stringify(decodedToken.subscription, null, 2));
+          localStorage.setItem('subscription', JSON.stringify(decodedToken.subscription));
+          setSubscription(decodedToken.subscription);
+        } else if (authResponse?.data?.subscription) {
+          console.log('=== SUBSCRIPTION INFO FROM AUTH RESPONSE ===');
+          console.log('Status:', authResponse.data.subscription.status);
+          console.log('Plan:', authResponse.data.subscription.plan_name);
+          console.log('Trial End:', authResponse.data.subscription.trial_end);
+        }
+
+        userInfo = {
+          sub: decodedToken.sub || decodedToken.user_id || decodedToken.id,
+          name: decodedToken.name || decodedToken.username || 'Usuario',
+          email: decodedToken.email || '',
+          picture: decodedToken.picture || decodedToken.avatar,
+          role: decodedToken.role,
+          permissions: decodedToken.permissions || {},
+        };
+      } else {
+        throw new Error('Failed to get user info from token or auth response');
+      }
 
       console.log('=== USER PERMISSIONS LOADED ===');
       console.log('User:', userInfo.email);
