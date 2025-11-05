@@ -232,6 +232,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const hasMenuAccess = (menu: string): boolean => {
+    console.log(`🔍 hasMenuAccess("${menu}") called`);
+    console.log('👤 Current user state:', user);
+    console.log('🔐 User permissions:', user?.permissions);
+
     const menuAliases: Record<string, string[]> = {
       'dashboard': ['dashboard', 'analytics', 'inicio'],
       'templates': ['templates', 'plantillas'],
@@ -241,13 +245,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
 
     const possibleKeys = menuAliases[menu] || [menu];
+    console.log(`🔑 Checking keys for "${menu}":`, possibleKeys);
 
     for (const key of possibleKeys) {
-      if (hasPermission(key, 'read')) {
+      const hasReadPermission = hasPermission(key, 'read');
+      console.log(`  - Checking "${key}": ${hasReadPermission ? '✅ HAS ACCESS' : '❌ NO ACCESS'}`);
+      if (hasReadPermission) {
+        console.log(`✅ Access granted to "${menu}" via key "${key}"`);
         return true;
       }
     }
 
+    console.log(`❌ Access denied to "${menu}"`);
     return false;
   };
 
