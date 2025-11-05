@@ -235,9 +235,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const hasMenuAccess = (menu: string): boolean => {
-    const result = hasPermission(menu, 'read');
-    console.log(`hasMenuAccess(${menu}):`, result);
-    return result;
+    const menuAliases: Record<string, string[]> = {
+      'dashboard': ['dashboard', 'analytics', 'inicio'],
+      'templates': ['templates', 'plantillas'],
+      'statistics': ['statistics', 'estadisticas', 'stats'],
+      'documentation': ['documentation', 'documentacion', 'docs'],
+      'settings': ['settings', 'configuracion', 'config'],
+    };
+
+    const possibleKeys = menuAliases[menu] || [menu];
+
+    for (const key of possibleKeys) {
+      if (hasPermission(key, 'read')) {
+        console.log(`hasMenuAccess(${menu}): true (matched key: ${key})`);
+        return true;
+      }
+    }
+
+    console.log(`hasMenuAccess(${menu}): false (no matching keys found)`);
+    return false;
   };
 
   return (
