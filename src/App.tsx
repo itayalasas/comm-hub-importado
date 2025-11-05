@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastContainer } from './components/ToastContainer';
-import { Landing } from './pages/Landing';
+import { Home } from './pages/Home';
+import { Login } from './pages/Login';
 import { Callback } from './pages/Callback';
 import { Dashboard } from './pages/Dashboard';
 import { Templates } from './pages/Templates';
@@ -23,7 +24,7 @@ const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode;
   }
 
   if (!isAuth) {
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (requiredMenu && !hasMenuAccess(requiredMenu)) {
@@ -57,13 +58,14 @@ const HomeRedirect = () => {
     );
   }
 
-  return isAuth ? <Navigate to="/dashboard" replace /> : <Landing />;
+  return isAuth ? <Navigate to="/dashboard" replace /> : <Home />;
 };
 
 const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
+      <Route path="/login" element={<Login />} />
       <Route path="/callback" element={<Callback />} />
       <Route
         path="/dashboard"
