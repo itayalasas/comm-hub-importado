@@ -7,6 +7,27 @@ type MenuPermissions = {
   [menuSlug: string]: MenuPermission[];
 };
 
+interface Subscription {
+  id: string;
+  status: string;
+  plan_name: string;
+  plan_price: number;
+  plan_currency: string;
+  trial_start?: string;
+  trial_end?: string;
+  period_start: string;
+  period_end: string;
+  entitlements: {
+    features: {
+      api_access: boolean;
+      advanced_reports: boolean;
+      priority_support: boolean;
+    };
+    max_users: number;
+    max_storage_gb: number;
+  };
+}
+
 interface User {
   sub: string;
   name: string;
@@ -14,12 +35,14 @@ interface User {
   picture?: string;
   role?: string;
   permissions?: MenuPermissions;
+  subscription?: Subscription;
 }
 
 interface AuthContextType {
   user: User | null;
   isAuth: boolean;
   isLoading: boolean;
+  subscription: Subscription | null;
   login: () => void;
   register: () => void;
   logout: () => void;
@@ -44,11 +67,13 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const storedToken = localStorage.getItem('access_token');
+    const storedSubscription = localStorage.getItem('subscription');
 
     if (storedUser && storedToken) {
       const parsedUser = JSON.parse(storedUser);
@@ -59,6 +84,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       console.log('Menus with access:', Object.keys(parsedUser.permissions || {}));
       setUser(parsedUser);
     }
+
+    if (storedSubscription) {
+      const parsedSubscription = JSON.parse(storedSubscription);
+      setSubscription(parsedSubscription);
+    }
+
     setIsLoading(false);
   }, []);
 
@@ -84,7 +115,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     localStorage.removeItem('user');
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    localStorage.removeItem('subscription');
     setUser(null);
+    setSubscription(null);
     window.location.href = '/';
   };
 
@@ -108,6 +141,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const handleCallback = async (tokenOrCode: string) => {
     try {
       let accessToken = tokenOrCode;
+      let authResponse = null;
 
       if (!tokenOrCode.startsWith('eyJ')) {
         const tokenResponse = await fetch(`${configManager.authUrl}/oauth/token`, {
@@ -128,10 +162,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           throw new Error('Failed to exchange code for token');
         }
 
-        const tokens = await tokenResponse.json();
-        accessToken = tokens.access_token;
-        if (tokens.refresh_token) {
-          localStorage.setItem('refresh_token', tokens.refresh_token);
+        authResponse = await tokenResponse.json();
+        accessToken = authResponse.data?.access_token || authResponse.access_token;
+
+        const refreshToken = authResponse.data?.refresh_token || authResponse.refresh_token;
+        if (refreshToken) {
+          localStorage.setItem('refresh_token', refreshToken);
+        }
+
+        if (authResponse.data?.subscription) {
+          localStorage.setItem('subscription', JSON.stringify(authResponse.data.subscription));
+          setSubscription(authResponse.data.subscription);
         }
       }
 
@@ -157,6 +198,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       console.log('Role:', userInfo.role);
       console.log('All Permissions:', JSON.stringify(userInfo.permissions, null, 2));
       console.log('Menus with access:', Object.keys(userInfo.permissions || {}));
+
+      if (authResponse?.data?.subscription) {
+        console.log('=== SUBSCRIPTION INFO ===');
+        console.log('Status:', authResponse.data.subscription.status);
+        console.log('Plan:', authResponse.data.subscription.plan_name);
+        console.log('Trial End:', authResponse.data.subscription.trial_end);
+      }
 
       localStorage.setItem('user', JSON.stringify(userInfo));
       setUser(userInfo);
@@ -189,6 +237,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         user,
         isAuth: !!user,
         isLoading,
+        subscription,
         login,
         register,
         logout,

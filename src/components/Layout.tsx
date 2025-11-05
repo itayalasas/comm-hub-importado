@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, FileText, Settings, BarChart3, LogOut, Book } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { TrialBanner } from './TrialBanner';
 
 interface LayoutProps {
   children: ReactNode;
@@ -44,6 +45,8 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
           </div>
         </div>
       </nav>
+
+      <TrialBanner />
 
       <div className="flex">
         <aside className="w-64 min-h-[calc(100vh-4rem)] border-r border-slate-700 bg-slate-900/30 backdrop-blur-sm">
