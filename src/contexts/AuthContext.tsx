@@ -225,13 +225,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const hasPermission = (menu: string, permission: MenuPermission): boolean => {
     if (!user || !user.permissions) {
-      console.log(`hasPermission(${menu}, ${permission}): No user or permissions`);
       return false;
     }
     const menuPermissions = user.permissions[menu];
-    const result = menuPermissions ? menuPermissions.includes(permission) : false;
-    console.log(`hasPermission(${menu}, ${permission}):`, result, 'menuPermissions:', menuPermissions);
-    return result;
+    return menuPermissions ? menuPermissions.includes(permission) : false;
   };
 
   const hasMenuAccess = (menu: string): boolean => {
@@ -247,12 +244,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     for (const key of possibleKeys) {
       if (hasPermission(key, 'read')) {
-        console.log(`hasMenuAccess(${menu}): true (matched key: ${key})`);
         return true;
       }
     }
 
-    console.log(`hasMenuAccess(${menu}): false (no matching keys found)`);
     return false;
   };
 
