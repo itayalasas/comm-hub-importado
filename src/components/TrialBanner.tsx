@@ -24,38 +24,32 @@ export const TrialBanner = () => {
   return (
     <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-b border-amber-500/30 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3 flex-1">
-            <div className="flex-shrink-0">
-              <AlertTriangle className="w-5 h-5 text-amber-400" />
-            </div>
-            <div className="flex-1 flex items-center gap-2 flex-wrap">
-              <p className="text-sm text-amber-100">
-                <span className="font-semibold">Modo de Prueba:</span>{' '}
-                {daysRemaining !== null && (
-                  <>
-                    Te quedan{' '}
-                    <span className="font-bold text-amber-300">
-                      {daysRemaining} {daysRemaining === 1 ? 'día' : 'días'}
-                    </span>{' '}
-                    de prueba.
-                  </>
-                )}
-                {daysRemaining === null && (
-                  <>Estás usando una licencia de prueba.</>
-                )}
-              </p>
-              <a
-                href="#"
-                className="text-sm font-semibold text-amber-300 hover:text-amber-200 underline transition-colors"
-              >
-                Actualizar Plan
-              </a>
-            </div>
-          </div>
+        <div className="flex items-center justify-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+          <p className="text-sm text-amber-100">
+            <span className="font-semibold">Modo de Prueba:</span>{' '}
+            {daysRemaining !== null && (
+              <>
+                Te quedan{' '}
+                <span className="font-bold text-amber-300">
+                  {daysRemaining} {daysRemaining === 1 ? 'día' : 'días'}
+                </span>{' '}
+                de prueba.
+              </>
+            )}
+            {daysRemaining === null && (
+              <>Estás usando una licencia de prueba.</>
+            )}
+          </p>
+          <a
+            href="#"
+            className="text-sm font-semibold text-amber-300 hover:text-amber-200 underline transition-colors whitespace-nowrap"
+          >
+            Actualizar Plan
+          </a>
           <button
             onClick={() => setIsVisible(false)}
-            className="flex-shrink-0 ml-4 p-1 hover:bg-amber-500/20 rounded transition-colors"
+            className="p-1 hover:bg-amber-500/20 rounded transition-colors flex-shrink-0 ml-2"
             aria-label="Cerrar banner"
           >
             <X className="w-4 h-4 text-amber-300" />
