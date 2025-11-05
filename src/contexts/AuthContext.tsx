@@ -184,6 +184,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error('Failed to decode token');
       }
 
+      if (decodedToken.subscription) {
+        console.log('=== SUBSCRIPTION INFO FROM TOKEN ===');
+        console.log('Status:', decodedToken.subscription.status);
+        console.log('Plan:', decodedToken.subscription.plan_name);
+        console.log('Trial Start:', decodedToken.subscription.trial_start);
+        console.log('Trial End:', decodedToken.subscription.trial_end);
+        console.log('Full subscription:', JSON.stringify(decodedToken.subscription, null, 2));
+        localStorage.setItem('subscription', JSON.stringify(decodedToken.subscription));
+        setSubscription(decodedToken.subscription);
+      } else if (authResponse?.data?.subscription) {
+        console.log('=== SUBSCRIPTION INFO FROM AUTH RESPONSE ===');
+        console.log('Status:', authResponse.data.subscription.status);
+        console.log('Plan:', authResponse.data.subscription.plan_name);
+        console.log('Trial End:', authResponse.data.subscription.trial_end);
+      }
+
       const userInfo: User = {
         sub: decodedToken.sub || decodedToken.user_id || decodedToken.id,
         name: decodedToken.name || decodedToken.username || 'Usuario',
@@ -198,13 +214,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       console.log('Role:', userInfo.role);
       console.log('All Permissions:', JSON.stringify(userInfo.permissions, null, 2));
       console.log('Menus with access:', Object.keys(userInfo.permissions || {}));
-
-      if (authResponse?.data?.subscription) {
-        console.log('=== SUBSCRIPTION INFO ===');
-        console.log('Status:', authResponse.data.subscription.status);
-        console.log('Plan:', authResponse.data.subscription.plan_name);
-        console.log('Trial End:', authResponse.data.subscription.trial_end);
-      }
 
       localStorage.setItem('user', JSON.stringify(userInfo));
       setUser(userInfo);

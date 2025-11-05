@@ -8,22 +8,14 @@ export const TrialBanner = () => {
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
 
   useEffect(() => {
-    console.log('=== TRIAL BANNER DEBUG ===');
-    console.log('Subscription:', subscription);
-    console.log('Status:', subscription?.status);
-    console.log('Trial End:', subscription?.trial_end);
-
     if (subscription?.status === 'trialing' && subscription.trial_end) {
       const trialEndDate = new Date(subscription.trial_end);
       const today = new Date();
       const diffTime = trialEndDate.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      console.log('Days remaining:', diffDays);
       setDaysRemaining(diffDays);
     }
   }, [subscription]);
-
-  console.log('Should show banner:', subscription?.status === 'trialing' && isVisible);
 
   if (!subscription || subscription.status !== 'trialing' || !isVisible) {
     return null;
