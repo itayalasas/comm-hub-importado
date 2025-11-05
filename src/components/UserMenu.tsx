@@ -64,7 +64,7 @@ export const UserMenu = () => {
         </button>
 
         {isOpen && (
-          <div className="absolute right-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
+          <div className="absolute right-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl shadow-black/50 z-[100]">
             <div className="p-3 border-b border-slate-700">
               <div className="text-sm font-medium text-white">{user?.name}</div>
               <div className="text-xs text-slate-400">{user?.email}</div>
