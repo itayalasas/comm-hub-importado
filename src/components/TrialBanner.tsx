@@ -8,14 +8,22 @@ export const TrialBanner = () => {
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
 
   useEffect(() => {
+    console.log('=== TRIAL BANNER DEBUG ===');
+    console.log('Subscription:', subscription);
+    console.log('Status:', subscription?.status);
+    console.log('Trial End:', subscription?.trial_end);
+
     if (subscription?.status === 'trialing' && subscription.trial_end) {
       const trialEndDate = new Date(subscription.trial_end);
       const today = new Date();
       const diffTime = trialEndDate.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      console.log('Days remaining:', diffDays);
       setDaysRemaining(diffDays);
     }
   }, [subscription]);
+
+  console.log('Should show banner:', subscription?.status === 'trialing' && isVisible);
 
   if (!subscription || subscription.status !== 'trialing' || !isVisible) {
     return null;
@@ -29,26 +37,28 @@ export const TrialBanner = () => {
             <div className="flex-shrink-0">
               <AlertTriangle className="w-5 h-5 text-amber-400" />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 flex items-center gap-2 flex-wrap">
               <p className="text-sm text-amber-100">
-                <span className="font-semibold">Licencia de Prueba:</span>{' '}
+                <span className="font-semibold">Modo de Prueba:</span>{' '}
                 {daysRemaining !== null && (
                   <>
                     Te quedan{' '}
                     <span className="font-bold text-amber-300">
                       {daysRemaining} {daysRemaining === 1 ? 'día' : 'días'}
                     </span>{' '}
-                    de tu período de prueba del plan{' '}
-                    <span className="font-semibold">{subscription.plan_name}</span>.
+                    de prueba.
                   </>
                 )}
                 {daysRemaining === null && (
-                  <>
-                    Estás usando una licencia de prueba del plan{' '}
-                    <span className="font-semibold">{subscription.plan_name}</span>.
-                  </>
+                  <>Estás usando una licencia de prueba.</>
                 )}
               </p>
+              <a
+                href="#"
+                className="text-sm font-semibold text-amber-300 hover:text-amber-200 underline transition-colors"
+              >
+                Actualizar Plan
+              </a>
             </div>
           </div>
           <button
