@@ -44,6 +44,10 @@ interface AvailablePlan {
   };
   is_upgrade: boolean;
   price_difference: number;
+  mp_init_point?: string;
+  mp_back_url?: string;
+  mp_preapproval_plan_id?: string;
+  mp_status?: string;
 }
 
 export type { Feature, Subscription, AvailablePlan };
@@ -302,6 +306,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         if (decodedToken.available_plans && Array.isArray(decodedToken.available_plans)) {
           console.log('=== AVAILABLE PLANS FROM TOKEN ===');
           console.log('Plans count:', decodedToken.available_plans.length);
+          console.log('');
+
+          decodedToken.available_plans.forEach((plan: any, index: number) => {
+            console.log(`📦 Plan ${index + 1}:`, plan.name);
+            console.log('  ├─ ID:', plan.id);
+            console.log('  ├─ Description:', plan.description);
+            console.log('  ├─ Price:', plan.price, plan.currency);
+            console.log('  ├─ Billing Cycle:', plan.billing_cycle);
+            console.log('  ├─ Is Upgrade:', plan.is_upgrade);
+            console.log('  ├─ Price Difference:', plan.price_difference);
+            console.log('  ├─ Features Count:', plan.entitlements?.features?.length || 0);
+            console.log('  ├─ MP Init Point:', plan.mp_init_point ? '✅ Present' : '❌ Missing');
+            console.log('  ├─ MP Back URL:', plan.mp_back_url ? '✅ Present' : '❌ Missing');
+            console.log('  ├─ MP Preapproval Plan ID:', plan.mp_preapproval_plan_id || '❌ Missing');
+            console.log('  └─ MP Status:', plan.mp_status || '❌ Missing');
+
+            if (plan.entitlements?.features) {
+              console.log('  📋 Features:');
+              plan.entitlements.features.forEach((feature: any) => {
+                console.log(`     - ${feature.name} (${feature.code}): ${feature.value} ${feature.unit || ''}`);
+              });
+            }
+            console.log('');
+          });
+
+          console.log('💾 Full plans JSON:');
+          console.log(JSON.stringify(decodedToken.available_plans, null, 2));
+
           localStorage.setItem('available_plans', JSON.stringify(decodedToken.available_plans));
           setAvailablePlans(decodedToken.available_plans);
         }

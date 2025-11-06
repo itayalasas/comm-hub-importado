@@ -28,6 +28,25 @@ export const UpgradeModal = ({
   console.log('Feature name:', featureName);
   console.log('Current limit:', currentLimit);
 
+  if (availablePlans.length > 0) {
+    console.log('');
+    console.log('🔍 DETAILED PLANS INSPECTION:');
+    availablePlans.forEach((plan, index) => {
+      console.log(`\n📦 Plan ${index + 1}: ${plan.name}`);
+      console.log('  ├─ ID:', plan.id);
+      console.log('  ├─ Price:', plan.price, plan.currency);
+      console.log('  ├─ Billing:', plan.billing_cycle);
+      console.log('  ├─ Is Upgrade:', plan.is_upgrade);
+      console.log('  ├─ Price Diff:', plan.price_difference);
+      console.log('  ├─ Features:', plan.entitlements?.features?.length || 0);
+      console.log('  ├─ MP Init Point:', plan.mp_init_point ? '✅ ' + plan.mp_init_point.substring(0, 50) + '...' : '❌ Missing');
+      console.log('  ├─ MP Back URL:', plan.mp_back_url ? '✅ ' + plan.mp_back_url.substring(0, 50) + '...' : '❌ Missing');
+      console.log('  ├─ MP Plan ID:', plan.mp_preapproval_plan_id || '❌ Missing');
+      console.log('  └─ MP Status:', plan.mp_status || '❌ Missing');
+    });
+    console.log('');
+  }
+
   const handleUpgrade = (planId: string) => {
     console.log('Upgrading to plan:', planId);
   };
