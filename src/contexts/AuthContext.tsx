@@ -251,8 +251,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           email: decodedToken.email,
           name: decodedToken.name,
           hasSubscription: !!decodedToken.subscription,
-          hasPermissions: !!decodedToken.permissions
+          hasPermissions: !!decodedToken.permissions,
+          hasAvailablePlans: !!decodedToken.available_plans,
+          availablePlansCount: Array.isArray(decodedToken.available_plans) ? decodedToken.available_plans.length : 0
         });
+
+        if (decodedToken.available_plans) {
+          console.log('Available plans raw data:', JSON.stringify(decodedToken.available_plans, null, 2));
+        }
       }
 
       let userInfo: User;
