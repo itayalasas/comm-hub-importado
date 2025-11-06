@@ -1,6 +1,8 @@
 import { createPortal } from 'react-dom';
 import { X, CreditCard, Calendar, Package } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { UpgradeModal } from './UpgradeModal';
+import { useState } from 'react';
 
 interface SubscriptionModalProps {
   onClose: () => void;
@@ -8,6 +10,7 @@ interface SubscriptionModalProps {
 
 export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const { subscription } = useAuth();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
@@ -21,6 +24,14 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const isTrialing = subscription?.status === 'trialing';
   const isActive = subscription?.status === 'active';
   const trialEnded = subscription?.trial_end && new Date(subscription.trial_end) < new Date();
+
+  const getCurrentLimit = () => {
+    if (!subscription) return 0;
+    const appFeature = subscription.entitlements.features.find(
+      f => f.code === 'max_applications'
+    );
+    return appFeature ? parseInt(appFeature.value) : 0;
+  };
 
   const modalContent = (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" style={{ margin: 0, left: 0, right: 0 }}>
@@ -131,10 +142,13 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
               </div>
 
               <div className="flex gap-3">
-                <button className="flex-1 px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors">
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="flex-1 px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors font-semibold"
+                >
                   Actualizar Plan
                 </button>
-                <button className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors">
+                <button className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-semibold">
                   Gestionar Pago
                 </button>
               </div>
@@ -157,5 +171,16 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const modalRoot = document.getElementById('modal-root');
   if (!modalRoot) return null;
 
-  return createPortal(modalContent, modalRoot);
+  return (
+    <>
+      {createPortal(modalContent, modalRoot)}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        currentLimit={getCurrentLimit()}
+        featureName="aplicaciones"
+        featureCode="max_applications"
+      />
+    </>
+  );
 };
