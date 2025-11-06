@@ -805,19 +805,8 @@ export const Settings = () => {
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
         currentLimit={checkApplicationLimit().maxLimit}
-        featureName="applications"
-        nextPlan={{
-          name: "Pro",
-          price: 49,
-          currency: "USD",
-          features: [
-            "10 Applications",
-            "Unlimited Templates",
-            "50,000 Emails per month",
-            "Priority Support",
-            "Advanced Analytics"
-          ]
-        }}
+        featureName="aplicaciones"
+        featureCode="max_applications"
       />
     </Layout>
   );
