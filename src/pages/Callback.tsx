@@ -22,7 +22,16 @@ export const Callback = () => {
     const errorParam = params.get('error');
 
     console.log('=== CALLBACK DEBUG ===');
-    console.log('Token:', token ? 'present' : 'null');
+    console.log('Full URL:', window.location.href);
+    console.log('Token present:', token ? 'YES' : 'NO');
+    if (token) {
+      console.log('Token length:', token.length);
+      console.log('Token first 50 chars:', token.substring(0, 50));
+      console.log('Token last 50 chars:', token.substring(token.length - 50));
+      console.log('Token starts with eyJ:', token.startsWith('eyJ'));
+      const tokenParts = token.split('.');
+      console.log('Token parts:', tokenParts.length);
+    }
     console.log('Code:', code ? 'present' : 'null');
     console.log('All params:', Object.fromEntries(params.entries()));
 
