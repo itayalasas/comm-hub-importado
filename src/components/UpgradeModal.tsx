@@ -47,8 +47,22 @@ export const UpgradeModal = ({
     console.log('');
   }
 
-  const handleUpgrade = (planId: string) => {
-    console.log('Upgrading to plan:', planId);
+  const handleUpgrade = (plan: AvailablePlan) => {
+    console.log('=== UPGRADE ACTION ===');
+    console.log('Plan:', plan.name);
+    console.log('Plan ID:', plan.id);
+    console.log('MP Init Point:', plan.mp_init_point);
+
+    if (!plan.mp_init_point) {
+      console.error('❌ No MP Init Point available for this plan');
+      alert('Error: No se encontró el enlace de pago para este plan');
+      return;
+    }
+
+    console.log('🚀 Redirecting to Mercado Pago...');
+    console.log('URL:', plan.mp_init_point);
+
+    window.location.href = plan.mp_init_point;
   };
 
   const getFeatureValue = (plan: AvailablePlan, code?: string): string | null => {
@@ -153,10 +167,15 @@ export const UpgradeModal = ({
                       </div>
 
                       <button
-                        onClick={() => handleUpgrade(plan.id)}
-                        className="w-full py-3.5 px-5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-xl font-bold transition-all shadow-xl shadow-cyan-500/30 hover:shadow-cyan-500/50 hover:scale-[1.02] active:scale-[0.98] border border-cyan-400/20 mt-auto"
+                        onClick={() => handleUpgrade(plan)}
+                        disabled={!plan.mp_init_point}
+                        className={`w-full py-3.5 px-5 rounded-xl font-bold transition-all border mt-auto ${
+                          plan.mp_init_point
+                            ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white shadow-xl shadow-cyan-500/30 hover:shadow-cyan-500/50 hover:scale-[1.02] active:scale-[0.98] border-cyan-400/20 cursor-pointer'
+                            : 'bg-slate-700 text-slate-400 border-slate-600 cursor-not-allowed opacity-50'
+                        }`}
                       >
-                        Actualizar ahora
+                        {plan.mp_init_point ? 'Actualizar ahora' : 'No disponible'}
                       </button>
                     </div>
                   </div>
