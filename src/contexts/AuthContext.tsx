@@ -129,17 +129,35 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const decodeJWT = (token: string): any => {
     try {
-      const base64Url = token.split('.')[1];
+      if (!token || typeof token !== 'string') {
+        console.error('Invalid token: not a string or empty');
+        return null;
+      }
+
+      const parts = token.split('.');
+      console.log('JWT parts count:', parts.length);
+
+      if (parts.length !== 3) {
+        console.error('Invalid JWT: expected 3 parts, got', parts.length);
+        return null;
+      }
+
+      const base64Url = parts[1];
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+
       const jsonPayload = decodeURIComponent(
         atob(base64)
           .split('')
           .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
           .join('')
       );
-      return JSON.parse(jsonPayload);
+
+      const decoded = JSON.parse(jsonPayload);
+      console.log('JWT decoded successfully. Keys:', Object.keys(decoded));
+      return decoded;
     } catch (error) {
       console.error('Error decoding JWT:', error);
+      console.error('Token was:', token?.substring(0, 100) + '...');
       return null;
     }
   };
@@ -191,42 +209,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
 
       console.log('Access token to decode:', accessToken?.substring(0, 50) + '...');
+
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+
       localStorage.setItem('access_token', accessToken);
 
       let decodedToken = decodeJWT(accessToken);
       console.log('Decoded token:', decodedToken ? 'SUCCESS' : 'FAILED');
 
-      if (!decodedToken && !authResponse && tokenOrCode.startsWith('eyJ')) {
-        console.log('Token looks like JWT but failed to decode, trying exchange...');
-        try {
-          const tokenResponse = await fetch(`${configManager.authUrl}/oauth/token`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${configManager.authApiKey}`,
-            },
-            body: JSON.stringify({
-              grant_type: 'authorization_code',
-              code: tokenOrCode,
-              redirect_uri: configManager.redirectUri,
-              client_id: configManager.authAppId,
-            }),
-          });
-
-          if (tokenResponse.ok) {
-            authResponse = await tokenResponse.json();
-            console.log('Fallback auth response received:', authResponse);
-            const newToken = authResponse.data?.access_token || authResponse.access_token;
-            if (newToken) {
-              accessToken = newToken;
-              localStorage.setItem('access_token', accessToken);
-              decodedToken = decodeJWT(accessToken);
-              console.log('Decoded fallback token:', decodedToken ? 'SUCCESS' : 'FAILED');
-            }
-          }
-        } catch (fallbackError) {
-          console.error('Fallback exchange failed:', fallbackError);
-        }
+      if (decodedToken) {
+        console.log('Token payload preview:', {
+          sub: decodedToken.sub,
+          email: decodedToken.email,
+          name: decodedToken.name,
+          hasSubscription: !!decodedToken.subscription,
+          hasPermissions: !!decodedToken.permissions
+        });
       }
 
       let userInfo: User;
