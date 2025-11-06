@@ -32,7 +32,21 @@ interface Subscription {
   };
 }
 
-export type { Feature, Subscription };
+interface AvailablePlan {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  billing_cycle: string;
+  entitlements: {
+    features: Feature[];
+  };
+  is_upgrade: boolean;
+  price_difference: number;
+}
+
+export type { Feature, Subscription, AvailablePlan };
 
 interface User {
   sub: string;
@@ -49,6 +63,7 @@ interface AuthContextType {
   isAuth: boolean;
   isLoading: boolean;
   subscription: Subscription | null;
+  availablePlans: AvailablePlan[];
   login: () => void;
   register: () => void;
   logout: () => void;
@@ -74,12 +89,14 @@ interface AuthProviderProps {
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [availablePlans, setAvailablePlans] = useState<AvailablePlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const storedToken = localStorage.getItem('access_token');
     const storedSubscription = localStorage.getItem('subscription');
+    const storedPlans = localStorage.getItem('available_plans');
 
     if (storedUser && storedToken) {
       const parsedUser = JSON.parse(storedUser);
@@ -94,6 +111,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (storedSubscription) {
       const parsedSubscription = JSON.parse(storedSubscription);
       setSubscription(parsedSubscription);
+    }
+
+    if (storedPlans) {
+      const parsedPlans = JSON.parse(storedPlans);
+      console.log('=== LOADING AVAILABLE PLANS FROM LOCALSTORAGE ===');
+      console.log('Plans count:', parsedPlans.length);
+      setAvailablePlans(parsedPlans);
     }
 
     setIsLoading(false);
@@ -269,6 +293,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           console.log('Trial End:', authResponse.data.subscription.trial_end);
         }
 
+        if (decodedToken.available_plans && Array.isArray(decodedToken.available_plans)) {
+          console.log('=== AVAILABLE PLANS FROM TOKEN ===');
+          console.log('Plans count:', decodedToken.available_plans.length);
+          localStorage.setItem('available_plans', JSON.stringify(decodedToken.available_plans));
+          setAvailablePlans(decodedToken.available_plans);
+        }
+
         userInfo = {
           sub: decodedToken.sub || decodedToken.user_id || decodedToken.id,
           name: decodedToken.name || decodedToken.username || 'Usuario',
@@ -339,6 +370,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         isAuth: !!user,
         isLoading,
         subscription,
+        availablePlans,
         login,
         register,
         logout,
