@@ -128,11 +128,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const login = () => {
+    console.log('=== LOGIN REDIRECT ===');
+    console.log('Auth URL:', configManager.authUrl);
+    console.log('App ID:', configManager.authAppId);
+    console.log('Redirect URI:', configManager.redirectUri);
+    console.log('API Key:', configManager.authApiKey);
+
     const authUrl = `${configManager.authUrl}/login?` +
       `app_id=${configManager.authAppId}&` +
       `redirect_uri=${encodeURIComponent(configManager.redirectUri)}&` +
       `api_key=${configManager.authApiKey}`;
 
+    console.log('Full auth URL:', authUrl);
     window.location.href = authUrl;
   };
 
