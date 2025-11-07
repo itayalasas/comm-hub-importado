@@ -122,7 +122,7 @@ export const Callback = () => {
         console.error('Error in callback:', err);
         setError('Error al procesar la autenticación.');
         setTimeout(() => {
-          navigate('/login', { replace: true });
+          navigate('/', { replace: true });
         }, 3000);
       });
   }, [handleCallback, navigate]);
