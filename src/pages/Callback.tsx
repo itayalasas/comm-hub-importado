@@ -16,10 +16,23 @@ export const Callback = () => {
 
     hasProcessed.current = true;
 
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const code = params.get('code');
-    const errorParam = params.get('error');
+    let token = null;
+    let code = null;
+    let errorParam = null;
+
+    if (window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      token = hashParams.get('token');
+      code = hashParams.get('code');
+      errorParam = hashParams.get('error');
+      console.log('=== USING HASH PARAMS ===');
+    } else {
+      const params = new URLSearchParams(window.location.search);
+      token = params.get('token');
+      code = params.get('code');
+      errorParam = params.get('error');
+      console.log('=== USING QUERY PARAMS ===');
+    }
 
     console.log('=== CALLBACK DEBUG ===');
     console.log('Full URL:', window.location.href);
@@ -33,9 +46,9 @@ export const Callback = () => {
       console.log('Token parts:', tokenParts.length);
     }
     console.log('Code:', code ? 'present' : 'null');
-    console.log('All params:', Object.fromEntries(params.entries()));
 
     if (errorParam) {
+      console.error('Error param received:', errorParam);
       setError('Error al autenticar. Por favor intenta de nuevo.');
       setTimeout(() => {
         navigate('/', { replace: true });
@@ -46,12 +59,17 @@ export const Callback = () => {
     const authToken = token || code;
 
     if (!authToken) {
+      console.error('No auth token found in URL');
+      console.log('Hash:', window.location.hash);
+      console.log('Search:', window.location.search);
       setError('No se recibió código de autenticación.');
       setTimeout(() => {
         navigate('/', { replace: true });
       }, 3000);
       return;
     }
+
+    console.log('Auth token found, processing...');
 
     handleCallback(authToken)
       .then(() => {

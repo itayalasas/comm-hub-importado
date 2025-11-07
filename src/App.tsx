@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastContainer } from './components/ToastContainer';
+import { Landing } from './pages/Landing';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Callback } from './pages/Callback';
@@ -92,7 +93,7 @@ const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode;
   return <>{children}</>;
 };
 
-const HomeRedirect = () => {
+const RootRedirect = () => {
   const { isAuth, isLoading, user, hasMenuAccess } = useAuth();
 
   if (isLoading) {
@@ -117,13 +118,14 @@ const HomeRedirect = () => {
     return <Navigate to="/login" replace />;
   }
 
-  return <Home />;
+  return <Landing />;
 };
 
 const AppRoutes = () => {
   return (
     <Routes>
-      <Route path="/" element={<HomeRedirect />} />
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="/home" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/callback" element={<Callback />} />
       <Route
