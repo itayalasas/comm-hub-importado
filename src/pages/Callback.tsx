@@ -36,7 +36,11 @@ export const Callback = () => {
 
     console.log('=== CALLBACK DEBUG ===');
     console.log('Full URL:', window.location.href);
+    console.log('Hash:', window.location.hash);
+    console.log('Search:', window.location.search);
     console.log('Token present:', token ? 'YES' : 'NO');
+    console.log('Code present:', code ? 'YES' : 'NO');
+
     if (token) {
       console.log('Token length:', token.length);
       console.log('Token first 50 chars:', token.substring(0, 50));
@@ -45,7 +49,12 @@ export const Callback = () => {
       const tokenParts = token.split('.');
       console.log('Token parts:', tokenParts.length);
     }
-    console.log('Code:', code ? 'present' : 'null');
+
+    if (code) {
+      console.log('Code value:', code);
+      console.log('Code length:', code.length);
+      console.log('Code is UUID format:', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code));
+    }
 
     if (errorParam) {
       console.error('Error param received:', errorParam);
@@ -69,7 +78,10 @@ export const Callback = () => {
       return;
     }
 
-    console.log('Auth token found, processing...');
+    console.log('=== PROCESSING AUTH TOKEN ===');
+    console.log('Using token/code:', authToken);
+    console.log('Is JWT (starts with eyJ):', authToken.startsWith('eyJ'));
+    console.log('Will exchange code:', !authToken.startsWith('eyJ'));
 
     handleCallback(authToken)
       .then(() => {
