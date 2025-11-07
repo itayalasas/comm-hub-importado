@@ -233,13 +233,37 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         console.log('Request body:', JSON.stringify(requestBody, null, 2));
 
         console.log('Making fetch request...');
-        const tokenResponse = await fetch(configManager.authValidaToken, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        });
+        console.log('Fetch URL:', configManager.authValidaToken);
+        console.log('Fetch starting at:', new Date().toISOString());
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          console.error('=== FETCH TIMEOUT (20s) ===');
+          controller.abort();
+        }, 20000);
+
+        let tokenResponse;
+        try {
+          tokenResponse = await fetch(configManager.authValidaToken, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          console.log('Fetch completed at:', new Date().toISOString());
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            console.error('=== FETCH ABORTED - TIMEOUT ===');
+            throw new Error('La solicitud de autenticación tardó demasiado. Por favor verifica tu conexión e intenta de nuevo.');
+          }
+          console.error('=== FETCH ERROR ===');
+          console.error('Error:', fetchError);
+          throw new Error(`Error de red al intercambiar código: ${fetchError.message}`);
+        }
 
         console.log('Response status:', tokenResponse.status);
         console.log('Response ok:', tokenResponse.ok);

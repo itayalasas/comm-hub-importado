@@ -18,6 +18,16 @@ export const Callback = () => {
     hasProcessed.current = true;
     setProcessing(true);
 
+    // Safety timeout - if processing takes more than 30 seconds, redirect to login
+    const safetyTimeout = setTimeout(() => {
+      console.error('=== CALLBACK TIMEOUT ===');
+      console.error('Authentication processing took too long (>30s)');
+      setError('El proceso de autenticación tomó demasiado tiempo. Por favor intenta de nuevo.');
+      setTimeout(() => {
+        navigate('/login', { replace: true });
+      }, 2000);
+    }, 30000);
+
     let token = null;
     let code = null;
     let errorParam = null;
@@ -102,6 +112,9 @@ export const Callback = () => {
 
     handleCallback(authToken)
       .then(() => {
+        clearTimeout(safetyTimeout);
+        console.log('=== HANDLECALLBACK COMPLETED SUCCESSFULLY ===');
+
         const storedUser = localStorage.getItem('user');
         const storedSubscription = localStorage.getItem('subscription');
 
@@ -148,19 +161,21 @@ export const Callback = () => {
         navigate(redirectPath, { replace: true });
       })
       .catch((err) => {
-        console.error('Error in callback:', err);
+        clearTimeout(safetyTimeout);
+        console.error('=== ERROR IN CALLBACK ===');
+        console.error('Error:', err);
         console.error('Error details:', {
           message: err.message,
           stack: err.stack,
         });
-        setError('Error al procesar la autenticación.');
+        setError('Error al procesar la autenticación: ' + (err.message || 'Error desconocido'));
         setProcessing(false);
         setTimeout(() => {
           navigate('/login', { replace: true });
         }, 3000);
       })
       .finally(() => {
-        console.log('Callback processing completed');
+        console.log('=== CALLBACK PROCESSING FINALLY ===');
       });
   }, [handleCallback, navigate, processing]);
 
