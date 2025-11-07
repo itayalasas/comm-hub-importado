@@ -194,38 +194,61 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const handleCallback = async (tokenOrCode: string) => {
     try {
+      console.log('=== HANDLE CALLBACK START ===');
+      console.log('Token/Code received:', tokenOrCode.substring(0, 50) + '...');
+      console.log('Token/Code starts with eyJ:', tokenOrCode.startsWith('eyJ'));
+      console.log('Token/Code length:', tokenOrCode.length);
+      console.log('Config loaded:', configManager.isLoaded());
+
+      if (configManager.isLoaded()) {
+        console.log('Config values available:');
+        console.log('- Auth URL:', configManager.authUrl);
+        console.log('- Auth App ID:', configManager.authAppId);
+        console.log('- Auth Valida Token:', configManager.authValidaToken);
+      } else {
+        console.error('ConfigManager not loaded yet!');
+      }
+
       let accessToken = tokenOrCode;
       let authResponse = null;
 
-      console.log('=== HANDLE CALLBACK START ===');
-      console.log('Token/Code starts with eyJ:', tokenOrCode.startsWith('eyJ'));
-      console.log('Token/Code length:', tokenOrCode.length);
-
       if (!tokenOrCode.startsWith('eyJ')) {
+        console.log('=== CODE EXCHANGE PROCESS ===');
         console.log('Exchanging code for token...');
         console.log('Using AUTH_VALIDA_TOKEN:', configManager.authValidaToken);
         console.log('Code:', tokenOrCode);
         console.log('Application ID:', configManager.authAppId);
 
+        const requestBody = {
+          code: tokenOrCode,
+          application_id: configManager.authAppId,
+        };
+        console.log('Request body:', JSON.stringify(requestBody, null, 2));
+
+        console.log('Making fetch request...');
         const tokenResponse = await fetch(configManager.authValidaToken, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            code: tokenOrCode,
-            application_id: configManager.authAppId,
-          }),
+          body: JSON.stringify(requestBody),
         });
+
+        console.log('Response status:', tokenResponse.status);
+        console.log('Response ok:', tokenResponse.ok);
+        console.log('Response headers:', Object.fromEntries(tokenResponse.headers.entries()));
 
         if (!tokenResponse.ok) {
           const errorText = await tokenResponse.text();
-          console.error('Token exchange failed:', tokenResponse.status, errorText);
-          throw new Error('Failed to exchange code for token');
+          console.error('=== TOKEN EXCHANGE FAILED ===');
+          console.error('Status:', tokenResponse.status);
+          console.error('Error text:', errorText);
+          throw new Error(`Failed to exchange code for token: ${tokenResponse.status} - ${errorText}`);
         }
 
         authResponse = await tokenResponse.json();
-        console.log('Auth response received:', authResponse);
+        console.log('=== TOKEN EXCHANGE SUCCESS ===');
+        console.log('Auth response received:', JSON.stringify(authResponse, null, 2));
 
         accessToken = authResponse.access_token || authResponse.data?.access_token;
 
@@ -362,7 +385,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       localStorage.setItem('user', JSON.stringify(userInfo));
       setUser(userInfo);
     } catch (error) {
-      console.error('Error in handleCallback:', error);
+      console.error('=== ERROR IN HANDLECALLBACK ===');
+      console.error('Error:', error);
+      console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       throw error;
     }
   };
