@@ -57,7 +57,16 @@ class ConfigManager {
     if (!this.config) {
       throw new Error('Configuration not loaded. Call loadConfig() first.');
     }
-    return this.config.variables[key];
+
+    const value = this.config.variables[key];
+
+    if (!value && key === 'AUTH_VALIDA_TOKEN') {
+      const fallback = import.meta.env.AUTH_VALIDA_TOKEN || 'https://sfqtmnncgiqkveaoqckt.supabase.co/functions/v1/auth-exchange-code';
+      console.log(`[Config] Using fallback for ${key}:`, fallback);
+      return fallback;
+    }
+
+    return value;
   }
 
   get supabaseUrl(): string {
