@@ -215,8 +215,19 @@ export const Dashboard = () => {
       const responseTime = Date.now() - emailStart;
 
       if (emailResponse.ok) {
-        const emailData = await emailResponse.json();
-        console.log('Email health check response:', emailData);
+        const responseText = await emailResponse.text();
+        console.log('Email health check raw response:', responseText);
+
+        let emailData;
+        try {
+          emailData = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error('Failed to parse email health check response as JSON:', parseError);
+          console.error('Response was:', responseText.substring(0, 500));
+          throw new Error('Invalid JSON response from email health check');
+        }
+
+        console.log('Email health check parsed data:', emailData);
 
         if (emailData.status === 'operational' && emailData.configured) {
           healthChecks[2].status = 'operational';
@@ -263,8 +274,19 @@ export const Dashboard = () => {
       const responseTime = Date.now() - pdfStart;
 
       if (pdfResponse.ok) {
-        const pdfData = await pdfResponse.json();
-        console.log('PDF health check response:', pdfData);
+        const responseText = await pdfResponse.text();
+        console.log('PDF health check raw response:', responseText);
+
+        let pdfData;
+        try {
+          pdfData = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error('Failed to parse PDF health check response as JSON:', parseError);
+          console.error('Response was:', responseText.substring(0, 500));
+          throw new Error('Invalid JSON response from PDF health check');
+        }
+
+        console.log('PDF health check parsed data:', pdfData);
 
         if (pdfData.status === 'operational' || pdfData.status === 'healthy') {
           healthChecks[3].status = 'operational';
