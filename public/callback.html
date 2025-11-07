@@ -78,24 +78,28 @@
       console.log('Query params - Error:', error ? 'YES' : 'NO');
     }
 
-    if (code) {
-      console.log('Code found:', code);
-      console.log('Redirecting to React app with code...');
-      // Already in hash format, just go to the React route
-      window.location.href = `/callback#code=${encodeURIComponent(code)}`;
-    } else if (token) {
-      console.log('Token found, length:', token.length);
-      console.log('Redirecting to React app with token...');
-      window.location.href = `/callback#token=${encodeURIComponent(token)}`;
-    } else if (error) {
-      console.log('Error found:', error);
-      console.log('Redirecting to React app with error...');
-      window.location.href = `/callback#error=${encodeURIComponent(error)}`;
+    if (error) {
+      console.error('Error found:', error);
+      window.location.href = '/login';
+    } else if (code || token) {
+      const authValue = code || token;
+      console.log('Auth value found:', authValue);
+      console.log('Storing in sessionStorage and redirecting...');
+
+      // Store auth data in sessionStorage
+      sessionStorage.setItem('authCallback', JSON.stringify({
+        token: token,
+        code: code,
+        timestamp: Date.now()
+      }));
+
+      console.log('Redirecting to /auth-processing');
+      // Redirect to a different route to avoid loop
+      window.location.href = '/auth-processing';
     } else {
       console.error('No token, code, or error found in URL');
       console.log('Hash:', window.location.hash);
       console.log('Search:', window.location.search);
-      // Redirect to login if nothing found
       setTimeout(() => {
         console.log('Redirecting to login...');
         window.location.href = '/login';
