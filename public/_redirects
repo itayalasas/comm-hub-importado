@@ -1,1 +1,5 @@
+# Handle callback with query params using static HTML to avoid URI too long errors
+/callback?*  /callback.html  200
+
+# SPA fallback - all other routes go to index.html
 /*    /index.html   200
