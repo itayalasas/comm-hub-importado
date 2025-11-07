@@ -203,38 +203,41 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (!tokenOrCode.startsWith('eyJ')) {
         console.log('Exchanging code for token...');
-        const tokenResponse = await fetch(`${configManager.authUrl}/oauth/token`, {
+        console.log('Using AUTH_VALIDA_TOKEN:', configManager.authValidaToken);
+        console.log('Code:', tokenOrCode);
+        console.log('Application ID:', configManager.authAppId);
+
+        const tokenResponse = await fetch(configManager.authValidaToken, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${configManager.authApiKey}`,
           },
           body: JSON.stringify({
-            grant_type: 'authorization_code',
             code: tokenOrCode,
-            redirect_uri: configManager.redirectUri,
-            client_id: configManager.authAppId,
+            application_id: configManager.authAppId,
           }),
         });
 
         if (!tokenResponse.ok) {
           const errorText = await tokenResponse.text();
-          console.error('Token exchange failed:', errorText);
+          console.error('Token exchange failed:', tokenResponse.status, errorText);
           throw new Error('Failed to exchange code for token');
         }
 
         authResponse = await tokenResponse.json();
         console.log('Auth response received:', authResponse);
-        accessToken = authResponse.data?.access_token || authResponse.access_token;
 
-        const refreshToken = authResponse.data?.refresh_token || authResponse.refresh_token;
+        accessToken = authResponse.access_token || authResponse.data?.access_token;
+
+        const refreshToken = authResponse.refresh_token || authResponse.data?.refresh_token;
         if (refreshToken) {
           localStorage.setItem('refresh_token', refreshToken);
         }
 
-        if (authResponse.data?.subscription) {
-          localStorage.setItem('subscription', JSON.stringify(authResponse.data.subscription));
-          setSubscription(authResponse.data.subscription);
+        if (authResponse.subscription || authResponse.data?.subscription) {
+          const subscription = authResponse.subscription || authResponse.data.subscription;
+          localStorage.setItem('subscription', JSON.stringify(subscription));
+          setSubscription(subscription);
         }
       }
 

@@ -58,14 +58,14 @@
     console.log('Code present:', code ? 'YES' : 'NO');
     console.log('Error present:', error ? 'YES' : 'NO');
 
-    if (token) {
-      console.log('Token length:', token.length);
-      console.log('Redirecting with token in hash...');
-      // Redirect to the React app with token in hash fragment
-      window.location.href = `/callback#token=${encodeURIComponent(token)}`;
-    } else if (code) {
+    if (code) {
+      console.log('Code found:', code);
       console.log('Redirecting with code in hash...');
       window.location.href = `/callback#code=${encodeURIComponent(code)}`;
+    } else if (token) {
+      console.log('Token length:', token.length);
+      console.log('Redirecting with token in hash...');
+      window.location.href = `/callback#token=${encodeURIComponent(token)}`;
     } else if (error) {
       console.log('Redirecting with error in hash...');
       window.location.href = `/callback#error=${encodeURIComponent(error)}`;
