@@ -94,18 +94,28 @@ export const HTMLEditor = ({ value, onChange, onClose, variables }: HTMLEditorPr
 
 
   const modalContent = (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[300] p-4">
-      <div className="bg-slate-900 rounded-xl border border-slate-700 w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-800">
-          <div className="flex items-center space-x-3">
-            <Maximize2 className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-lg font-bold text-white">Editor HTML Avanzado</h2>
-          </div>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[300] p-2 sm:p-4">
+      <div className="bg-slate-900 rounded-lg sm:rounded-xl border border-slate-700 w-full h-full max-w-[98vw] sm:max-w-[95vw] max-h-[98vh] sm:max-h-[95vh] flex flex-col shadow-2xl">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 p-3 sm:p-4 border-b border-slate-700 bg-slate-800">
+          <div className="flex items-center justify-between sm:justify-start space-x-2 sm:space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <Maximize2 className="w-4 sm:w-5 h-4 sm:h-5 text-cyan-400" />
+              <h2 className="text-base sm:text-lg font-bold text-white">Editor HTML</h2>
+            </div>
 
-          <div className="flex items-center space-x-2">
             <button
               onClick={formatHTML}
-              className="flex items-center space-x-2 px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors text-sm"
+              className="flex sm:hidden items-center space-x-1 px-2 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors text-xs"
+              title="Formatear HTML"
+            >
+              <Wand2 className="w-3 h-3" />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={formatHTML}
+              className="hidden sm:flex items-center space-x-2 px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors text-sm"
               title="Formatear HTML"
             >
               <Wand2 className="w-4 h-4" />
@@ -115,7 +125,7 @@ export const HTMLEditor = ({ value, onChange, onClose, variables }: HTMLEditorPr
             <div className="flex bg-slate-700 rounded-lg p-1">
               <button
                 onClick={() => setViewMode('code')}
-                className={`flex items-center space-x-1 px-3 py-1.5 rounded text-sm transition-colors ${
+                className={`flex items-center justify-center px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm transition-colors ${
                   viewMode === 'code'
                     ? 'bg-cyan-500 text-white'
                     : 'text-slate-300 hover:text-white'
@@ -123,11 +133,11 @@ export const HTMLEditor = ({ value, onChange, onClose, variables }: HTMLEditorPr
                 title="Solo código"
               >
                 <Code className="w-4 h-4" />
-                <span>Código</span>
+                <span className="hidden sm:inline ml-1">Código</span>
               </button>
               <button
                 onClick={() => setViewMode('split')}
-                className={`flex items-center space-x-1 px-3 py-1.5 rounded text-sm transition-colors ${
+                className={`hidden md:flex items-center justify-center px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm transition-colors ${
                   viewMode === 'split'
                     ? 'bg-cyan-500 text-white'
                     : 'text-slate-300 hover:text-white'
@@ -135,11 +145,11 @@ export const HTMLEditor = ({ value, onChange, onClose, variables }: HTMLEditorPr
                 title="Vista dividida"
               >
                 <Split className="w-4 h-4" />
-                <span>Dividir</span>
+                <span className="hidden sm:inline ml-1">Dividir</span>
               </button>
               <button
                 onClick={() => setViewMode('preview')}
-                className={`flex items-center space-x-1 px-3 py-1.5 rounded text-sm transition-colors ${
+                className={`flex items-center justify-center px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm transition-colors ${
                   viewMode === 'preview'
                     ? 'bg-cyan-500 text-white'
                     : 'text-slate-300 hover:text-white'
@@ -147,13 +157,13 @@ export const HTMLEditor = ({ value, onChange, onClose, variables }: HTMLEditorPr
                 title="Solo vista previa"
               >
                 <Eye className="w-4 h-4" />
-                <span>Vista Previa</span>
+                <span className="hidden sm:inline ml-1">Vista</span>
               </button>
             </div>
 
             <button
               onClick={onClose}
-              className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+              className="p-1.5 sm:p-2 hover:bg-slate-700 rounded-lg transition-colors"
               title="Cerrar sin guardar"
             >
               <X className="w-5 h-5 text-slate-400" />
@@ -161,11 +171,11 @@ export const HTMLEditor = ({ value, onChange, onClose, variables }: HTMLEditorPr
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden flex">
+        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           {(viewMode === 'code' || viewMode === 'split') && (
-            <div className={`flex flex-col border-r border-slate-700 ${viewMode === 'split' ? 'w-1/2' : 'w-full'}`}>
-              <div className="bg-slate-800 px-4 py-2 border-b border-slate-700">
-                <h3 className="text-sm font-semibold text-slate-300 flex items-center space-x-2">
+            <div className={`flex flex-col border-slate-700 ${viewMode === 'split' ? 'md:w-1/2 md:border-r' : 'w-full'}`}>
+              <div className="bg-slate-800 px-3 sm:px-4 py-2 border-b border-slate-700">
+                <h3 className="text-xs sm:text-sm font-semibold text-slate-300 flex items-center space-x-2">
                   <Code className="w-4 h-4" />
                   <span>Código HTML</span>
                 </h3>

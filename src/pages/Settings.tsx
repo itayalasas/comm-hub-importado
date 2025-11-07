@@ -325,23 +325,23 @@ export const Settings = () => {
 
   return (
     <Layout currentPage="settings">
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-white">Configuración</h1>
-          <p className="text-slate-400 mt-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">Configuración</h1>
+          <p className="text-sm sm:text-base text-slate-400 mt-2">
             Gestiona tus aplicaciones, API keys y configuración de email
           </p>
         </div>
 
-        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
             <div className="flex items-center space-x-2">
               <Key className="w-5 h-5 text-cyan-400" />
-              <h3 className="text-lg font-semibold text-white">Aplicaciones y API Keys</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-white">Aplicaciones y API Keys</h3>
             </div>
             <button
               onClick={handleNewApplicationClick}
-              className="flex items-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />
               <span>Nueva Aplicación</span>
