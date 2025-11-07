@@ -24,7 +24,7 @@ const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode;
   }
 
   if (!isAuth) {
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (requiredMenu && !hasMenuAccess(requiredMenu)) {
@@ -92,7 +92,7 @@ const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode;
   return <>{children}</>;
 };
 
-const RootRedirect = () => {
+const DashboardRedirect = () => {
   const { isAuth, isLoading, user, hasMenuAccess } = useAuth();
 
   if (isLoading) {
@@ -101,6 +101,10 @@ const RootRedirect = () => {
         <div className="text-white">Cargando...</div>
       </div>
     );
+  }
+
+  if (!isAuth) {
+    return <Navigate to="/login" replace />;
   }
 
   if (isAuth && user) {
@@ -113,19 +117,19 @@ const RootRedirect = () => {
       }
     }
 
-    console.warn('⚠️ User has no menu access, redirecting to home');
-    return <Navigate to="/" replace />;
+    console.warn('⚠️ User has no menu access, redirecting to login');
+    return <Navigate to="/login" replace />;
   }
 
-  return <Landing />;
+  return <Navigate to="/login" replace />;
 };
 
 const AppRoutes = () => {
   return (
     <Routes>
-      <Route path="/" element={<RootRedirect />} />
-      <Route path="/home" element={<Home />} />
-      <Route path="/login" element={<RootRedirect />} />
+      <Route path="/" element={<Home />} />
+      <Route path="/login" element={<Landing />} />
+      <Route path="/app" element={<DashboardRedirect />} />
       <Route path="/callback" element={<Callback />} />
       <Route
         path="/dashboard"

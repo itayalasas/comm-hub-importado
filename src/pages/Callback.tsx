@@ -51,7 +51,7 @@ export const Callback = () => {
       console.error('Error param received:', errorParam);
       setError('Error al autenticar. Por favor intenta de nuevo.');
       setTimeout(() => {
-        navigate('/', { replace: true });
+        navigate('/login', { replace: true });
       }, 3000);
       return;
     }
@@ -64,7 +64,7 @@ export const Callback = () => {
       console.log('Search:', window.location.search);
       setError('No se recibió código de autenticación.');
       setTimeout(() => {
-        navigate('/', { replace: true });
+        navigate('/login', { replace: true });
       }, 3000);
       return;
     }
@@ -76,7 +76,7 @@ export const Callback = () => {
         const storedUser = localStorage.getItem('user');
         const storedSubscription = localStorage.getItem('subscription');
 
-        let redirectPath = '/';
+        let redirectPath = '/dashboard';
 
         if (storedUser) {
           const user = JSON.parse(storedUser);
@@ -122,7 +122,7 @@ export const Callback = () => {
         console.error('Error in callback:', err);
         setError('Error al procesar la autenticación.');
         setTimeout(() => {
-          navigate('/', { replace: true });
+          navigate('/login', { replace: true });
         }, 3000);
       });
   }, [handleCallback, navigate]);
