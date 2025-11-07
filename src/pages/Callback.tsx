@@ -6,32 +6,49 @@ export const Callback = () => {
   const { handleCallback } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
   const hasProcessed = useRef(false);
 
   useEffect(() => {
-    if (hasProcessed.current) {
-      console.log('Callback already processed, skipping...');
+    if (hasProcessed.current || processing) {
+      console.log('Callback already processed or processing, skipping...');
       return;
     }
 
     hasProcessed.current = true;
+    setProcessing(true);
 
     let token = null;
     let code = null;
     let errorParam = null;
 
+    console.log('=== CALLBACK COMPONENT LOADED ===');
+    console.log('Full URL:', window.location.href);
+    console.log('Hash:', window.location.hash);
+    console.log('Search:', window.location.search);
+
+    // First try hash params (priority, as most OAuth providers use this)
     if (window.location.hash) {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       token = hashParams.get('token');
       code = hashParams.get('code');
       errorParam = hashParams.get('error');
-      console.log('=== USING HASH PARAMS ===');
-    } else {
+
+      if (token || code || errorParam) {
+        console.log('=== USING HASH PARAMS ===');
+      }
+    }
+
+    // If nothing found in hash, try query params
+    if (!token && !code && !errorParam && window.location.search) {
       const params = new URLSearchParams(window.location.search);
       token = params.get('token');
       code = params.get('code');
       errorParam = params.get('error');
-      console.log('=== USING QUERY PARAMS ===');
+
+      if (token || code || errorParam) {
+        console.log('=== USING QUERY PARAMS ===');
+      }
     }
 
     console.log('=== CALLBACK DEBUG ===');
@@ -132,12 +149,20 @@ export const Callback = () => {
       })
       .catch((err) => {
         console.error('Error in callback:', err);
+        console.error('Error details:', {
+          message: err.message,
+          stack: err.stack,
+        });
         setError('Error al procesar la autenticación.');
+        setProcessing(false);
         setTimeout(() => {
           navigate('/login', { replace: true });
         }, 3000);
+      })
+      .finally(() => {
+        console.log('Callback processing completed');
       });
-  }, [handleCallback, navigate]);
+  }, [handleCallback, navigate, processing]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
