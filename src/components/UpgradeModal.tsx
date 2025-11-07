@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { X, Check, Zap, TrendingUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { AvailablePlan } from '../contexts/AuthContext';
@@ -71,7 +72,7 @@ export const UpgradeModal = ({
     return feature?.value || null;
   };
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200" style={{ margin: 0, left: 0, right: 0, top: 0, bottom: 0 }}>
       <div className="relative w-full max-w-5xl max-h-[90vh] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-cyan-500/10 via-transparent to-transparent pointer-events-none" />
@@ -208,4 +209,9 @@ export const UpgradeModal = ({
       </div>
     </div>
   );
+
+  const modalRoot = document.getElementById('modal-root');
+  if (!modalRoot) return null;
+
+  return createPortal(modalContent, modalRoot);
 };
