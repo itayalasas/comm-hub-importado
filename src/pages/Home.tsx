@@ -24,7 +24,7 @@ export const Home = () => {
               </div>
             </div>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/login')}
               className="px-6 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-cyan-500/30 transition-all hover:scale-105"
             >
               Inicia una prueba
@@ -47,7 +47,7 @@ export const Home = () => {
               Plataforma completa para gestionar emails, templates y análisis de tus comunicaciones empresariales desde un solo lugar
             </p>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/login')}
               className="group inline-flex items-center space-x-3 px-8 py-4 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-semibold text-lg hover:shadow-xl hover:shadow-cyan-500/30 transition-all hover:scale-105"
             >
               <span>Comienza ahora</span>
@@ -125,7 +125,7 @@ export const Home = () => {
               Únete a empresas que ya confían en CommHub para gestionar sus comunicaciones de forma profesional y eficiente
             </p>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/login')}
               className="group inline-flex items-center space-x-3 px-8 py-4 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-semibold text-lg hover:shadow-xl hover:shadow-cyan-500/30 transition-all hover:scale-105"
             >
               <span>Inicia tu prueba gratuita</span>
