@@ -33,7 +33,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
     return appFeature ? parseInt(appFeature.value) : 0;
   };
 
-  const modalContent = (
+  const modalContent = !showUpgradeModal && (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" style={{ margin: 0, left: 0, right: 0 }}>
       <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-6 flex items-center justify-between">
@@ -173,7 +173,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
 
   return (
     <>
-      {createPortal(modalContent, modalRoot)}
+      {modalContent && createPortal(modalContent, modalRoot)}
       <UpgradeModal
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
