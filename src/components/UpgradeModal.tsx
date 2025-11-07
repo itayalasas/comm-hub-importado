@@ -73,38 +73,38 @@ export const UpgradeModal = ({
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200" style={{ margin: 0, left: 0, right: 0, top: 0, bottom: 0 }}>
-      <div className="relative w-full max-w-5xl max-h-[90vh] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200" style={{ margin: 0, left: 0, right: 0, top: 0, bottom: 0 }}>
+      <div className="relative w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] bg-slate-900 rounded-xl sm:rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-cyan-500/10 via-transparent to-transparent pointer-events-none" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-cyan-600/5 via-transparent to-transparent pointer-events-none" />
 
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition-all z-20 group border border-slate-700"
+          className="absolute top-2 right-2 sm:top-4 sm:right-4 p-2 sm:p-2.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition-all z-20 group border border-slate-700"
         >
           <X className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" />
         </button>
 
-        <div className="relative pt-8 px-8 pb-6 flex-shrink-0">
-          <div className="flex justify-center mb-6">
-            <div className="w-20 h-20 bg-gradient-to-br from-cyan-500 to-cyan-700 rounded-full shadow-2xl shadow-cyan-500/30 flex items-center justify-center border-4 border-slate-800 animate-in zoom-in duration-300">
-              <TrendingUp className="w-10 h-10 text-white drop-shadow-lg" />
+        <div className="relative pt-6 sm:pt-8 px-4 sm:px-8 pb-4 sm:pb-6 flex-shrink-0">
+          <div className="flex justify-center mb-4 sm:mb-6">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-cyan-500 to-cyan-700 rounded-full shadow-2xl shadow-cyan-500/30 flex items-center justify-center border-4 border-slate-800 animate-in zoom-in duration-300">
+              <TrendingUp className="w-8 h-8 sm:w-10 sm:h-10 text-white drop-shadow-lg" />
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-white text-center mb-2 tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white text-center mb-2 tracking-tight">
             Mejora tu Plan
           </h2>
-          <p className="text-slate-200 text-center mb-1">
+          <p className="text-sm sm:text-base text-slate-200 text-center mb-1">
             Tu plan actual incluye <span className="font-bold text-cyan-400">{currentLimit}</span> {featureName}
           </p>
-          <p className="text-slate-400 text-center text-sm mb-6">
+          <p className="text-xs sm:text-sm text-slate-400 text-center mb-4 sm:mb-6">
             Desbloquea más capacidades actualizando a un plan superior
           </p>
         </div>
 
-        <div className="relative flex-1 overflow-y-auto px-8 pb-8 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800/50">
+        <div className="relative flex-1 overflow-y-auto px-4 sm:px-8 pb-4 sm:pb-8 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800/50">
           {availablePlans.length > 0 ? (
-            <div className="grid md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               {availablePlans.map((plan) => {
                 const featureValue = getFeatureValue(plan, featureCode);
 
