@@ -43,37 +43,61 @@
   <script>
     // Immediately capture the full URL before any redirects
     const fullUrl = window.location.href;
-    const urlObj = new URL(fullUrl);
 
     console.log('=== CALLBACK HTML HANDLER ===');
     console.log('Full URL:', fullUrl);
     console.log('URL length:', fullUrl.length);
 
-    // Extract token or code from query parameters
-    const token = urlObj.searchParams.get('token');
-    const code = urlObj.searchParams.get('code');
-    const error = urlObj.searchParams.get('error');
+    let token = null;
+    let code = null;
+    let error = null;
 
-    console.log('Token present:', token ? 'YES' : 'NO');
-    console.log('Code present:', code ? 'YES' : 'NO');
-    console.log('Error present:', error ? 'YES' : 'NO');
+    // First check hash parameters (priority, as OAuth providers often use hash)
+    if (window.location.hash) {
+      console.log('Hash present:', window.location.hash);
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      token = hashParams.get('token');
+      code = hashParams.get('code');
+      error = hashParams.get('error');
+
+      console.log('Hash params - Token:', token ? 'YES' : 'NO');
+      console.log('Hash params - Code:', code ? 'YES' : 'NO');
+      console.log('Hash params - Error:', error ? 'YES' : 'NO');
+    }
+
+    // If nothing in hash, check query parameters
+    if (!token && !code && !error && window.location.search) {
+      console.log('Search present:', window.location.search);
+      const urlObj = new URL(fullUrl);
+      token = urlObj.searchParams.get('token');
+      code = urlObj.searchParams.get('code');
+      error = urlObj.searchParams.get('error');
+
+      console.log('Query params - Token:', token ? 'YES' : 'NO');
+      console.log('Query params - Code:', code ? 'YES' : 'NO');
+      console.log('Query params - Error:', error ? 'YES' : 'NO');
+    }
 
     if (code) {
       console.log('Code found:', code);
-      console.log('Redirecting with code in hash...');
+      console.log('Redirecting to React app with code...');
+      // Already in hash format, just go to the React route
       window.location.href = `/callback#code=${encodeURIComponent(code)}`;
     } else if (token) {
-      console.log('Token length:', token.length);
-      console.log('Redirecting with token in hash...');
+      console.log('Token found, length:', token.length);
+      console.log('Redirecting to React app with token...');
       window.location.href = `/callback#token=${encodeURIComponent(token)}`;
     } else if (error) {
-      console.log('Redirecting with error in hash...');
+      console.log('Error found:', error);
+      console.log('Redirecting to React app with error...');
       window.location.href = `/callback#error=${encodeURIComponent(error)}`;
     } else {
       console.error('No token, code, or error found in URL');
-      console.log('Query params:', Array.from(urlObj.searchParams.entries()));
+      console.log('Hash:', window.location.hash);
+      console.log('Search:', window.location.search);
       // Redirect to login if nothing found
       setTimeout(() => {
+        console.log('Redirecting to login...');
         window.location.href = '/login';
       }, 2000);
     }
