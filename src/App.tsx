@@ -4,6 +4,7 @@ import { ToastContainer } from './components/ToastContainer';
 import { Landing } from './pages/Landing';
 import { Home } from './pages/Home';
 import { Callback } from './pages/Callback';
+import { AuthProcessing } from './pages/AuthProcessing';
 import { Dashboard } from './pages/Dashboard';
 import { Templates } from './pages/Templates';
 import { Statistics } from './pages/Statistics';
@@ -131,6 +132,7 @@ const AppRoutes = () => {
       <Route path="/login" element={<Landing />} />
       <Route path="/app" element={<DashboardRedirect />} />
       <Route path="/callback" element={<Callback />} />
+      <Route path="/auth-processing" element={<AuthProcessing />} />
       <Route
         path="/dashboard"
         element={
