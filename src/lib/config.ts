@@ -11,6 +11,7 @@ interface EnvConfig {
     VITE_AUTH_APP_ID: string;
     VITE_AUTH_URL: string;
     VITE_REDIRECT_URI: string;
+    AUTH_VALIDA_TOKEN: string;
   };
   updated_at: string;
 }
@@ -81,6 +82,10 @@ class ConfigManager {
 
   get redirectUri(): string {
     return this.getVariable('VITE_REDIRECT_URI');
+  }
+
+  get authValidaToken(): string {
+    return this.getVariable('AUTH_VALIDA_TOKEN');
   }
 
   isLoaded(): boolean {
