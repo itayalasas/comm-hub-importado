@@ -6,9 +6,16 @@ export const AuthProcessing = () => {
   const { handleCallback } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     const processAuth = async () => {
+      if (isProcessing) {
+        console.log('Already processing auth, skipping...');
+        return;
+      }
+
+      setIsProcessing(true);
       console.log('=== AUTH PROCESSING PAGE LOADED ===');
 
       const authCallbackData = sessionStorage.getItem('authCallback');
@@ -89,7 +96,7 @@ export const AuthProcessing = () => {
     };
 
     processAuth();
-  }, [handleCallback, navigate]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">

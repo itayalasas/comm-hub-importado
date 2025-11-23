@@ -39,7 +39,8 @@ export const useSubscriptionLimits = () => {
   };
 
   const getFeatureLimit = (featureCode: string): number | null => {
-    if (!subscription?.entitlements?.features) return null;
+    if (!subscription?.entitlements) return null;
+    if (!subscription.entitlements.features) return null;
 
     const feature = subscription.entitlements.features.find(
       (f) => f.code === featureCode
@@ -99,7 +100,8 @@ export const useSubscriptionLimits = () => {
   };
 
   const hasFeature = (featureCode: string): boolean => {
-    if (!subscription?.entitlements?.features) return false;
+    if (!subscription?.entitlements) return false;
+    if (!subscription.entitlements.features) return false;
 
     const feature = subscription.entitlements.features.find(
       (f) => f.code === featureCode
