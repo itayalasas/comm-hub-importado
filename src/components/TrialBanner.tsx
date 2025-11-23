@@ -25,6 +25,8 @@ export const TrialBanner = () => {
 
   const getCurrentLimit = () => {
     if (!subscription) return 0;
+    if (!subscription.entitlements) return 0;
+    if (!subscription.entitlements.features) return 0;
     const appFeature = subscription.entitlements.features.find(
       f => f.code === 'max_applications'
     );
