@@ -60,36 +60,48 @@ Deno.serve(async (req: Request) => {
 
     application = app;
 
-    const { template_name, recipient_email, data, base_data } = requestData;
-    const emailData = data || base_data || {};
-
-    if (!template_name || !recipient_email) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Missing required fields: template_name, recipient_email' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const { data: template, error: templateError } = await supabase
-      .from('communication_templates')
-      .select('*')
-      .eq('name', template_name)
-      .eq('application_id', application.id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (templateError || !template) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Template not found or inactive' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const orderId = requestData.order_id;
     const waitForInvoice = requestData.wait_for_invoice;
+    const recipients = requestData.recipients;
+
+    let recipientsList: Array<{ recipient_email: string; template_name: string; data: any }> = [];
+
+    if (recipients && Array.isArray(recipients) && recipients.length > 0) {
+      console.log('[pending-communication] Multiple recipients mode:', recipients.length);
+      recipientsList = recipients.map((r: any) => ({
+        recipient_email: r.recipient_email,
+        template_name: r.template_name,
+        data: { ...(requestData.data || requestData.base_data || {}), ...(r.data || {}) }
+      }));
+    } else {
+      const { template_name, recipient_email, data, base_data } = requestData;
+      const emailData = data || base_data || {};
+
+      if (!template_name || !recipient_email) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Missing required fields: template_name, recipient_email or recipients array' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      recipientsList = [{
+        recipient_email,
+        template_name,
+        data: emailData
+      }];
+    }
+
+    for (const recipient of recipientsList) {
+      if (!recipient.recipient_email || !recipient.template_name) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Each recipient must have recipient_email and template_name' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     if (orderId && waitForInvoice) {
-      console.log('[pending-communication] wait_for_invoice=true, creating parent log');
+      console.log('[pending-communication] wait_for_invoice=true, processing', recipientsList.length, 'recipients');
 
       function renderTemplate(template: string, data: Record<string, any>): string {
         let result = template;
@@ -106,61 +118,79 @@ Deno.serve(async (req: Request) => {
         return result;
       }
 
-      const emailDataWithOrderId = { ...emailData, order_id: orderId };
-      const renderedSubject = requestData.subject || renderTemplate(template.subject || 'Pending Invoice', emailDataWithOrderId);
+      const createdRecipients: any[] = [];
 
-      const { data: parentLogData, error: parentLogError } = await supabase
-        .from('email_logs')
-        .insert({
-          application_id: application.id,
-          template_id: template.id,
-          recipient_email,
-          subject: renderedSubject,
-          status: 'pending',
-          communication_type: 'email_with_pdf',
-          pdf_generated: false,
-          metadata: {
-            action: 'email_queued',
-            message: 'Email queued, waiting for invoice PDF',
+      for (const recipient of recipientsList) {
+        const { data: template, error: templateError } = await supabase
+          .from('communication_templates')
+          .select('*')
+          .eq('name', recipient.template_name)
+          .eq('application_id', application.id)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (templateError || !template) {
+          console.error('[pending-communication] Template not found:', recipient.template_name);
+          continue;
+        }
+
+        const emailDataWithOrderId = { ...recipient.data, order_id: orderId };
+        const renderedSubject = requestData.subject || renderTemplate(template.subject || 'Pending Invoice', emailDataWithOrderId);
+
+        const { data: parentLogData, error: parentLogError } = await supabase
+          .from('email_logs')
+          .insert({
+            application_id: application.id,
+            template_id: template.id,
+            recipient_email: recipient.recipient_email,
+            subject: renderedSubject,
+            status: 'pending',
+            communication_type: 'email_with_pdf',
+            pdf_generated: false,
+            metadata: {
+              action: 'email_queued',
+              message: 'Email queued, waiting for invoice PDF',
+              order_id: orderId,
+              wait_for_invoice: true,
+              template_name: recipient.template_name,
+            },
+          })
+          .select()
+          .single();
+
+        if (parentLogError || !parentLogData) {
+          console.error('[pending-communication] Failed to create parent log for', recipient.recipient_email, ':', parentLogError);
+          continue;
+        }
+
+        const { data: pendingComm, error: pendingError } = await supabase
+          .from('pending_communications')
+          .insert({
+            application_id: application.id,
+            template_name: recipient.template_name,
+            recipient_email: recipient.recipient_email,
+            base_data: emailDataWithOrderId,
+            pending_fields: ['invoice_pdf'],
+            external_system: 'email_system',
+            external_reference_id: orderId,
             order_id: orderId,
-            wait_for_invoice: true,
-            template_name,
-          },
-        })
-        .select()
-        .single();
+            parent_log_id: parentLogData.id,
+            status: 'waiting_data',
+          })
+          .select()
+          .single();
 
-      if (parentLogError || !parentLogData) {
-        console.error('[pending-communication] Failed to create parent log:', parentLogError);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Failed to create email log', details: parentLogError?.message }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+        if (pendingError || !pendingComm) {
+          console.error('[pending-communication] Failed to create pending communication for', recipient.recipient_email, ':', pendingError);
+          continue;
+        }
 
-      const { data: pendingComm, error: pendingError } = await supabase
-        .from('pending_communications')
-        .insert({
-          application_id: application.id,
-          template_name: template_name,
-          recipient_email,
-          base_data: emailDataWithOrderId,
-          pending_fields: ['invoice_pdf'],
-          external_system: 'email_system',
-          external_reference_id: orderId,
-          order_id: orderId,
+        createdRecipients.push({
+          recipient_email: recipient.recipient_email,
+          template_name: recipient.template_name,
           parent_log_id: parentLogData.id,
-          status: 'waiting_data',
-        })
-        .select()
-        .single();
-
-      if (pendingError || !pendingComm) {
-        console.error('[pending-communication] Failed to create pending communication:', pendingError);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Failed to create pending communication', details: pendingError?.message }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+          pending_communication_id: pendingComm.id
+        });
       }
 
       console.log('[pending-communication] Checking for existing PDF for order_id:', orderId);
@@ -208,94 +238,138 @@ Deno.serve(async (req: Request) => {
         return new Response(
           JSON.stringify({
             success: true,
-            message: 'Email queued, waiting for invoice PDF',
-            log_id: parentLogData.id,
-            pending_communication_id: pendingComm.id,
+            message: `Emails queued for ${createdRecipients.length} recipients, waiting for invoice PDF`,
+            recipients: createdRecipients,
             status: 'queued',
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      console.log('[pending-communication] ✅ PDF exists! Attaching...');
+      console.log('[pending-communication] ✅ PDF exists! Attaching to all', createdRecipients.length, 'recipients...');
 
-      await supabase
-        .from('email_logs')
-        .update({ parent_log_id: parentLogData.id })
-        .eq('id', pdfEmailLogId);
+      for (const recipientInfo of createdRecipients) {
+        await supabase
+          .from('email_logs')
+          .update({ parent_log_id: recipientInfo.parent_log_id })
+          .eq('id', pdfEmailLogId);
 
-      await supabase
-        .from('pending_communications')
-        .update({
-          completed_data: {
-            pdf_attachment: {
-              filename: existingPdf.filename,
-              content: existingPdf.pdf_base64,
-              encoding: 'base64',
+        await supabase
+          .from('pending_communications')
+          .update({
+            completed_data: {
+              pdf_attachment: {
+                filename: existingPdf.filename,
+                content: existingPdf.pdf_base64,
+                encoding: 'base64',
+              },
+              pdf_generation_log_id: pdfEmailLogId,
+              pdf_email_log_id: pdfEmailLogId,
+              pdf_filename: existingPdf.filename,
+              pdf_size_bytes: existingPdf.size_bytes,
+              initial_log_id: recipientInfo.parent_log_id,
             },
-            pdf_generation_log_id: pdfEmailLogId,
-            pdf_email_log_id: pdfEmailLogId,
-            pdf_filename: existingPdf.filename,
-            pdf_size_bytes: existingPdf.size_bytes,
-            initial_log_id: parentLogData.id,
-          },
-          status: 'pdf_generated',
-          pdf_generated: true,
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', pendingComm.id);
+            status: 'pdf_generated',
+            pdf_generated: true,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', recipientInfo.pending_communication_id);
+      }
 
-      console.log('[pending-communication] Triggering email send...');
+      console.log('[pending-communication] Triggering email send for all recipients...');
 
       const completeUrl = `${supabaseUrl}/functions/v1/complete-pending-communication`;
-      const completeResponse = await fetch(completeUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseKey}`,
-          'x-api-key': apiKey,
-        },
-        body: JSON.stringify({ pending_communication_id: pendingComm.id }),
-      });
+      const sentResults: any[] = [];
 
-      const completeResult = await completeResponse.json();
+      for (const recipientInfo of createdRecipients) {
+        const completeResponse = await fetch(completeUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+            'x-api-key': apiKey,
+          },
+          body: JSON.stringify({ pending_communication_id: recipientInfo.pending_communication_id }),
+        });
 
-      if (completeResult.success) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            message: 'Email sent with PDF',
-            log_id: parentLogData.id,
-            pending_communication_id: pendingComm.id,
-            status: 'sent',
-          }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } else {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Failed to send email',
-            details: completeResult,
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        const completeResult = await completeResponse.json();
+        sentResults.push({
+          recipient: recipientInfo.recipient_email,
+          success: completeResult.success,
+          log_id: completeResult.log_id
+        });
       }
+
+      const allSuccess = sentResults.every(r => r.success);
+
+      return new Response(
+        JSON.stringify({
+          success: allSuccess,
+          message: allSuccess
+            ? `Emails sent successfully to ${createdRecipients.length} recipients`
+            : 'Some emails failed to send',
+          recipients: sentResults,
+          status: 'sent',
+        }),
+        { status: allSuccess ? 200 : 207, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const sendEmailUrl = `${supabaseUrl}/functions/v1/send-email`;
-    const emailResponse = await fetch(sendEmailUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
-      body: JSON.stringify({ template_name, recipient_email, data: emailData }),
-    });
 
-    const emailResult = await emailResponse.json();
+    if (recipientsList.length > 1) {
+      console.log('[pending-communication] Sending direct emails to', recipientsList.length, 'recipients');
+      const sendResults: any[] = [];
 
-    return new Response(
-      JSON.stringify(emailResult),
-      { status: emailResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+      for (const recipient of recipientsList) {
+        const emailResponse = await fetch(sendEmailUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+          body: JSON.stringify({
+            template_name: recipient.template_name,
+            recipient_email: recipient.recipient_email,
+            data: recipient.data
+          }),
+        });
+
+        const emailResult = await emailResponse.json();
+        sendResults.push({
+          recipient: recipient.recipient_email,
+          success: emailResult.success,
+          log_id: emailResult.log_id
+        });
+      }
+
+      const allSuccess = sendResults.every(r => r.success);
+
+      return new Response(
+        JSON.stringify({
+          success: allSuccess,
+          message: allSuccess
+            ? `Emails sent successfully to ${recipientsList.length} recipients`
+            : 'Some emails failed to send',
+          recipients: sendResults,
+        }),
+        { status: allSuccess ? 200 : 207, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } else {
+      const emailResponse = await fetch(sendEmailUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+        body: JSON.stringify({
+          template_name: recipientsList[0].template_name,
+          recipient_email: recipientsList[0].recipient_email,
+          data: recipientsList[0].data
+        }),
+      });
+
+      const emailResult = await emailResponse.json();
+
+      return new Response(
+        JSON.stringify(emailResult),
+        { status: emailResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
   } catch (error: any) {
     console.error('Error:', error);
     return new Response(
