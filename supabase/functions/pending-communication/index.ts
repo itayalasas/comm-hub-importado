@@ -85,7 +85,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const orderId = requestData.order_id;
+    const orderId = requestData.order_id || requestData.invoice_id;
     const waitForInvoice = requestData.wait_for_invoice;
 
     if (orderId && waitForInvoice) {
