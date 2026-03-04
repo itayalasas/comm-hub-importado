@@ -171,8 +171,21 @@ export const Dashboard = () => {
       { name: 'PDF Generator', status: 'down', responseTime: 0, message: '' },
     ];
 
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const parseFunctionData = (rawData: unknown) => {
+      if (rawData && typeof rawData === 'object') {
+        return rawData as Record<string, any>;
+      }
+
+      if (typeof rawData === 'string') {
+        try {
+          return JSON.parse(rawData) as Record<string, any>;
+        } catch {
+          throw new Error('Respuesta inválida del health check');
+        }
+      }
+
+      throw new Error('Respuesta vacía del health check');
+    };
 
     try {
       const start = Date.now();
@@ -200,56 +213,33 @@ export const Dashboard = () => {
 
     try {
       const emailStart = Date.now();
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-      const emailResponse = await fetch(`${supabaseUrl}/functions/v1/health-check-email`, {
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal,
+      const { data, error } = await supabase.functions.invoke('health-check-email', {
+        method: 'GET',
       });
-
-      clearTimeout(timeoutId);
       const responseTime = Date.now() - emailStart;
 
-      if (emailResponse.ok) {
-        const responseText = await emailResponse.text();
-        console.log('Email health check raw response:', responseText);
-
-        let emailData;
-        try {
-          emailData = JSON.parse(responseText);
-        } catch (parseError) {
-          console.error('Failed to parse email health check response as JSON:', parseError);
-          console.error('Response was:', responseText.substring(0, 500));
-          throw new Error('Invalid JSON response from email health check');
-        }
-
-        console.log('Email health check parsed data:', emailData);
-
-        if (emailData.status === 'operational' && emailData.configured) {
-          healthChecks[2].status = 'operational';
-          healthChecks[2].message = `${emailData.provider?.toUpperCase() || 'Email'} configurado`;
-        } else if (emailData.status === 'operational' && !emailData.configured) {
-          healthChecks[2].status = 'unconfigured';
-          healthChecks[2].message = 'No configurado';
-        } else if (emailData.status === 'down') {
-          healthChecks[2].status = 'down';
-          healthChecks[2].message = emailData.error || 'Servicio caído';
-        } else {
-          healthChecks[2].status = 'degraded';
-          healthChecks[2].message = 'Degradado';
-        }
-
-        healthChecks[2].responseTime = emailData.responseTime || responseTime;
-      } else {
-        console.error('Email health check failed with status:', emailResponse.status);
-        healthChecks[2].status = 'down';
-        healthChecks[2].responseTime = responseTime;
-        healthChecks[2].message = 'Error de conexión';
+      if (error) {
+        throw new Error(error.message || 'Error de conexión');
       }
+
+      const emailData = parseFunctionData(data);
+      console.log('Email health check parsed data:', emailData);
+
+      if (emailData.status === 'operational' && emailData.configured) {
+        healthChecks[2].status = 'operational';
+        healthChecks[2].message = `${emailData.provider?.toUpperCase() || 'Email'} configurado`;
+      } else if (emailData.status === 'operational' && !emailData.configured) {
+        healthChecks[2].status = 'unconfigured';
+        healthChecks[2].message = 'No configurado';
+      } else if (emailData.status === 'down') {
+        healthChecks[2].status = 'down';
+        healthChecks[2].message = emailData.error || 'Servicio caído';
+      } else {
+        healthChecks[2].status = 'degraded';
+        healthChecks[2].message = 'Degradado';
+      }
+
+      healthChecks[2].responseTime = emailData.responseTime || responseTime;
     } catch (err) {
       console.error('Email service health check failed:', err);
       healthChecks[2].status = 'down';
@@ -259,51 +249,28 @@ export const Dashboard = () => {
 
     try {
       const pdfStart = Date.now();
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-      const pdfResponse = await fetch(`${supabaseUrl}/functions/v1/health-check-pdf`, {
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal,
+      const { data, error } = await supabase.functions.invoke('health-check-pdf', {
+        method: 'GET',
       });
-
-      clearTimeout(timeoutId);
       const responseTime = Date.now() - pdfStart;
 
-      if (pdfResponse.ok) {
-        const responseText = await pdfResponse.text();
-        console.log('PDF health check raw response:', responseText);
-
-        let pdfData;
-        try {
-          pdfData = JSON.parse(responseText);
-        } catch (parseError) {
-          console.error('Failed to parse PDF health check response as JSON:', parseError);
-          console.error('Response was:', responseText.substring(0, 500));
-          throw new Error('Invalid JSON response from PDF health check');
-        }
-
-        console.log('PDF health check parsed data:', pdfData);
-
-        if (pdfData.status === 'operational' || pdfData.status === 'healthy') {
-          healthChecks[3].status = 'operational';
-        } else if (pdfData.status === 'down') {
-          healthChecks[3].status = 'down';
-          healthChecks[3].message = pdfData.error || 'Servicio caído';
-        } else {
-          healthChecks[3].status = 'degraded';
-        }
-
-        healthChecks[3].responseTime = pdfData.responseTime || responseTime;
-      } else {
-        console.error('PDF health check failed with status:', pdfResponse.status);
-        healthChecks[3].status = 'down';
-        healthChecks[3].responseTime = responseTime;
-        healthChecks[3].message = 'Error de conexión';
+      if (error) {
+        throw new Error(error.message || 'Error de conexión');
       }
+
+      const pdfData = parseFunctionData(data);
+      console.log('PDF health check parsed data:', pdfData);
+
+      if (pdfData.status === 'operational' || pdfData.status === 'healthy') {
+        healthChecks[3].status = 'operational';
+      } else if (pdfData.status === 'down') {
+        healthChecks[3].status = 'down';
+        healthChecks[3].message = pdfData.error || 'Servicio caído';
+      } else {
+        healthChecks[3].status = 'degraded';
+      }
+
+      healthChecks[3].responseTime = pdfData.responseTime || responseTime;
     } catch (err) {
       console.error('PDF service health check failed:', err);
       healthChecks[3].status = 'down';
