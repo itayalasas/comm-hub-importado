@@ -108,6 +108,13 @@ Deno.serve(async (req: Request) => {
 
       const emailDataWithOrderId = { ...emailData, order_id: orderId };
       const renderedSubject = requestData.subject || renderTemplate(template.subject || 'Pending Invoice', emailDataWithOrderId);
+      const parentEmailPayload = {
+        recipient_email,
+        subject: renderedSubject,
+        template_name,
+        order_id: orderId,
+        has_pdf_attachment: false,
+      };
 
       const { data: parentLogData, error: parentLogError } = await supabase
         .from('email_logs')
@@ -122,6 +129,15 @@ Deno.serve(async (req: Request) => {
           metadata: {
             action: 'email_queued',
             message: 'Email queued, waiting for invoice PDF',
+            email_payload: parentEmailPayload,
+            request_payload: {
+              template_name,
+              recipient_email,
+              subject: renderedSubject,
+              data: emailDataWithOrderId,
+              order_id: orderId,
+              wait_for_invoice: true,
+            },
             order_id: orderId,
             wait_for_invoice: true,
             template_name,
@@ -258,7 +274,14 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({ pending_communication_id: pendingComm.id }),
       });
 
-      const completeResult = await completeResponse.json();
+      const completeResponseText = await completeResponse.text();
+      let completeResult: any;
+      try {
+        completeResult = completeResponseText ? JSON.parse(completeResponseText) : {};
+      } catch {
+        console.error('[pending-communication] Invalid JSON from complete-pending-communication:', completeResponseText.slice(0, 300));
+        throw new Error(`Invalid JSON response from complete-pending-communication (${completeResponse.status})`);
+      }
 
       if (completeResult.success) {
         return new Response(
@@ -290,7 +313,21 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({ template_name, recipient_email, data: emailData }),
     });
 
-    const emailResult = await emailResponse.json();
+    const emailResponseText = await emailResponse.text();
+    let emailResult: any;
+    try {
+      emailResult = emailResponseText ? JSON.parse(emailResponseText) : {};
+    } catch {
+      console.error('[pending-communication] Invalid JSON from send-email:', emailResponseText.slice(0, 300));
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Invalid response from send-email',
+          details: `Status ${emailResponse.status}`,
+        }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     return new Response(
       JSON.stringify(emailResult),

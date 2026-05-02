@@ -1,5 +1,7 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 import { renderTemplate } from './_shared/template-engine.ts';
+import { renderHtmlToPdfBase64 } from './_shared/pdf-renderer.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -63,9 +65,12 @@ async function convertQrUrlsToBase64(data: any): Promise<any> {
         if (value.startsWith('data:image')) {
           console.log('[generate-pdf] Value is already a base64 image, keeping as-is');
           result[key] = value;
+          result[`${key}_qr`] = value;
         } else {
           console.log('[generate-pdf] Generating QR code from text/URL for key:', key, '- value:', value.substring(0, 50));
-          result[key] = await generateQrCodeFromText(value);
+          const qrBase64 = await generateQrCodeFromText(value);
+          result[key] = qrBase64;
+          result[`${key}_qr`] = qrBase64;
         }
       } else {
         result[key] = value;
@@ -80,61 +85,6 @@ async function convertQrUrlsToBase64(data: any): Promise<any> {
   return result;
 }
 
-async function htmlToPdfBase64(html: string): Promise<string> {
-  const pdfshiftApiKey = Deno.env.get('PDFSHIFT_API_KEY');
-  const pdfshiftApiUrl = Deno.env.get('PDFSHIFT_API_URL') || 'https://api.pdfshift.io/v3/convert/pdf';
-
-  if (!pdfshiftApiKey) {
-    console.error('[generate-pdf] PDFSHIFT_API_KEY not configured');
-    throw new Error('PDFSHIFT_API_KEY environment variable is not set. Please configure it in Supabase Edge Functions secrets.');
-  }
-
-  console.log('[generate-pdf] Calling PDFShift API...');
-  console.log('[generate-pdf] HTML length:', html.length);
-
-  const credentials = btoa(`api:${pdfshiftApiKey}`);
-
-  const response = await fetch(pdfshiftApiUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source: html,
-      landscape: false,
-      use_print: false,
-     "sandbox": true
-
-    }),
-  });
-
-  console.log('[generate-pdf] PDFShift response status:', response.status);
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('[generate-pdf] PDFShift API error:', errorText);
-    throw new Error(`PDFShift API error: ${response.status} - ${errorText}`);
-  }
-
-  const pdfArrayBuffer = await response.arrayBuffer();
-  console.log('[generate-pdf] Received PDF buffer, size:', pdfArrayBuffer.byteLength, 'bytes');
-
-  const uint8Array = new Uint8Array(pdfArrayBuffer);
-
-  let binaryString = '';
-  const chunkSize = 8192;
-  for (let i = 0; i < uint8Array.length; i += chunkSize) {
-    const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-    binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-  }
-
-  const base64 = btoa(binaryString);
-  console.log('[generate-pdf] PDF converted to base64, length:', base64.length);
-
-  return base64;
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -142,6 +92,8 @@ Deno.serve(async (req: Request) => {
       headers: corsHeaders,
     });
   }
+
+  let requestData: GeneratePDFRequest | null = null;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -232,7 +184,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    let requestData: GeneratePDFRequest;
     let requestBody = '';
 
     try {
@@ -528,15 +479,15 @@ Deno.serve(async (req: Request) => {
     console.log('[generate-pdf] Converting QR URLs to base64...');
     const processedData = await convertQrUrlsToBase64(data);
 
-    const wrappedData = { data: processedData };
-    const htmlContent = renderTemplate(pdfTemplate.html_content, wrappedData);
+    const templateData = { ...processedData, data: processedData };
+    const htmlContent = renderTemplate(pdfTemplate.html_content, templateData);
 
     const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', processedData);
 
-    console.log('Converting HTML to PDF with PDFShift API...');
-    const pdfBase64 = await htmlToPdfBase64(htmlContent);
-
-    const sizeBytes = pdfBase64.length;
+    console.log('Converting HTML to PDF with Gotenberg...');
+    const pdfResult = await renderHtmlToPdfBase64(htmlContent, { title: filename });
+    const pdfBase64 = pdfResult.base64;
+    const sizeBytes = pdfResult.sizeBytes;
 
     console.log('PDF generated successfully:', { filename, sizeBytes });
 
@@ -658,6 +609,20 @@ Deno.serve(async (req: Request) => {
         .from('pdf_generation_logs')
         .update({ public_url: publicUrl })
         .eq('id', pdfLog.id);
+
+      if (emailLog?.id) {
+        await supabase
+          .from('email_logs')
+          .update({
+            metadata: {
+              ...(emailLog.metadata || {}),
+              pdf_generation_log_id: pdfLog.id,
+              pdf_public_url: publicUrl,
+              pdf_access_token: accessToken,
+            },
+          })
+          .eq('id', emailLog.id);
+      }
     }
 
     const targetPendingId = pending_communication_id || (pendingComm ? pendingComm.id : null);

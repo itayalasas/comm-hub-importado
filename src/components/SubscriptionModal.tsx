@@ -11,6 +11,9 @@ interface SubscriptionModalProps {
 export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const { subscription } = useAuth();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const features = subscription?.entitlements?.features ?? [];
+  const planPrice = typeof subscription?.plan_price === 'number' ? subscription.plan_price : 0;
+  const planCurrency = subscription?.plan_currency || 'USD';
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
@@ -27,7 +30,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
 
   const getCurrentLimit = () => {
     if (!subscription) return 0;
-    const appFeature = subscription.entitlements.features.find(
+    const appFeature = features.find(
       f => f.code === 'max_applications'
     );
     return appFeature ? parseInt(appFeature.value) : 0;
@@ -79,9 +82,9 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
 
                 <div className="flex items-baseline space-x-2">
                   <span className="text-4xl font-bold text-white">
-                    {subscription.plan_price.toFixed(2)}
+                    {planPrice.toFixed(2)}
                   </span>
-                  <span className="text-xl text-slate-400">{subscription.plan_currency}</span>
+                  <span className="text-xl text-slate-400">{planCurrency}</span>
                   <span className="text-slate-400">/mes</span>
                 </div>
               </div>
@@ -129,7 +132,9 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                     <h4 className="font-semibold text-white">Límites y Características</h4>
                   </div>
                   <div className="space-y-2">
-                    {subscription.entitlements.features.map((feature) => (
+                    {features.length === 0 ? (
+                      <div className="text-sm text-slate-400">Sin características disponibles</div>
+                    ) : features.map((feature) => (
                       <div key={feature.code} className="flex items-center justify-between">
                         <span className="text-sm text-slate-300">{feature.name}</span>
                         <span className="text-sm font-semibold text-cyan-400">

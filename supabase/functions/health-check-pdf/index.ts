@@ -1,3 +1,7 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+import { renderHtmlToPdfBase64 } from "./_shared/pdf-renderer.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -22,32 +26,17 @@ Deno.serve(async (req: Request) => {
   try {
     console.log('[health-check-pdf] Starting health check');
     const start = Date.now();
-    
-    const pdfshiftApiKey = Deno.env.get('PDFSHIFT_API_KEY');
-    if (!pdfshiftApiKey) {
-      throw new Error('PDFSHIFT_API_KEY not configured');
-    }
 
-    const testHtml = '<html><body><h1>Health Check</h1></body></html>';
-    
-    const response = await fetch('https://api.pdfshift.io/v3/convert/pdf', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${btoa(`api:${pdfshiftApiKey}`)}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source: testHtml,
-        sandbox: true,
-      }),
+    const pdfResult = await renderHtmlToPdfBase64('<h1>Health Check</h1><p>Gotenberg renderer operational</p>', {
+      title: 'Health Check',
     });
-
     const responseTime = Date.now() - start;
-    const isHealthy = response.ok;
+    const isHealthy = pdfResult.sizeBytes > 0;
 
     const responseData = {
       status: isHealthy ? 'operational' : 'degraded',
       responseTime,
+      pdf_size_bytes: pdfResult.sizeBytes,
       timestamp: new Date().toISOString(),
     };
 

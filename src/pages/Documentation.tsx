@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Book, Code, Copy, Check, ChevronDown, ChevronRight, Info, AlertCircle } from 'lucide-react';
 import { Layout } from '../components/Layout';
+import { configManager } from '../lib/config';
 
 interface EndpointSection {
   id: string;
@@ -28,7 +29,18 @@ export default function Documentation() {
   const [expandedEndpoints, setExpandedEndpoints] = useState<string[]>(['send-email']);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseUrl = (() => {
+    try {
+      if (configManager.isLoaded()) {
+        return configManager.supabaseUrl;
+      }
+    } catch (error) {
+      console.warn('[Documentation] Failed to read supabaseUrl from configManager:', error);
+    }
+
+    return import.meta.env.VITE_SUPABASE_URL || '';
+  })();
+  const apiBaseUrl = supabaseUrl || 'https://your-project.supabase.co';
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -57,7 +69,7 @@ export default function Documentation() {
       title: 'Generar PDF',
       method: 'POST',
       path: '/functions/v1/generate-pdf',
-      description: 'Genera un PDF desde un template HTML usando jsPDF. El PDF se guarda en la base de datos y puede adjuntarse a comunicaciones pendientes si se proporciona un order_id.',
+      description: 'Genera un PDF desde un template HTML usando un renderer Chromium self-hosted. El PDF se guarda en la base de datos y puede adjuntarse a comunicaciones pendientes si se proporciona un order_id.',
       authentication: 'API Key (x-api-key header)',
       headers: [
         { name: 'x-api-key', type: 'string', required: true, description: 'Tu API key de la aplicación' },
@@ -362,12 +374,42 @@ export default function Documentation() {
     );
   };
 
+  const generateCurlCommand = (endpoint: EndpointSection) => {
+    const queryParams =
+      endpoint.method === 'GET' && endpoint.parameters && endpoint.parameters.length > 0
+        ? `?${endpoint.parameters
+            .map((param) => `${param.name}=${param.name === 'external_reference_id' ? 'INVOICE-12345' : `<${param.name}>`}`)
+            .join('&')}`
+        : '';
+
+    const url = `${apiBaseUrl}${endpoint.path}${queryParams}`;
+    const lines: string[] = [`curl --request ${endpoint.method} '${url}'`];
+
+    const headers = endpoint.headers || [];
+    headers.forEach((header) => {
+      const headerValue =
+        header.name.toLowerCase() === 'x-api-key'
+          ? 'ak_production_xxxxxxxxxxxxx'
+          : header.name.toLowerCase() === 'content-type'
+          ? 'application/json'
+          : `<${header.name}>`;
+
+      lines.push(`  --header '${header.name}: ${headerValue}'`);
+    });
+
+    if (endpoint.requestBody?.example && endpoint.method !== 'GET') {
+      lines.push(`  --data-raw '${JSON.stringify(endpoint.requestBody.example, null, 2)}'`);
+    }
+
+    return lines.join(' \\\n');
+  };
+
   const renderIntroduction = () => (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-white mb-4">Documentación de API</h2>
         <p className="text-slate-300 mb-4">
-          Bienvenido a la documentación de la API de CommHub. Esta guía te ayudará a integrar nuestro
+          Bienvenido a la documentacion de la API de SendCraft. Esta guia te ayudara a integrar nuestro
           servicio de comunicaciones en tu sistema.
         </p>
       </div>
@@ -763,6 +805,9 @@ Content-Type: application/json`}
         <p className="text-slate-300">
           Lista completa de endpoints disponibles en la API.
         </p>
+        <p className="text-slate-400 text-sm mt-2">
+          Cada endpoint incluye un cURL listo para copiar e importar en Postman (Import {'>'} Raw text).
+        </p>
       </div>
 
       {endpoints.map((endpoint) => (
@@ -802,6 +847,26 @@ Content-Type: application/json`}
             <div className="border-t border-slate-700 p-6 space-y-6">
               <div>
                 <p className="text-slate-300">{endpoint.description}</p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold text-white uppercase tracking-wider">cURL (Postman Import)</h4>
+                  <button
+                    onClick={() => copyToClipboard(generateCurlCommand(endpoint), `${endpoint.id}-curl`)}
+                    className="p-2 hover:bg-slate-700 rounded transition-colors"
+                    title="Copiar cURL"
+                  >
+                    {copiedCode === `${endpoint.id}-curl` ? (
+                      <Check className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </div>
+                <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
+                  {generateCurlCommand(endpoint)}
+                </pre>
               </div>
 
               <div className="flex items-center gap-2 text-sm">

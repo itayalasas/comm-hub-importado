@@ -1,0 +1,38 @@
+{
+  "numero_cfe": "INV-001",
+  "fecha_emision": "2026-05-01",
+  "cliente": "Juan Perez",
+  "moneda": "UYU",
+  "is_paid": false,
+  "cae": "12345678901234",
+  "vencimiento_cae": "2026-05-31",
+  "subtotal": "819.67",
+  "iva": "180.33",
+  "total": "1000.00",
+  "issuer": {
+    "razon_social": "Empresa Demo S.A.",
+    "rut": "211234560018",
+    "serie": "A"
+  },
+  "items": [
+    {
+      "descripcion": "Servicio de implementacion",
+      "cantidad": 1,
+      "precio_unitario": "500.00",
+      "iva_porcentaje": 22,
+      "total": "610.00"
+    },
+    {
+      "descripcion": "Soporte mensual",
+      "cantidad": 1,
+      "precio_unitario": "319.67",
+      "iva_porcentaje": 22,
+      "total": "390.00"
+    }
+  ],
+  "datos_adicionales": {
+    "observaciones": "Prueba de conversion HTML a PDF con renderer intermedio.",
+    "forma_pago": "Transferencia bancaria"
+  },
+  "qr_code": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5WQAAAAASUVORK5CYII="
+}

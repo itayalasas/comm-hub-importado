@@ -105,7 +105,14 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify(requestBody),
       });
 
-      const emailResult = await emailResponse.json();
+      const emailResponseText = await emailResponse.text();
+      let emailResult: any;
+      try {
+        emailResult = emailResponseText ? JSON.parse(emailResponseText) : {};
+      } catch {
+        console.error('[complete-pending] Invalid JSON from send-email:', emailResponseText.slice(0, 300));
+        throw new Error(`Invalid JSON response from send-email (${emailResponse.status})`);
+      }
 
       if (emailResult.success) {
         await supabase.from('pending_communications').update({

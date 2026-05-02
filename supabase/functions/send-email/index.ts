@@ -134,6 +134,31 @@ Deno.serve(async (req: Request) => {
     htmlContent = htmlContent.trim().replace(/\n/g, ' ').replace(/\r/g, '');
 
     const hasPdfAttachment = !!finalPdfBase64;
+    const normalizedData = (data && typeof data === 'object') ? data : {};
+    const emailPayload = {
+      recipient_email,
+      subject: emailSubject,
+      template_name,
+      order_id: requestData.order_id || null,
+      has_pdf_attachment: hasPdfAttachment,
+      pdf_filename: hasPdfAttachment ? finalPdfFilename : null,
+    };
+    const requestPayload = {
+      ...requestData,
+      data: normalizedData,
+      template_name,
+      recipient_email,
+      subject: subject || requestData.subject || undefined,
+    };
+    const idempotencyKey = JSON.stringify({
+      recipient_email,
+      template_name,
+      subject: emailSubject,
+      data: normalizedData,
+      order_id: requestData.order_id || null,
+      has_pdf_attachment: hasPdfAttachment,
+      pdf_filename: hasPdfAttachment ? finalPdfFilename : null,
+    });
     let logEntry: any;
 
     if (_existing_log_id) {
@@ -146,6 +171,37 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!logEntry) {
+      const dedupeWindowMs = 15000;
+      const dedupeSince = new Date(Date.now() - dedupeWindowMs).toISOString();
+      const { data: recentLogs } = await supabase
+        .from('email_logs')
+        .select('id, status, metadata, created_at')
+        .eq('application_id', application.id)
+        .eq('recipient_email', recipient_email)
+        .eq('subject', emailSubject)
+        .in('communication_type', ['email', 'email_with_pdf'])
+        .gte('created_at', dedupeSince)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const duplicateLog = (recentLogs || []).find((candidate: any) => {
+        const candidatePayload = candidate?.metadata?.idempotency_key;
+        return candidatePayload && candidatePayload === idempotencyKey;
+      });
+
+      if (duplicateLog && !requestData._allow_duplicate_resend) {
+        console.log('[send-email] Duplicate prevented, reusing log:', duplicateLog.id);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Duplicate request prevented',
+            log_id: duplicateLog.id,
+            duplicate_prevented: true,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       console.log('[send-email] Creating new log');
       const { data: logData } = await supabase.from('email_logs').insert({
         application_id: application.id,
@@ -155,10 +211,43 @@ Deno.serve(async (req: Request) => {
         status: 'pending',
         communication_type: hasPdfAttachment ? 'email_with_pdf' : 'email',
         pdf_generated: hasPdfAttachment,
-        metadata: { data, action: 'email_queued', template_name },
+        metadata: {
+          email_payload: emailPayload,
+          request_payload: requestPayload,
+          idempotency_key: idempotencyKey,
+          action: 'email_queued',
+          template_name,
+          order_id: requestData.order_id || null,
+        },
       }).select().single();
       logEntry = logData;
     }
+
+    const existingMetadata = (logEntry?.metadata && typeof logEntry.metadata === 'object') ? logEntry.metadata : {};
+    const existingRequestPayload = (existingMetadata.request_payload && typeof existingMetadata.request_payload === 'object' && Object.keys(existingMetadata.request_payload).length > 0)
+      ? existingMetadata.request_payload
+      : null;
+    const existingEmailPayload = (existingMetadata.email_payload && typeof existingMetadata.email_payload === 'object' && Object.keys(existingMetadata.email_payload).length > 0)
+      ? existingMetadata.email_payload
+      : null;
+
+    const mergedMetadata = {
+      ...existingMetadata,
+      action: hasPdfAttachment ? 'email_sent_with_invoice' : 'email_sent',
+      completed_at: new Date().toISOString(),
+      processing_time_ms: Date.now() - startTime,
+      template_name: existingMetadata.template_name || template_name,
+      email_payload: existingEmailPayload || emailPayload,
+      request_payload: existingRequestPayload || requestPayload,
+      idempotency_key: existingMetadata.idempotency_key || idempotencyKey,
+      pdf_info: {
+        ...(existingMetadata.pdf_info || {}),
+        pdf_email_log_id: _pdf_info?.pdf_email_log_id || existingMetadata?.pdf_info?.pdf_email_log_id || null,
+        pdf_filename: finalPdfFilename || existingMetadata?.pdf_info?.pdf_filename || null,
+        pdf_size_bytes: pdfSizeBytes || existingMetadata?.pdf_info?.pdf_size_bytes || null,
+        pdf_public_url: pdfPublicUrl || existingMetadata?.pdf_info?.pdf_public_url || null,
+      },
+    };
 
     if (hasPdfAttachment && _pdf_info?.pdf_email_log_id) {
       console.log('[send-email] Linking PDF log as child');
@@ -251,7 +340,7 @@ Deno.serve(async (req: Request) => {
           resend_email_id: resendData.id,
           delivery_status: 'sent',
           pdf_attachment_size: finalPdfBase64 ? finalPdfBase64.length : null,
-          metadata: { action: hasPdfAttachment ? 'email_sent_with_invoice' : 'email_sent', completed_at: new Date().toISOString(), processing_time_ms: Date.now() - startTime },
+          metadata: mergedMetadata,
         }).eq('id', logEntry.id);
 
         return new Response(JSON.stringify({ success: true, message: 'Email sent successfully', log_id: logEntry.id, resend_email_id: resendData.id, processing_time_ms: Date.now() - startTime }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -261,7 +350,7 @@ Deno.serve(async (req: Request) => {
         status: 'sent',
         sent_at: new Date().toISOString(),
         pdf_attachment_size: finalPdfBase64 ? finalPdfBase64.length : null,
-        metadata: { action: hasPdfAttachment ? 'email_sent_with_invoice' : 'email_sent', completed_at: new Date().toISOString(), processing_time_ms: Date.now() - startTime },
+        metadata: mergedMetadata,
       }).eq('id', logEntry.id);
 
       return new Response(JSON.stringify({ success: true, message: 'Email sent successfully', log_id: logEntry.id, processing_time_ms: Date.now() - startTime }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

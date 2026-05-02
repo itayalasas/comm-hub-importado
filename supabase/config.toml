@@ -1,0 +1,4 @@
+# Allow external callers to invoke this function without a Supabase JWT.
+# The function itself still enforces access through the `x-api-key` header.
+[functions.pending-communication]
+verify_jwt = false

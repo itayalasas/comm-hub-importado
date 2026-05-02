@@ -6,7 +6,7 @@ export const Home = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-50"></div>
+      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPBlVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-50"></div>
 
       <nav className="relative z-10 border-b border-slate-800/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -14,13 +14,7 @@ export const Home = () => {
             <div className="flex items-center space-x-3">
               <div className="relative">
                 <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-30"></div>
-                <img src="/logo.svg" alt="CommHub" className="h-8 relative" />
-              </div>
-              <div className="flex items-center space-x-2">
-                <Sparkles className="w-3 h-3 text-cyan-400/50" />
-                <span className="text-[10px] text-slate-400 font-medium tracking-wider">
-                  BY AYALA IT
-                </span>
+                <img src="/logo.svg" alt="SendCraft" className="h-8 relative" />
               </div>
             </div>
             <button
@@ -36,6 +30,10 @@ export const Home = () => {
       <div className="relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center mb-20">
+            <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-200 text-sm font-semibold tracking-[0.24em] uppercase">
+              <Sparkles className="w-4 h-4 text-cyan-300" />
+              <span>SendCraft</span>
+            </div>
             <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
               Gestiona tus comunicaciones
               <br />
@@ -44,7 +42,7 @@ export const Home = () => {
               </span>
             </h1>
             <p className="text-xl md:text-2xl text-slate-300 mb-10 max-w-3xl mx-auto leading-relaxed">
-              Plataforma completa para gestionar emails, templates y análisis de tus comunicaciones empresariales desde un solo lugar
+              SendCraft centraliza emails, templates, PDFs y analitica de comunicaciones empresariales desde un solo lugar.
             </p>
             <button
               onClick={() => navigate('/login')}
@@ -60,9 +58,9 @@ export const Home = () => {
               <div className="w-14 h-14 bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 border border-cyan-500/30 rounded-xl flex items-center justify-center mb-6">
                 <Mail className="w-7 h-7 text-cyan-400" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-3">Gestión de Emails</h3>
+              <h3 className="text-xl font-bold text-white mb-3">Gestion de Emails</h3>
               <p className="text-slate-300 leading-relaxed">
-                Envía y rastrea emails transaccionales y de marketing con seguimiento en tiempo real de entregas, aperturas y clics
+                Envia y rastrea emails transaccionales y de marketing con seguimiento en tiempo real de entregas, aperturas y clics.
               </p>
             </div>
 
@@ -70,9 +68,9 @@ export const Home = () => {
               <div className="w-14 h-14 bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 border border-cyan-500/30 rounded-xl flex items-center justify-center mb-6">
                 <Zap className="w-7 h-7 text-cyan-400" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-3">Templates Dinámicos</h3>
+              <h3 className="text-xl font-bold text-white mb-3">Templates Dinamicos</h3>
               <p className="text-slate-300 leading-relaxed">
-                Crea y personaliza templates de email con variables dinámicas y preview en tiempo real para diferentes tipos de comunicación
+                Crea y personaliza templates de email con variables dinamicas y preview en tiempo real para distintos tipos de comunicacion.
               </p>
             </div>
 
@@ -80,9 +78,9 @@ export const Home = () => {
               <div className="w-14 h-14 bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 border border-cyan-500/30 rounded-xl flex items-center justify-center mb-6">
                 <BarChart className="w-7 h-7 text-cyan-400" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-3">Análisis en Tiempo Real</h3>
+              <h3 className="text-xl font-bold text-white mb-3">Analitica en Tiempo Real</h3>
               <p className="text-slate-300 leading-relaxed">
-                Visualiza métricas detalladas de tus comunicaciones con dashboards interactivos y reportes completos de rendimiento
+                Visualiza metricas detalladas de tus comunicaciones con dashboards interactivos y reportes completos de rendimiento.
               </p>
             </div>
 
@@ -92,7 +90,7 @@ export const Home = () => {
               </div>
               <h3 className="text-xl font-bold text-white mb-3">Seguridad Empresarial</h3>
               <p className="text-slate-300 leading-relaxed">
-                Autenticación empresarial robusta con gestión de permisos y roles para proteger tus datos y comunicaciones
+                Autenticacion empresarial robusta con gestion de permisos y roles para proteger tus datos y comunicaciones.
               </p>
             </div>
 
@@ -100,9 +98,9 @@ export const Home = () => {
               <div className="w-14 h-14 bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 border border-cyan-500/30 rounded-xl flex items-center justify-center mb-6">
                 <CheckCircle className="w-7 h-7 text-cyan-400" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-3">Webhooks Automáticos</h3>
+              <h3 className="text-xl font-bold text-white mb-3">Webhooks Automaticos</h3>
               <p className="text-slate-300 leading-relaxed">
-                Recibe notificaciones automáticas de eventos importantes y mantén tus sistemas sincronizados en tiempo real
+                Recibe notificaciones automaticas de eventos importantes y manten tus sistemas sincronizados en tiempo real.
               </p>
             </div>
 
@@ -112,17 +110,17 @@ export const Home = () => {
               </div>
               <h3 className="text-xl font-bold text-white mb-3">API Completa</h3>
               <p className="text-slate-300 leading-relaxed">
-                Integra CommHub con tus sistemas existentes usando nuestra API RESTful completa y bien documentada
+                Integra SendCraft con tus sistemas existentes usando nuestra API RESTful completa y bien documentada.
               </p>
             </div>
           </div>
 
           <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-3xl p-12 text-center">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
-              ¿Listo para optimizar tus comunicaciones?
+              Listo para optimizar tus comunicaciones?
             </h2>
             <p className="text-xl text-slate-300 mb-8 max-w-2xl mx-auto">
-              Únete a empresas que ya confían en CommHub para gestionar sus comunicaciones de forma profesional y eficiente
+              Unete a empresas que ya confian en SendCraft para gestionar sus comunicaciones de forma profesional y eficiente.
             </p>
             <button
               onClick={() => navigate('/login')}
@@ -137,7 +135,7 @@ export const Home = () => {
         <footer className="border-t border-slate-800/50 mt-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="text-center text-slate-400 text-sm">
-              © 2024 CommHub. Todos los derechos reservados.
+              Copyright 2024 SendCraft. Todos los derechos reservados.
             </div>
           </div>
         </footer>

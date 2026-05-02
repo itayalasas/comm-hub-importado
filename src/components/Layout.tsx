@@ -40,7 +40,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
                   <Menu className="w-6 h-6 text-slate-400" />
                 )}
               </button>
-              <img src="/logo.svg" alt="CommHub" className="h-8" />
+              <img src="/logo.svg" alt="SendCraft" className="h-8" />
             </div>
             <UserMenu />
           </div>

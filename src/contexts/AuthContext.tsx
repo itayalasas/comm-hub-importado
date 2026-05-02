@@ -96,6 +96,71 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [availablePlans, setAvailablePlans] = useState<AvailablePlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const normalizeFeatures = (rawFeatures: any): Feature[] => {
+    if (!Array.isArray(rawFeatures)) return [];
+
+    return rawFeatures
+      .filter((feature) => feature && typeof feature === 'object')
+      .map((feature) => ({
+        code: String(feature.code || ''),
+        name: String(feature.name || feature.code || 'Feature'),
+        description: String(feature.description || ''),
+        value: String(feature.value ?? ''),
+        value_type: (feature.value_type === 'number' || feature.value_type === 'boolean' || feature.value_type === 'string')
+          ? feature.value_type
+          : 'string',
+        unit: feature.unit ? String(feature.unit) : undefined,
+        category: String(feature.category || 'general'),
+      }));
+  };
+
+  const normalizeSubscription = (rawSubscription: any): Subscription | null => {
+    if (!rawSubscription || typeof rawSubscription !== 'object') return null;
+
+    if (!rawSubscription.id || !rawSubscription.status) {
+      return null;
+    }
+
+    return {
+      id: String(rawSubscription.id),
+      status: String(rawSubscription.status),
+      plan_name: String(rawSubscription.plan_name || 'Plan'),
+      plan_price: Number(rawSubscription.plan_price || 0),
+      plan_currency: String(rawSubscription.plan_currency || 'USD'),
+      trial_start: rawSubscription.trial_start ? String(rawSubscription.trial_start) : undefined,
+      trial_end: rawSubscription.trial_end ? String(rawSubscription.trial_end) : undefined,
+      period_start: String(rawSubscription.period_start || ''),
+      period_end: String(rawSubscription.period_end || ''),
+      entitlements: {
+        features: normalizeFeatures(rawSubscription.entitlements?.features),
+      },
+    };
+  };
+
+  const normalizeAvailablePlans = (rawPlans: any): AvailablePlan[] => {
+    if (!Array.isArray(rawPlans)) return [];
+
+    return rawPlans
+      .filter((plan) => plan && typeof plan === 'object' && plan.id)
+      .map((plan) => ({
+        id: String(plan.id),
+        name: String(plan.name || 'Plan'),
+        description: String(plan.description || ''),
+        price: Number(plan.price || 0),
+        currency: String(plan.currency || 'USD'),
+        billing_cycle: String(plan.billing_cycle || 'monthly'),
+        entitlements: {
+          features: normalizeFeatures(plan.entitlements?.features),
+        },
+        is_upgrade: Boolean(plan.is_upgrade),
+        price_difference: Number(plan.price_difference || 0),
+        mp_init_point: plan.mp_init_point ? String(plan.mp_init_point) : undefined,
+        mp_back_url: plan.mp_back_url ? String(plan.mp_back_url) : undefined,
+        mp_preapproval_plan_id: plan.mp_preapproval_plan_id ? String(plan.mp_preapproval_plan_id) : undefined,
+        mp_status: plan.mp_status ? String(plan.mp_status) : undefined,
+      }));
+  };
+
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const storedToken = localStorage.getItem('access_token');
@@ -114,14 +179,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     if (storedSubscription) {
       const parsedSubscription = JSON.parse(storedSubscription);
-      setSubscription(parsedSubscription);
+      const normalizedSubscription = normalizeSubscription(parsedSubscription);
+      setSubscription(normalizedSubscription);
     }
 
     if (storedPlans) {
       const parsedPlans = JSON.parse(storedPlans);
       console.log('=== LOADING AVAILABLE PLANS FROM LOCALSTORAGE ===');
       console.log('Plans count:', parsedPlans.length);
-      setAvailablePlans(parsedPlans);
+      setAvailablePlans(normalizeAvailablePlans(parsedPlans));
     }
 
     setIsLoading(false);
@@ -289,9 +355,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
 
         if (authResponse.subscription || authResponse.data?.subscription) {
-          const subscription = authResponse.subscription || authResponse.data.subscription;
-          localStorage.setItem('subscription', JSON.stringify(subscription));
-          setSubscription(subscription);
+          const rawSubscription = authResponse.subscription || authResponse.data.subscription;
+          const normalizedSubscription = normalizeSubscription(rawSubscription);
+
+          if (normalizedSubscription) {
+            localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
+            setSubscription(normalizedSubscription);
+          }
         }
       }
 
@@ -336,28 +406,40 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         };
 
         if (authResponse.data.subscription) {
+          const normalizedSubscription = normalizeSubscription(authResponse.data.subscription);
           console.log('=== SUBSCRIPTION INFO FROM AUTH RESPONSE ===');
           console.log('Status:', authResponse.data.subscription.status);
           console.log('Plan:', authResponse.data.subscription.plan_name);
           console.log('Trial End:', authResponse.data.subscription.trial_end);
-          localStorage.setItem('subscription', JSON.stringify(authResponse.data.subscription));
-          setSubscription(authResponse.data.subscription);
+          if (normalizedSubscription) {
+            localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
+            setSubscription(normalizedSubscription);
+          }
         }
       } else if (decodedToken) {
         if (decodedToken.subscription) {
+          const normalizedSubscription = normalizeSubscription(decodedToken.subscription);
           console.log('=== SUBSCRIPTION INFO FROM TOKEN ===');
           console.log('Status:', decodedToken.subscription.status);
           console.log('Plan:', decodedToken.subscription.plan_name);
           console.log('Trial Start:', decodedToken.subscription.trial_start);
           console.log('Trial End:', decodedToken.subscription.trial_end);
           console.log('Full subscription:', JSON.stringify(decodedToken.subscription, null, 2));
-          localStorage.setItem('subscription', JSON.stringify(decodedToken.subscription));
-          setSubscription(decodedToken.subscription);
+          if (normalizedSubscription) {
+            localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
+            setSubscription(normalizedSubscription);
+          }
         } else if (authResponse?.data?.subscription) {
+          const normalizedSubscription = normalizeSubscription(authResponse.data.subscription);
           console.log('=== SUBSCRIPTION INFO FROM AUTH RESPONSE ===');
           console.log('Status:', authResponse.data.subscription.status);
           console.log('Plan:', authResponse.data.subscription.plan_name);
           console.log('Trial End:', authResponse.data.subscription.trial_end);
+
+          if (normalizedSubscription) {
+            localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
+            setSubscription(normalizedSubscription);
+          }
         }
 
         if (decodedToken.available_plans && Array.isArray(decodedToken.available_plans)) {
@@ -391,8 +473,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           console.log('💾 Full plans JSON:');
           console.log(JSON.stringify(decodedToken.available_plans, null, 2));
 
-          localStorage.setItem('available_plans', JSON.stringify(decodedToken.available_plans));
-          setAvailablePlans(decodedToken.available_plans);
+          const normalizedPlans = normalizeAvailablePlans(decodedToken.available_plans);
+          localStorage.setItem('available_plans', JSON.stringify(normalizedPlans));
+          setAvailablePlans(normalizedPlans);
         }
 
         userInfo = {

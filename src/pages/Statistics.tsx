@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
+import { configManager } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send, Check, Search } from 'lucide-react';
@@ -74,10 +75,14 @@ export const Statistics = () => {
   const [resending, setResending] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [childLogs, setChildLogs] = useState<Record<string, EmailLog[]>>({});
+  const [selectedLogPdfUrl, setSelectedLogPdfUrl] = useState<string | null>(null);
+  const [selectedLogPdfFilename, setSelectedLogPdfFilename] = useState<string>('document.pdf');
+  const [loadingSelectedLogPdf, setLoadingSelectedLogPdf] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchEmail, setSearchEmail] = useState('');
   const [searchDateStart, setSearchDateStart] = useState('');
   const [searchDateEnd, setSearchDateEnd] = useState('');
+  const [searchStatus, setSearchStatus] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -87,7 +92,7 @@ export const Statistics = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchEmail, searchDateStart, searchDateEnd]);
+  }, [searchEmail, searchDateStart, searchDateEnd, searchStatus]);
 
   useEffect(() => {
     if (selectedApp) {
@@ -349,6 +354,19 @@ export const Statistics = () => {
     };
   };
 
+  const getStatusFilterValue = (log: EmailLog) => {
+    if (log.communication_type === 'pdf_generation') return 'generated';
+    if (log.delivery_status === 'bounced' || log.bounced_at) return 'bounced';
+    if (log.delivery_status === 'complained' || log.complained_at) return 'spam';
+    if (log.status === 'failed') return 'failed';
+    if (log.clicked_at) return 'clicked';
+    if (log.opened_at) return 'opened';
+    if (log.delivery_status === 'delivered' || log.delivered_at) return 'delivered';
+    if (log.sent_at && log.status === 'sent') return 'sent';
+    if (log.delivery_status === 'delivery_delayed') return 'delayed';
+    return 'pending';
+  };
+
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString('es-ES', {
       year: 'numeric',
@@ -421,6 +439,7 @@ export const Statistics = () => {
   const filteredLogs = logs.filter((log) => {
     const emailMatch = searchEmail === '' ||
       log.recipient_email.toLowerCase().includes(searchEmail.toLowerCase());
+    const statusMatch = searchStatus === '' || getStatusFilterValue(log) === searchStatus;
 
     let dateMatch = true;
     if (searchDateStart || searchDateEnd) {
@@ -439,7 +458,7 @@ export const Statistics = () => {
       }
     }
 
-    return emailMatch && dateMatch;
+    return emailMatch && dateMatch && statusMatch;
   });
 
   const resendCommunication = async () => {
@@ -448,8 +467,8 @@ export const Statistics = () => {
     setResending(true);
     try {
       const log = resendConfirmLog;
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const supabaseUrl = configManager.supabaseUrl;
+      const supabaseAnonKey = configManager.supabaseAnonKey;
 
       const currentApp = applications.find(app => app.id === selectedApp);
       if (!currentApp) {
@@ -478,36 +497,67 @@ export const Statistics = () => {
 
       let pdfBase64 = null;
       let pdfFilename = 'document.pdf';
+      let pdfEmailLogId: string | null = log.metadata?.pdf_info?.pdf_email_log_id || log.metadata?.pdf_info?.pdf_log_id || null;
+      let templateData = log.metadata?.request_payload?.data || log.metadata?.template_data || log.metadata?.data || {};
 
       if (log.pdf_generated) {
         if (log.metadata?.pdf_base64) {
           pdfBase64 = log.metadata.pdf_base64;
           pdfFilename = log.metadata?.pdf_filename || 'document.pdf';
-        } else if (log.metadata?.pdf_info?.pdf_log_id) {
-          const pdfLogId = log.metadata.pdf_info.pdf_log_id;
+        }
 
-          const { data: pdfLog, error: pdfError } = await supabase
+        if (!pdfEmailLogId) {
+          const { data: pdfChildLog } = await supabase
             .from('email_logs')
-            .select('metadata')
-            .eq('id', pdfLogId)
+            .select('id, metadata')
+            .eq('parent_log_id', log.id)
             .eq('communication_type', 'pdf_generation')
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
 
-          if (!pdfError && pdfLog?.metadata?.pdf_base64) {
-            pdfBase64 = pdfLog.metadata.pdf_base64;
-            pdfFilename = log.metadata.pdf_info.pdf_filename || pdfLog.metadata?.pdf_filename || 'document.pdf';
-            console.log('PDF recuperado desde log de generación:', pdfLogId);
-          } else {
-            console.error('No se pudo recuperar el PDF desde el log de generación:', pdfLogId);
+          if (pdfChildLog?.id) {
+            pdfEmailLogId = pdfChildLog.id;
+            pdfFilename = pdfChildLog.metadata?.filename || pdfFilename;
+            console.log('PDF email_log_id recuperado desde log hijo:', pdfEmailLogId);
+          }
+        }
+
+        if (pdfEmailLogId && !pdfBase64) {
+          const { data: pdfData } = await supabase
+            .from('pdf_generation_logs')
+            .select('pdf_base64, filename')
+            .eq('email_log_id', pdfEmailLogId)
+            .maybeSingle();
+
+          if (pdfData?.pdf_base64) {
+            pdfBase64 = pdfData.pdf_base64;
+            pdfFilename = pdfData.filename || pdfFilename;
+            console.log('PDF recuperado desde pdf_generation_logs:', pdfEmailLogId);
           }
         }
       }
 
-      const templateData = log.metadata?.template_data || log.metadata?.data || {};
+      if (!templateData || Object.keys(templateData).length === 0) {
+        const { data: pdfChildLog } = await supabase
+          .from('email_logs')
+          .select('id, metadata')
+          .eq('parent_log_id', log.id)
+          .eq('communication_type', 'pdf_generation')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (pdfChildLog?.metadata?.request_payload?.data) {
+          templateData = pdfChildLog.metadata.request_payload.data;
+        } else if (pdfChildLog?.metadata?.data) {
+          templateData = pdfChildLog.metadata.data;
+        }
+      }
 
       const orderId = log.metadata?.order_id;
       const waitForInvoice = log.metadata?.wait_for_invoice;
-      const hasPdfInfo = log.metadata?.pdf_info || pdfBase64;
+      const hasPdfInfo = log.metadata?.pdf_info || pdfBase64 || pdfEmailLogId;
 
       let endpoint = 'send-email';
       const payload: any = {
@@ -525,6 +575,11 @@ export const Statistics = () => {
       } else if (pdfBase64) {
         payload.pdf_base64 = pdfBase64;
         payload.pdf_filename = pdfFilename;
+      } else if (pdfEmailLogId) {
+        payload._pdf_info = {
+          pdf_email_log_id: pdfEmailLogId,
+          pdf_filename: pdfFilename,
+        };
       }
 
       const response = await fetch(`${supabaseUrl}/functions/v1/${endpoint}`, {
@@ -538,8 +593,27 @@ export const Statistics = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Error al reenviar comunicación');
+        const responseText = await response.text();
+        let errorMessage = `Error al reenviar comunicación (${response.status})`;
+
+        if (responseText) {
+          const contentType = response.headers.get('content-type') || '';
+
+          if (contentType.includes('application/json')) {
+            try {
+              const errorData = JSON.parse(responseText);
+              errorMessage = errorData.error || errorData.message || errorMessage;
+            } catch {
+              errorMessage = responseText.slice(0, 200);
+            }
+          } else {
+            errorMessage = responseText.startsWith('<!DOCTYPE') || responseText.startsWith('<html')
+              ? `Respuesta no válida del endpoint ${endpoint}`
+              : responseText.slice(0, 200);
+          }
+        }
+
+        throw new Error(errorMessage);
       }
 
       toast.success('Comunicación reenviada exitosamente');
@@ -556,6 +630,107 @@ export const Statistics = () => {
       setResending(false);
     }
   };
+
+  const resolvePdfLinkForLog = async (log: EmailLog): Promise<{ url: string; filename: string } | null> => {
+    const metadata = (log.metadata && typeof log.metadata === 'object') ? log.metadata : {};
+    const directUrl = metadata.pdf_public_url || metadata.public_url || metadata?.pdf_info?.pdf_public_url;
+    const filename = metadata.pdf_filename || metadata.filename || metadata?.pdf_info?.pdf_filename || 'document.pdf';
+
+    if (directUrl) {
+      return { url: directUrl, filename };
+    }
+
+    const directToken = metadata.pdf_access_token || metadata?.pdf_info?.pdf_access_token;
+    if (directToken) {
+      return {
+        url: `${configManager.supabaseUrl}/functions/v1/view-pdf?token=${directToken}`,
+        filename,
+      };
+    }
+
+    const orderId = metadata.order_id || metadata?.pdf_info?.order_id;
+    if (!orderId) {
+      return null;
+    }
+
+    const { data: linkData, error } = await supabase
+      .from('public_pdf_links')
+      .select('access_token, filename, created_at')
+      .eq('order_id', orderId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !linkData?.access_token) {
+      return null;
+    }
+
+    return {
+      url: `${configManager.supabaseUrl}/functions/v1/view-pdf?token=${linkData.access_token}`,
+      filename: linkData.filename || filename,
+    };
+  };
+
+  const getEmailPayloadForLog = (log: EmailLog | null) => {
+    if (!log) return null;
+
+    const metadata = (log.metadata && typeof log.metadata === 'object') ? log.metadata : {};
+
+    const fallbackData = metadata.request_payload?.data || metadata.template_data || metadata.data;
+    if (!fallbackData || typeof fallbackData !== 'object' || Object.keys(fallbackData).length === 0) {
+      return null;
+    }
+
+    return {
+      recipient_email: metadata.request_payload?.recipient_email || metadata.email_payload?.recipient_email || log.recipient_email,
+      subject: metadata.request_payload?.subject || metadata.email_payload?.subject || log.subject,
+      template_name: metadata.request_payload?.template_name || metadata.template_name || metadata.email_payload?.template_name || null,
+      data: fallbackData,
+    };
+  };
+
+  useEffect(() => {
+    const loadPdfLink = async () => {
+      if (!selectedLog) {
+        setSelectedLogPdfUrl(null);
+        setSelectedLogPdfFilename('document.pdf');
+        setLoadingSelectedLogPdf(false);
+        return;
+      }
+
+      const mightHavePdf =
+        selectedLog.communication_type === 'pdf_generation' ||
+        selectedLog.pdf_generated ||
+        !!selectedLog.metadata?.pdf_info ||
+        !!selectedLog.metadata?.order_id;
+
+      if (!mightHavePdf) {
+        setSelectedLogPdfUrl(null);
+        setSelectedLogPdfFilename('document.pdf');
+        setLoadingSelectedLogPdf(false);
+        return;
+      }
+
+      setLoadingSelectedLogPdf(true);
+
+      const linkData = await resolvePdfLinkForLog(selectedLog);
+
+      if (linkData) {
+        setSelectedLogPdfUrl(linkData.url);
+        setSelectedLogPdfFilename(linkData.filename);
+      } else {
+        setSelectedLogPdfUrl(null);
+        setSelectedLogPdfFilename('document.pdf');
+      }
+
+      setLoadingSelectedLogPdf(false);
+    };
+
+    loadPdfLink();
+  }, [selectedLog]);
+
+  const selectedLogEmailPayload = getEmailPayloadForLog(selectedLog);
 
   if (loading) {
     return (
@@ -770,7 +945,7 @@ export const Statistics = () => {
               <div className="p-6 border-b border-slate-700 space-y-4">
                 <h3 className="text-lg font-semibold text-white">Historial de Comunicaciones</h3>
 
-                <div className="grid md:grid-cols-3 gap-4">
+                <div className="grid md:grid-cols-4 gap-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                     <input
@@ -793,6 +968,26 @@ export const Statistics = () => {
                   </div>
 
                   <div>
+                    <select
+                      value={searchStatus}
+                      onChange={(e) => setSearchStatus(e.target.value)}
+                      className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500 transition-colors"
+                    >
+                      <option value="">Todos los estados</option>
+                      <option value="pending">Pending</option>
+                      <option value="sent">Sent</option>
+                      <option value="delivered">Delivered</option>
+                      <option value="opened">Opened</option>
+                      <option value="clicked">Clicked</option>
+                      <option value="failed">Failed</option>
+                      <option value="bounced">Bounced</option>
+                      <option value="spam">Spam</option>
+                      <option value="delayed">Delayed</option>
+                      <option value="generated">Generated</option>
+                    </select>
+                  </div>
+
+                  <div>
                     <input
                       type="date"
                       placeholder="Fecha fin"
@@ -803,7 +998,7 @@ export const Statistics = () => {
                   </div>
                 </div>
 
-                {(searchEmail || searchDateStart || searchDateEnd) && (
+                {(searchEmail || searchDateStart || searchDateEnd || searchStatus) && (
                   <div className="flex items-center justify-between text-sm text-slate-400">
                     <span>
                       Mostrando {filteredLogs.length} de {logs.length} registros
@@ -813,6 +1008,7 @@ export const Statistics = () => {
                         setSearchEmail('');
                         setSearchDateStart('');
                         setSearchDateEnd('');
+                        setSearchStatus('');
                       }}
                       className="text-cyan-400 hover:text-cyan-300 transition-colors"
                     >
@@ -1210,6 +1406,48 @@ export const Statistics = () => {
                   <label className="block text-sm font-medium text-red-400 mb-2">Error</label>
                   <div className="px-4 py-2 bg-red-900/20 border border-red-700/50 rounded-lg text-red-300">
                     {selectedLog.error_message}
+                  </div>
+                </div>
+              )}
+
+              {(loadingSelectedLogPdf || selectedLogPdfUrl) && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">PDF Generado</label>
+                  <div className="px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg">
+                    {loadingSelectedLogPdf ? (
+                      <div className="text-sm text-slate-400">Buscando enlace de PDF...</div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <a
+                          href={selectedLogPdfUrl || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
+                        >
+                          Ver PDF
+                        </a>
+                        <a
+                          href={selectedLogPdfUrl ? `${selectedLogPdfUrl}&action=download` : '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm"
+                        >
+                          Descargar PDF
+                        </a>
+                        <span className="text-xs text-slate-400 truncate">{selectedLogPdfFilename}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedLogEmailPayload && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">JSON Correo</label>
+                  <div className="px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg">
+                    <pre className="text-sm text-slate-300 overflow-x-auto">
+                      {JSON.stringify(selectedLogEmailPayload, null, 2)}
+                    </pre>
                   </div>
                 </div>
               )}
