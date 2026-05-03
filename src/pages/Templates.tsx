@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { verifyApplicationOwnership } from '../lib/security';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
+import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { Plus, CreditCard as Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 
 interface Application {
@@ -39,6 +40,7 @@ export const Templates = () => {
   const { user } = useAuth();
   const toast = useToast();
   const { canCreate, canUpdate, canDelete } = usePermissions('templates');
+  const { checkTemplateLimit } = useSubscriptionLimits();
   const [applications, setApplications] = useState<Application[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
@@ -229,6 +231,15 @@ export const Templates = () => {
   const saveTemplate = async () => {
     if (!selectedApp || !formData.name || !formData.html_content) return;
 
+    // Enforce template limit only for new templates (not edits)
+    if (!editingTemplate) {
+      const tplLimit = checkTemplateLimit();
+      if (tplLimit.limitReached) {
+        toast.error(`Límite de templates alcanzado (${tplLimit.currentCount}/${tplLimit.maxLimit}). Actualiza tu plan para crear más.`);
+        return;
+      }
+    }
+
     try {
       const variables = extractVariables(formData.html_content);
 
@@ -341,15 +352,31 @@ export const Templates = () => {
       <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Templates</h1>
-          {selectedApp && canCreate && (
-            <button
-              onClick={() => openEditor()}
-              className="flex items-center justify-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Nuevo Template</span>
-            </button>
-          )}
+          {selectedApp && canCreate && (() => {
+            const tplLimit = checkTemplateLimit();
+            return tplLimit.limitReached ? (
+              <div className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-slate-400 rounded-lg text-sm cursor-not-allowed" title={`Límite de templates alcanzado (${tplLimit.currentCount}/${tplLimit.maxLimit})`}>
+                <Plus className="w-5 h-5" />
+                <span>Nuevo Template</span>
+                <span className="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
+                  {tplLimit.currentCount}/{tplLimit.maxLimit}
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={() => openEditor()}
+                className="flex items-center justify-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Nuevo Template</span>
+                {tplLimit.maxLimit !== Infinity && (
+                  <span className="text-xs bg-white/10 px-1.5 py-0.5 rounded-full">
+                    {tplLimit.currentCount}/{tplLimit.maxLimit}
+                  </span>
+                )}
+              </button>
+            );
+          })()}
         </div>
 
         {applications.length === 0 ? (
