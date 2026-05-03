@@ -241,7 +241,7 @@ export const Landing = () => {
                 <div className="slide-5 text-center mb-4">
                   <p className="text-slate-500 text-sm">
                     ¿No tienes cuenta?{' '}
-                    <button onClick={register} className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors">
+                    <button onClick={() => register()} className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors">
                       Crear cuenta
                     </button>
                   </p>
@@ -377,7 +377,7 @@ export const Landing = () => {
 
                   {/* CTA */}
                   <button
-                    onClick={register}
+                    onClick={() => register()}
                     className={`mt-6 w-full py-2.5 rounded-xl font-bold text-sm transition-all ${
                       plan.key === 'business'
                         ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-500/25'
@@ -420,7 +420,7 @@ export const Landing = () => {
         <div className="text-center mt-3">
           <p className="text-slate-400 text-sm">
             ¿No tienes cuenta?{' '}
-            <button onClick={register} className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors">
+            <button onClick={() => register()} className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors">
               Crear cuenta
             </button>
           </p>

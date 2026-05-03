@@ -16,6 +16,7 @@ import {
   Star,
   Check,
   Minus,
+  Loader2,
   MessageSquare,
   Send,
   Activity,
@@ -23,6 +24,8 @@ import {
   Eye,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { usePlans, type Plan } from '../hooks/usePlans';
+import { configManager } from '../lib/config';
 
 /* ─── Data ─────────────────────────────────────────────────────── */
 const STATS = [
@@ -445,104 +448,144 @@ const STEPS = [
   },
 ];
 
-/* ─── Pricing Data ──────────────────────────────────────────────── */
-const PLANS = [
-  {
-    key: 'trial',
-    name: 'Trial',
-    tagline: '14 días gratis',
-    priceLabel: 'Gratis',
-    priceSub: '14 días',
-    highlight: false,
-    badge: null,
-    accentClass: 'text-slate-300',
-    borderClass: 'border-white/8',
-    bgClass: 'bg-white/[0.03]',
-    btnClass: 'bg-slate-600 hover:bg-slate-500 text-white',
-    features: [
-      { label: 'Emails / mes',          value: '100' },
-      { label: 'PDFs / mes',            value: '20' },
-      { label: 'Aplicaciones',          value: '1' },
-      { label: 'Templates',             value: '3' },
-      { label: 'Acceso API',            bool: false },
-      { label: '2FA',                   bool: false },
-      { label: 'Soporte prioritario',   bool: false },
-    ],
-  },
-  {
-    key: 'starter',
-    name: 'Starter',
-    tagline: 'Para comenzar',
-    priceLabel: 'UYU 890',
-    priceSub: '/mes',
-    highlight: false,
-    badge: null,
-    accentClass: 'text-cyan-400',
-    borderClass: 'border-cyan-500/20',
-    bgClass: 'bg-white/[0.03]',
-    btnClass: 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/20',
-    features: [
-      { label: 'Emails / mes',          value: '1.000' },
-      { label: 'PDFs / mes',            value: '200' },
-      { label: 'Aplicaciones',          value: '1' },
-      { label: 'Templates',             value: '10' },
-      { label: 'Acceso API',            bool: false },
-      { label: '2FA',                   bool: false },
-      { label: 'Soporte prioritario',   bool: false },
-    ],
-  },
-  {
-    key: 'business',
-    name: 'Business',
-    tagline: 'Para empresas en crecimiento',
-    priceLabel: 'UYU 1.890',
-    priceSub: '/mes',
-    highlight: true,
-    badge: 'Más popular',
-    accentClass: 'text-blue-400',
-    borderClass: 'border-blue-400/50',
-    bgClass: 'bg-gradient-to-b from-blue-500/10 to-blue-500/5',
-    btnClass: 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-500/30',
-    features: [
-      { label: 'Emails / mes',          value: '10.000' },
-      { label: 'PDFs / mes',            value: '3.000' },
-      { label: 'Aplicaciones',          value: '5' },
-      { label: 'Templates',             value: '50' },
-      { label: 'Acceso API',            bool: true },
-      { label: '2FA',                   bool: true },
-      { label: 'Reportes avanzados',    bool: true },
-      { label: 'Soporte prioritario',   bool: false },
-    ],
-  },
-  {
-    key: 'pro',
-    name: 'Pro',
-    tagline: 'Alto volumen · Multi-tenant',
-    priceLabel: 'UYU 3.900',
-    priceSub: '/mes',
-    highlight: false,
-    badge: 'Máximo poder',
-    accentClass: 'text-emerald-400',
-    borderClass: 'border-emerald-400/25',
-    bgClass: 'bg-white/[0.03]',
-    btnClass: 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20',
-    features: [
-      { label: 'Emails / mes',          value: '50.000' },
-      { label: 'PDFs / mes',            value: '20.000' },
-      { label: 'Aplicaciones',          value: '20' },
-      { label: 'Templates',             value: '200' },
-      { label: 'Acceso API',            bool: true },
-      { label: '2FA',                   bool: true },
-      { label: 'Reportes avanzados',    bool: true },
-      { label: 'Dominio personalizado', bool: true },
-      { label: 'Soporte prioritario',   bool: true },
-    ],
-  },
-] as const;
+/* ─── Pricing helpers ───────────────────────────────────────────── */
+const PLAN_STYLE: Record<number, { accentClass: string; borderClass: string; bgClass: string; btnClass: string; highlight: boolean; badge: string | null }> = {
+  0: { accentClass: 'text-slate-300',   borderClass: 'border-white/8',         bgClass: 'bg-white/[0.03]',                                    btnClass: 'bg-slate-600 hover:bg-slate-500 text-white',                         highlight: false, badge: null },
+  1: { accentClass: 'text-cyan-400',    borderClass: 'border-cyan-500/20',      bgClass: 'bg-white/[0.03]',                                    btnClass: 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/20',  highlight: false, badge: null },
+  2: { accentClass: 'text-blue-400',    borderClass: 'border-blue-400/50',      bgClass: 'bg-gradient-to-b from-blue-500/10 to-blue-500/5',    btnClass: 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-500/30',  highlight: true,  badge: 'Más popular' },
+  3: { accentClass: 'text-emerald-400', borderClass: 'border-emerald-400/25',   bgClass: 'bg-white/[0.03]',                                    btnClass: 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20', highlight: false, badge: 'Máximo poder' },
+};
+
+const FEATURE_LABEL: Record<string, string> = {
+  total_de_correos_mensuales: 'Emails / mes',
+  pdf_generations_monthly:    'PDFs / mes',
+  max_applications:           'Aplicaciones',
+  templates:                  'Templates',
+  api_access:                 'Acceso API',
+  two_factor_auth:            '2FA',
+  priority_support:           'Soporte prioritario',
+  advanced_reports:           'Reportes avanzados',
+  custom_domain:              'Dominio personalizado',
+};
+
+// Feature display order for the cards
+const FEATURE_ORDER = [
+  'total_de_correos_mensuales',
+  'pdf_generations_monthly',
+  'max_applications',
+  'templates',
+  'api_access',
+  'two_factor_auth',
+  'advanced_reports',
+  'custom_domain',
+  'priority_support',
+];
+
+function formatNumber(val: string): string {
+  const n = parseInt(val, 10);
+  if (isNaN(n)) return val;
+  return n.toLocaleString('es-UY');
+}
+
+function buildRegisterUrl(planId: string): string {
+  const base = configManager.authUrl;
+  const appId = configManager.authAppId;
+  const apiKey = configManager.authApiKey;
+  const redirectUri = configManager.redirectUri;
+  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${planId}`;
+}
+
+function PlanCard({ plan, index }: { plan: Plan; index: number }) {
+  const style = PLAN_STYLE[index] ?? PLAN_STYLE[1];
+  const isTrial = plan.trial_days > 0 && plan.price === 0;
+
+  // Sort features by our preferred display order; unknown features go to the end
+  const sortedFeatures = [...(plan.entitlements?.features ?? [])].sort((a, b) => {
+    const ia = FEATURE_ORDER.indexOf(a.code);
+    const ib = FEATURE_ORDER.indexOf(b.code);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+
+  const handleCta = () => {
+    if (!configManager.isLoaded()) return;
+    window.location.href = buildRegisterUrl(plan.id);
+  };
+
+  return (
+    <div className={`relative rounded-2xl border ${style.borderClass} ${style.bgClass} flex flex-col overflow-hidden card-hover ${style.highlight ? 'ring-1 ring-blue-400/30' : ''}`}>
+      {style.badge && (
+        <div className="absolute top-0 left-0 right-0 flex justify-center">
+          <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${index === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
+            {style.badge}
+          </span>
+        </div>
+      )}
+
+      <div className={`p-6 flex flex-col flex-1 ${style.badge ? 'pt-10' : ''}`}>
+        <div className="mb-5">
+          <h3 className={`text-xl font-extrabold mb-1 ${style.accentClass}`}>{plan.name}</h3>
+          <p className="text-slate-500 text-xs">{plan.description}</p>
+        </div>
+
+        <div className="mb-6 flex items-baseline gap-1">
+          {isTrial ? (
+            <>
+              <span className="text-3xl font-extrabold text-white">Gratis</span>
+              <span className="text-slate-400 text-sm">· {plan.trial_days} días</span>
+            </>
+          ) : (
+            <>
+              <span className="text-3xl font-extrabold text-white">
+                {plan.currency} {plan.price.toLocaleString('es-UY')}
+              </span>
+              <span className="text-slate-400 text-sm">/mes</span>
+            </>
+          )}
+        </div>
+
+        <div className="h-px bg-white/6 mb-5" />
+
+        <ul className="space-y-3 flex-1 mb-6">
+          {sortedFeatures.map((f) => {
+            const label = FEATURE_LABEL[f.code] ?? f.name;
+            const isBool = f.value_type === 'boolean';
+            const boolOn = isBool && (f.value === 'true' || f.value === '1');
+            return (
+              <li key={f.code} className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-slate-400">{label}</span>
+                {isBool ? (
+                  boolOn ? (
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+                      <Check className="w-3 h-3 text-emerald-400" />
+                    </span>
+                  ) : (
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/5 border border-white/8 flex items-center justify-center">
+                      <Minus className="w-3 h-3 text-slate-600" />
+                    </span>
+                  )
+                ) : (
+                  <span className={`flex-shrink-0 font-bold text-xs ${style.accentClass}`}>{formatNumber(f.value)}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        <button
+          onClick={handleCta}
+          className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btnClass}`}
+        >
+          {isTrial ? 'Comenzar gratis' : 'Suscribirse'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /* ─── Page ──────────────────────────────────────────────────────── */
 export const Home = () => {
   const navigate = useNavigate();
+  const { plans, loading: plansLoading } = usePlans();
 
   return (
     <div className="min-h-screen bg-[#050d1a] text-white overflow-x-hidden">
@@ -903,73 +946,20 @@ export const Home = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-            {PLANS.map((plan) => (
-              <div
-                key={plan.key}
-                className={`relative rounded-2xl border ${plan.borderClass} ${plan.bgClass} flex flex-col overflow-hidden card-hover ${plan.highlight ? 'ring-1 ring-blue-400/30' : ''}`}
-              >
-                {/* Badge */}
-                {plan.badge && (
-                  <div className="absolute top-0 left-0 right-0 flex justify-center">
-                    <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${plan.key === 'business' ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
-                      {plan.badge}
-                    </span>
-                  </div>
-                )}
-
-                <div className={`p-6 flex flex-col flex-1 ${plan.badge ? 'pt-10' : ''}`}>
-                  {/* Header */}
-                  <div className="mb-5">
-                    <h3 className={`text-xl font-extrabold mb-1 ${plan.accentClass}`}>{plan.name}</h3>
-                    <p className="text-slate-500 text-xs">{plan.tagline}</p>
-                  </div>
-
-                  {/* Price */}
-                  <div className="mb-6 flex items-baseline gap-1">
-                    <span className="text-3xl font-extrabold text-white">{plan.priceLabel}</span>
-                    <span className="text-slate-400 text-sm">{plan.priceSub}</span>
-                  </div>
-
-                  {/* Divider */}
-                  <div className="h-px bg-white/6 mb-5" />
-
-                  {/* Features */}
-                  <ul className="space-y-3 flex-1 mb-6">
-                    {plan.features.map((f) => (
-                      <li key={f.label} className="flex items-center justify-between gap-2 text-sm">
-                        <span className="text-slate-400">{f.label}</span>
-                        {'bool' in f ? (
-                          f.bool ? (
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
-                              <Check className="w-3 h-3 text-emerald-400" />
-                            </span>
-                          ) : (
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/5 border border-white/8 flex items-center justify-center">
-                              <Minus className="w-3 h-3 text-slate-600" />
-                            </span>
-                          )
-                        ) : (
-                          <span className={`flex-shrink-0 font-bold text-xs ${plan.accentClass}`}>{f.value}</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* CTA */}
-                  <button
-                    onClick={() => navigate('/login')}
-                    className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${plan.btnClass}`}
-                  >
-                    {plan.key === 'trial' ? 'Comenzar gratis' : 'Suscribirse'}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+          {plansLoading ? (
+            <div className="flex justify-center items-center py-20">
+              <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+              {plans.map((plan, i) => (
+                <PlanCard key={plan.id} plan={plan} index={i} />
+              ))}
+            </div>
+          )}
 
           <p className="text-center text-slate-600 text-sm mt-10">
-            Precios en pesos uruguayos (UYU) · Límites compartidos por tenant · Solo administradores pueden cambiar el plan
+            Límites compartidos por tenant · Solo administradores pueden cambiar el plan
           </p>
         </div>
       </section>

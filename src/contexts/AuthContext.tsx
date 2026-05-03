@@ -71,7 +71,7 @@ interface AuthContextType {
   subscription: Subscription | null;
   availablePlans: AvailablePlan[];
   login: () => void;
-  register: () => void;
+  register: (planId?: string) => void;
   logout: () => void;
   handleCallback: (tokenOrCode: string) => Promise<void>;
   hasPermission: (menu: string, permission: MenuPermission) => boolean;
@@ -241,11 +241,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     window.location.href = authUrl;
   };
 
-  const register = () => {
-    const authUrl = `${configManager.authUrl}/register-tenant?` +
+  const register = (planId?: string) => {
+    let authUrl = `${configManager.authUrl}/register-tenant?` +
       `app_id=${configManager.authAppId}&` +
       `redirect_uri=${encodeURIComponent(configManager.redirectUri)}&` +
       `api_key=${configManager.authApiKey}`;
+
+    if (planId) {
+      authUrl += `&plan_id=${planId}`;
+    }
 
     window.location.href = authUrl;
   };

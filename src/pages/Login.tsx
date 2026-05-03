@@ -125,7 +125,7 @@ export const Login = () => {
               <p className="text-slate-400 text-sm">
                 No tienes cuenta?{' '}
                 <button
-                  onClick={register}
+                  onClick={() => register()}
                   className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors"
                 >
                   Crear cuenta
@@ -162,7 +162,7 @@ export const Login = () => {
           <p className="text-slate-400 text-sm">
             No tienes cuenta?{' '}
             <button
-              onClick={register}
+              onClick={() => register()}
               className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors"
             >
               Crear cuenta
