@@ -60,6 +60,8 @@ interface User {
   role?: string;
   permissions?: MenuPermissions;
   subscription?: Subscription;
+  tenant_id?: string;
+  tenant_name?: string;
 }
 
 interface AuthContextType {
@@ -426,13 +428,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (!decodedToken && authResponse?.data) {
         console.log('=== TOKEN NO ES JWT, USANDO DATA DE AUTH RESPONSE ===');
+        // The auth response may nest user data under authResponse.data.user or flat in authResponse.data
+        const userData = authResponse.data.user || authResponse.data;
         userInfo = {
-          sub: authResponse.data.user_id || authResponse.data.sub || authResponse.data.id || 'unknown',
-          name: authResponse.data.name || authResponse.data.username || 'Usuario',
-          email: authResponse.data.email || '',
-          picture: authResponse.data.picture || authResponse.data.avatar,
-          role: authResponse.data.role,
-          permissions: authResponse.data.permissions || {},
+          sub: userData.id || userData.user_id || userData.sub || 'unknown',
+          name: userData.name || userData.username || 'Usuario',
+          email: userData.email || '',
+          picture: userData.picture || userData.avatar,
+          role: userData.role,
+          permissions: userData.permissions || {},
+          tenant_id: userData.tenant_id || undefined,
+          tenant_name: userData.tenant_name || undefined,
         };
 
         if (authResponse.data.subscription) {
@@ -508,13 +514,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setAvailablePlans(normalizedPlans);
         }
 
+        // tenant data may be directly in token or nested under token.user
+        const tokenUser = decodedToken.user || decodedToken;
         userInfo = {
-          sub: decodedToken.sub || decodedToken.user_id || decodedToken.id,
-          name: decodedToken.name || decodedToken.username || 'Usuario',
-          email: decodedToken.email || '',
-          picture: decodedToken.picture || decodedToken.avatar,
-          role: decodedToken.role,
-          permissions: decodedToken.permissions || {},
+          sub: tokenUser.id || tokenUser.sub || tokenUser.user_id,
+          name: tokenUser.name || tokenUser.username || 'Usuario',
+          email: tokenUser.email || '',
+          picture: tokenUser.picture || tokenUser.avatar,
+          role: tokenUser.role,
+          permissions: tokenUser.permissions || decodedToken.permissions || {},
+          tenant_id: tokenUser.tenant_id || decodedToken.tenant_id || undefined,
+          tenant_name: tokenUser.tenant_name || decodedToken.tenant_name || undefined,
         };
       } else {
         throw new Error('Failed to get user info from token or auth response');

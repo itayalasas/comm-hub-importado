@@ -92,11 +92,17 @@ export const Dashboard = () => {
         .eq('user_id', user.sub)
         .maybeSingle();
 
-      const { data, error } = await supabase
+      // Filter by tenant when available so all users in the same tenant share apps
+      const appsQuery = supabase
         .from('applications')
         .select('id, name')
-        .eq('user_id', user.sub)
         .order('created_at', { ascending: false });
+
+      const { data, error } = await (
+        user.tenant_id
+          ? appsQuery.eq('tenant_id', user.tenant_id)
+          : appsQuery.eq('user_id', user.sub)
+      );
 
       if (error) throw error;
 

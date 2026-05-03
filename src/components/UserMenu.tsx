@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { User, CreditCard, LogOut, ChevronDown } from 'lucide-react';
+import { User, CreditCard, LogOut, ChevronDown, Building2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfileModal } from './UserProfileModal';
 import { SubscriptionModal } from './SubscriptionModal';
@@ -68,13 +68,19 @@ export const UserMenu = () => {
             <div className="p-3 border-b border-slate-700">
               <div className="text-sm font-medium text-white">{user?.name}</div>
               <div className="text-xs text-slate-400">{user?.email}</div>
-              {user?.role && (
-                <div className="mt-1">
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {user?.role && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                     {user.role}
                   </span>
-                </div>
-              )}
+                )}
+                {user?.tenant_name && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-300 border border-slate-600">
+                    <Building2 className="w-3 h-3" />
+                    {user.tenant_name}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="py-2">

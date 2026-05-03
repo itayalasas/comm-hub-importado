@@ -72,11 +72,17 @@ export const Settings = () => {
     try {
       if (!user?.sub) return;
 
-      const { data, error } = await supabase
+      // Filter by tenant when available so all users in the same tenant share apps
+      const appsQuery = supabase
         .from('applications')
         .select('id, name, api_key')
-        .eq('user_id', user.sub)
         .order('created_at', { ascending: false });
+
+      const { data, error } = await (
+        user.tenant_id
+          ? appsQuery.eq('tenant_id', user.tenant_id)
+          : appsQuery.eq('user_id', user.sub)
+      );
 
       if (error) throw error;
 
@@ -294,6 +300,7 @@ export const Settings = () => {
           app_id: appId,
           domain: newAppData.domain || null,
           api_key: apiKey,
+          ...(user.tenant_id ? { tenant_id: user.tenant_id } : {}),
         })
         .select()
         .single();
