@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, Settings, BarChart3, Book, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FileText, Settings, BarChart3, Book, Menu, X, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
 import { UserMenu } from './UserMenu';
@@ -20,6 +20,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
     { name: 'Templates', icon: FileText, page: 'templates', route: 'templates', permissionKey: 'templates' },
     { name: 'Estadísticas', icon: BarChart3, page: 'statistics', route: 'statistics', permissionKey: 'statistics' },
     { name: 'Documentación', icon: Book, page: 'documentation', route: 'documentation', permissionKey: 'documentation' },
+    { name: 'API Explorer', icon: Zap, page: 'api-explorer', route: 'api-explorer', permissionKey: 'documentation' },
     { name: 'Configuración', icon: Settings, page: 'settings', route: 'settings', permissionKey: 'settings' },
   ].filter(item => hasMenuAccess(item.permissionKey));
 

@@ -10,6 +10,7 @@ import { Templates } from './pages/Templates';
 import { Statistics } from './pages/Statistics';
 import { Settings } from './pages/Settings';
 import Documentation from './pages/Documentation';
+import ApiExplorer from './pages/ApiExplorer';
 
 
 const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode; requiredMenu?: string }) => {
@@ -170,6 +171,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute requiredMenu="settings">
             <Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/api-explorer"
+        element={
+          <ProtectedRoute requiredMenu="documentation">
+            <ApiExplorer />
           </ProtectedRoute>
         }
       />
