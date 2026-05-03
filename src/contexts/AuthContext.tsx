@@ -210,7 +210,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const register = () => {
-    const authUrl = `${configManager.authUrl}/register?` +
+    const authUrl = `${configManager.authUrl}/register-tenant?` +
       `app_id=${configManager.authAppId}&` +
       `redirect_uri=${encodeURIComponent(configManager.redirectUri)}&` +
       `api_key=${configManager.authApiKey}`;
