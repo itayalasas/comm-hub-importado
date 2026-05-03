@@ -126,7 +126,15 @@ Deno.serve(async (req: Request) => {
 
     console.log('[send-email] PDF download section:', pdfPublicUrl ? 'Added to template' : 'Not added (no URL)');
 
-    const enrichedData = { ...data, pdf_download_section: pdfDownloadSection };
+    // Merge root-level fields (recipient_email, order_id, etc.) so templates can
+    // reference {{recipient_email}} even though it lives outside the data object.
+    // Explicit data fields take precedence over root fields.
+    const enrichedData = {
+      recipient_email,
+      order_id: requestData.order_id || null,
+      ...data,
+      pdf_download_section: pdfDownloadSection,
+    };
     let htmlContent = renderTemplate(template.html_content, enrichedData);
     let emailSubject = subject || renderTemplate(template.subject || '', enrichedData);
 
