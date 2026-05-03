@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { verifyApplicationOwnership } from '../lib/security';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
-import { Plus, Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { Plus, CreditCard as Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -101,11 +101,16 @@ export const Templates = () => {
         .eq('user_id', user.sub)
         .maybeSingle();
 
-      const { data, error } = await supabase
+      const appsQuery = supabase
         .from('applications')
         .select('id, name')
-        .eq('user_id', user.sub)
-        .order('created_at', { ascending: false});
+        .order('created_at', { ascending: false });
+
+      const { data, error } = await (
+        user.tenant_id
+          ? appsQuery.eq('tenant_id', user.tenant_id)
+          : appsQuery.eq('user_id', user.sub)
+      );
 
       if (error) throw error;
 
@@ -127,7 +132,7 @@ export const Templates = () => {
     try {
       if (!user?.sub) return;
 
-      const isOwner = await verifyApplicationOwnership(appId, user.sub);
+      const isOwner = await verifyApplicationOwnership(appId, user.sub, user.tenant_id);
       if (!isOwner) {
         console.error('Unauthorized access to application');
         return;

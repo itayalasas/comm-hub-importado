@@ -1,23 +1,30 @@
 import { supabase } from './supabase';
 
+/**
+ * Returns true when the user owns the application directly OR belongs to
+ * the same tenant as the application. Tenant members share all applications.
+ */
 export async function verifyApplicationOwnership(
   applicationId: string,
-  userId: string
+  userId: string,
+  tenantId?: string | null
 ): Promise<boolean> {
   try {
     const { data, error } = await supabase
       .from('applications')
-      .select('id')
+      .select('id, user_id, tenant_id')
       .eq('id', applicationId)
-      .eq('user_id', userId)
       .maybeSingle();
 
-    if (error) {
-      console.error('Error verifying application ownership:', error);
-      return false;
-    }
+    if (error || !data) return false;
 
-    return !!data;
+    // Direct owner
+    if (data.user_id === userId) return true;
+
+    // Same tenant — all tenant members have access
+    if (tenantId && data.tenant_id && data.tenant_id === tenantId) return true;
+
+    return false;
   } catch (error) {
     console.error('Error in verifyApplicationOwnership:', error);
     return false;
