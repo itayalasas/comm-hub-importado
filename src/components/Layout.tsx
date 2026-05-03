@@ -45,12 +45,24 @@ const FEATURE_ORDER = [
   'priority_support',
 ];
 
-function buildRegisterUrl(planId: string): string {
+function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
+  // If plan has MercadoPago config, use init_point directly.
+  // Update back_url to current app origin so MP redirects back here after payment.
+  if (plan.mercadopago?.init_point) {
+    try {
+      const url = new URL(plan.mercadopago.init_point);
+      url.searchParams.set('back_url', window.location.origin + window.location.pathname);
+      return url.toString();
+    } catch {
+      return plan.mercadopago.init_point;
+    }
+  }
+  // Fallback: use the auth register-tenant flow with plan_id
   const base = configManager.authUrl;
   const appId = configManager.authAppId;
   const apiKey = configManager.authApiKey;
   const redirectUri = configManager.redirectUri;
-  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${planId}`;
+  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${plan.id}`;
 }
 
 const TrialExpiredBlocker = () => {
@@ -164,7 +176,7 @@ const TrialExpiredBlocker = () => {
                         </ul>
 
                         <button
-                          onClick={() => { window.location.href = buildRegisterUrl(plan.id); }}
+                          onClick={() => { window.location.href = buildSubscribeUrl(plan); }}
                           className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btn}`}
                         >
                           Suscribirse
