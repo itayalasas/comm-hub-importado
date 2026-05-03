@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Star,
   Check,
+  Minus,
   MessageSquare,
   Send,
   Activity,
@@ -444,6 +445,101 @@ const STEPS = [
   },
 ];
 
+/* ─── Pricing Data ──────────────────────────────────────────────── */
+const PLANS = [
+  {
+    key: 'trial',
+    name: 'Trial',
+    tagline: '14 días gratis',
+    priceLabel: 'Gratis',
+    priceSub: '14 días',
+    highlight: false,
+    badge: null,
+    accentClass: 'text-slate-300',
+    borderClass: 'border-white/8',
+    bgClass: 'bg-white/[0.03]',
+    btnClass: 'bg-slate-600 hover:bg-slate-500 text-white',
+    features: [
+      { label: 'Emails / mes',          value: '100' },
+      { label: 'PDFs / mes',            value: '20' },
+      { label: 'Aplicaciones',          value: '1' },
+      { label: 'Templates',             value: '3' },
+      { label: 'Acceso API',            bool: false },
+      { label: '2FA',                   bool: false },
+      { label: 'Soporte prioritario',   bool: false },
+    ],
+  },
+  {
+    key: 'starter',
+    name: 'Starter',
+    tagline: 'Para comenzar',
+    priceLabel: 'UYU 890',
+    priceSub: '/mes',
+    highlight: false,
+    badge: null,
+    accentClass: 'text-cyan-400',
+    borderClass: 'border-cyan-500/20',
+    bgClass: 'bg-white/[0.03]',
+    btnClass: 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/20',
+    features: [
+      { label: 'Emails / mes',          value: '1.000' },
+      { label: 'PDFs / mes',            value: '200' },
+      { label: 'Aplicaciones',          value: '1' },
+      { label: 'Templates',             value: '10' },
+      { label: 'Acceso API',            bool: false },
+      { label: '2FA',                   bool: false },
+      { label: 'Soporte prioritario',   bool: false },
+    ],
+  },
+  {
+    key: 'business',
+    name: 'Business',
+    tagline: 'Para empresas en crecimiento',
+    priceLabel: 'UYU 1.890',
+    priceSub: '/mes',
+    highlight: true,
+    badge: 'Más popular',
+    accentClass: 'text-blue-400',
+    borderClass: 'border-blue-400/50',
+    bgClass: 'bg-gradient-to-b from-blue-500/10 to-blue-500/5',
+    btnClass: 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-500/30',
+    features: [
+      { label: 'Emails / mes',          value: '10.000' },
+      { label: 'PDFs / mes',            value: '3.000' },
+      { label: 'Aplicaciones',          value: '5' },
+      { label: 'Templates',             value: '50' },
+      { label: 'Acceso API',            bool: true },
+      { label: '2FA',                   bool: true },
+      { label: 'Reportes avanzados',    bool: true },
+      { label: 'Soporte prioritario',   bool: false },
+    ],
+  },
+  {
+    key: 'pro',
+    name: 'Pro',
+    tagline: 'Alto volumen · Multi-tenant',
+    priceLabel: 'UYU 3.900',
+    priceSub: '/mes',
+    highlight: false,
+    badge: 'Máximo poder',
+    accentClass: 'text-emerald-400',
+    borderClass: 'border-emerald-400/25',
+    bgClass: 'bg-white/[0.03]',
+    btnClass: 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20',
+    features: [
+      { label: 'Emails / mes',          value: '50.000' },
+      { label: 'PDFs / mes',            value: '20.000' },
+      { label: 'Aplicaciones',          value: '20' },
+      { label: 'Templates',             value: '200' },
+      { label: 'Acceso API',            bool: true },
+      { label: '2FA',                   bool: true },
+      { label: 'Reportes avanzados',    bool: true },
+      { label: 'Dominio personalizado', bool: true },
+      { label: 'Soporte prioritario',   bool: true },
+    ],
+  },
+] as const;
+
 /* ─── Page ──────────────────────────────────────────────────────── */
 export const Home = () => {
   const navigate = useNavigate();
@@ -497,6 +593,7 @@ export const Home = () => {
             <div className="hidden md:flex items-center space-x-8 text-sm text-slate-400">
               <a href="#how" className="hover:text-white transition-colors hover:text-cyan-300">Como funciona</a>
               <a href="#features" className="hover:text-white transition-colors hover:text-cyan-300">Funcionalidades</a>
+              <a href="#pricing" className="hover:text-white transition-colors hover:text-cyan-300">Precios</a>
               <a href="#testimonials" className="hover:text-white transition-colors hover:text-cyan-300">Testimonios</a>
             </div>
             <button
@@ -790,6 +887,90 @@ export const Home = () => {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── PRICING ───────────────────────────────────────────────── */}
+      <section id="pricing" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Planes y Precios</div>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Elige el plan que se ajusta a tu equipo
+            </h2>
+            <p className="text-slate-400 max-w-xl mx-auto">
+              Todos los planes incluyen acceso multi-tenant. Los límites son compartidos por todo el tenant y solo los administradores pueden actualizarlo.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+            {PLANS.map((plan) => (
+              <div
+                key={plan.key}
+                className={`relative rounded-2xl border ${plan.borderClass} ${plan.bgClass} flex flex-col overflow-hidden card-hover ${plan.highlight ? 'ring-1 ring-blue-400/30' : ''}`}
+              >
+                {/* Badge */}
+                {plan.badge && (
+                  <div className="absolute top-0 left-0 right-0 flex justify-center">
+                    <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${plan.key === 'business' ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                      {plan.badge}
+                    </span>
+                  </div>
+                )}
+
+                <div className={`p-6 flex flex-col flex-1 ${plan.badge ? 'pt-10' : ''}`}>
+                  {/* Header */}
+                  <div className="mb-5">
+                    <h3 className={`text-xl font-extrabold mb-1 ${plan.accentClass}`}>{plan.name}</h3>
+                    <p className="text-slate-500 text-xs">{plan.tagline}</p>
+                  </div>
+
+                  {/* Price */}
+                  <div className="mb-6 flex items-baseline gap-1">
+                    <span className="text-3xl font-extrabold text-white">{plan.priceLabel}</span>
+                    <span className="text-slate-400 text-sm">{plan.priceSub}</span>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="h-px bg-white/6 mb-5" />
+
+                  {/* Features */}
+                  <ul className="space-y-3 flex-1 mb-6">
+                    {plan.features.map((f) => (
+                      <li key={f.label} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-slate-400">{f.label}</span>
+                        {'bool' in f ? (
+                          f.bool ? (
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+                              <Check className="w-3 h-3 text-emerald-400" />
+                            </span>
+                          ) : (
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/5 border border-white/8 flex items-center justify-center">
+                              <Minus className="w-3 h-3 text-slate-600" />
+                            </span>
+                          )
+                        ) : (
+                          <span className={`flex-shrink-0 font-bold text-xs ${plan.accentClass}`}>{f.value}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* CTA */}
+                  <button
+                    onClick={() => navigate('/login')}
+                    className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${plan.btnClass}`}
+                  >
+                    {plan.key === 'trial' ? 'Comenzar gratis' : 'Suscribirse'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-center text-slate-600 text-sm mt-10">
+            Precios en pesos uruguayos (UYU) · Límites compartidos por tenant · Solo administradores pueden cambiar el plan
+          </p>
         </div>
       </section>
 
