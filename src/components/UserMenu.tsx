@@ -1,14 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
-import { User, CreditCard, LogOut, ChevronDown, Building2 } from 'lucide-react';
+import { User, CreditCard, LogOut, ChevronDown, Building2, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfileModal } from './UserProfileModal';
 import { SubscriptionModal } from './SubscriptionModal';
+import { InvitationsModal } from './InvitationsModal';
 
 export const UserMenu = () => {
   const { user, logout, subscription } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showInvitationsModal, setShowInvitationsModal] = useState(false);
+
+  const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -95,6 +99,19 @@ export const UserMenu = () => {
                 <span>Mi Perfil</span>
               </button>
 
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    setShowInvitationsModal(true);
+                    setIsOpen(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700/50 flex items-center space-x-3 transition-colors"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Invitaciones</span>
+                </button>
+              )}
+
               <button
                 onClick={() => {
                   setShowSubscriptionModal(true);
@@ -142,6 +159,10 @@ export const UserMenu = () => {
 
       {showSubscriptionModal && (
         <SubscriptionModal onClose={() => setShowSubscriptionModal(false)} />
+      )}
+
+      {showInvitationsModal && (
+        <InvitationsModal onClose={() => setShowInvitationsModal(false)} />
       )}
     </>
   );
