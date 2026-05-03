@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { X, CreditCard, Calendar, Package } from 'lucide-react';
+import { X, CreditCard, Calendar, Package, Check, Minus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UpgradeModal } from './UpgradeModal';
 import { useState } from 'react';
@@ -134,14 +134,24 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                   <div className="space-y-2">
                     {features.length === 0 ? (
                       <div className="text-sm text-slate-400">Sin características disponibles</div>
-                    ) : features.map((feature) => (
-                      <div key={feature.code} className="flex items-center justify-between">
-                        <span className="text-sm text-slate-300">{feature.name}</span>
-                        <span className="text-sm font-semibold text-cyan-400">
-                          {feature.value} {feature.unit || ''}
-                        </span>
-                      </div>
-                    ))}
+                    ) : features.map((feature) => {
+                      const isBool = feature.value_type === 'boolean';
+                      const boolTrue = isBool && (feature.value === 'true' || feature.value === '1');
+                      return (
+                        <div key={feature.code} className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-slate-300 truncate">{feature.name}</span>
+                          {isBool ? (
+                            <span className={`flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full ${boolTrue ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-500'}`}>
+                              {boolTrue ? <Check className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+                            </span>
+                          ) : (
+                            <span className="flex-shrink-0 text-sm font-semibold text-cyan-400">
+                              {feature.value}{feature.unit ? ` ${feature.unit}` : ''}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

@@ -97,21 +97,42 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [isLoading, setIsLoading] = useState(true);
 
   const normalizeFeatures = (rawFeatures: any): Feature[] => {
-    if (!Array.isArray(rawFeatures)) return [];
+    // Format 1: array of feature objects [{ code, name, value, value_type, ... }]
+    if (Array.isArray(rawFeatures)) {
+      return rawFeatures
+        .filter((feature) => feature && typeof feature === 'object')
+        .map((feature) => ({
+          code: String(feature.code || ''),
+          name: String(feature.name || feature.code || 'Feature'),
+          description: String(feature.description || ''),
+          value: String(feature.value ?? ''),
+          value_type: (feature.value_type === 'number' || feature.value_type === 'boolean' || feature.value_type === 'string')
+            ? feature.value_type
+            : 'string',
+          unit: feature.unit ? String(feature.unit) : undefined,
+          category: String(feature.category || 'general'),
+        }));
+    }
 
-    return rawFeatures
-      .filter((feature) => feature && typeof feature === 'object')
-      .map((feature) => ({
-        code: String(feature.code || ''),
-        name: String(feature.name || feature.code || 'Feature'),
-        description: String(feature.description || ''),
-        value: String(feature.value ?? ''),
-        value_type: (feature.value_type === 'number' || feature.value_type === 'boolean' || feature.value_type === 'string')
-          ? feature.value_type
-          : 'string',
-        unit: feature.unit ? String(feature.unit) : undefined,
-        category: String(feature.category || 'general'),
-      }));
+    // Format 2: flat object { featureCode: value, ... } — e.g. from external auth system
+    if (rawFeatures && typeof rawFeatures === 'object') {
+      return Object.entries(rawFeatures).map(([key, val]) => {
+        const rawVal = val as any;
+        const isBoolean = typeof rawVal === 'boolean' || rawVal === 'true' || rawVal === 'false';
+        const isNumber = !isBoolean && (typeof rawVal === 'number' || (typeof rawVal === 'string' && !isNaN(Number(rawVal)) && rawVal !== ''));
+        return {
+          code: key,
+          name: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+          description: '',
+          value: String(rawVal ?? ''),
+          value_type: isBoolean ? 'boolean' : isNumber ? 'number' : 'string',
+          unit: undefined,
+          category: 'general',
+        } as Feature;
+      });
+    }
+
+    return [];
   };
 
   const normalizeSubscription = (rawSubscription: any): Subscription | null => {
@@ -120,6 +141,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (!rawSubscription.id || !rawSubscription.status) {
       return null;
     }
+
+    // Features can come as entitlements.features (array/object), as a flat object
+    // at entitlements root, or directly as rawSubscription.features
+    const rawFeatures =
+      rawSubscription.entitlements?.features ??
+      rawSubscription.features ??
+      (rawSubscription.entitlements && typeof rawSubscription.entitlements === 'object' && !Array.isArray(rawSubscription.entitlements)
+        ? rawSubscription.entitlements
+        : undefined);
 
     return {
       id: String(rawSubscription.id),
@@ -132,7 +162,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       period_start: String(rawSubscription.period_start || ''),
       period_end: String(rawSubscription.period_end || ''),
       entitlements: {
-        features: normalizeFeatures(rawSubscription.entitlements?.features),
+        features: normalizeFeatures(rawFeatures),
       },
     };
   };
