@@ -1,4 +1,4 @@
-import { Shield, Check, ArrowRight, Sparkles } from 'lucide-react';
+import { Shield, Check, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
