@@ -91,11 +91,16 @@ Deno.serve(async (req: Request) => {
     }
 
     const { data: credentials } = await supabase.from('email_credentials').select('*').eq('application_id', application.id).eq('is_active', true).maybeSingle();
-    if (!credentials) {
-      return new Response(JSON.stringify({ success: false, error: 'Email credentials not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
 
-    const providerType = credentials.provider_type || 'smtp';
+    // Fall back to platform default when no credentials are configured
+    const effectiveCredentials = credentials ?? {
+      provider_type: 'resend',
+      resend_api_key: '',
+      from_email: 'no-reply@sendcraft.net',
+      from_name: 'SandCraft',
+    };
+
+    const providerType = effectiveCredentials.provider_type || 'resend';
     console.log('[send-email] Using provider:', providerType);
 
     const { data: template } = await supabase.from('communication_templates').select('*').eq('name', template_name).eq('application_id', application.id).eq('template_type', 'email').eq('is_active', true).maybeSingle();
@@ -268,26 +273,27 @@ Deno.serve(async (req: Request) => {
     try {
       // When the stored Resend key is absent/short (<20 chars) the credentials
       // belong to the platform default account — override all sender details.
-      const storedResendKey = credentials.resend_api_key ?? '';
+      const storedResendKey = effectiveCredentials.resend_api_key ?? '';
       const usingPlatformAccount = providerType === 'resend' && storedResendKey.length < 20;
+
 
       const actualFromEmail = usingPlatformAccount
         ? 'no-reply@sendcraft.net'
-        : credentials.from_email;
+        : effectiveCredentials.from_email;
       const fromName = usingPlatformAccount
         ? 'SandCraft'
-        : (credentials.from_name || application.name || 'SandCraft');
+        : (effectiveCredentials.from_name || application.name || 'SandCraft');
 
       console.log('[send-email] From email:', actualFromEmail, 'Name:', fromName, 'Platform account:', usingPlatformAccount);
 
       if (providerType === 'smtp') {
-        const useTLS = credentials.smtp_port === 465;
-        console.log('[send-email] SMTP config:', { host: credentials.smtp_host, port: credentials.smtp_port, user: credentials.smtp_user, tls: useTLS });
+        const useTLS = effectiveCredentials.smtp_port === 465;
+        console.log('[send-email] SMTP config:', { host: effectiveCredentials.smtp_host, port: effectiveCredentials.smtp_port, user: effectiveCredentials.smtp_user, tls: useTLS });
 
         const connectionConfig: any = {
-          hostname: credentials.smtp_host,
-          port: credentials.smtp_port,
-          auth: { username: credentials.smtp_user, password: credentials.smtp_password },
+          hostname: effectiveCredentials.smtp_host,
+          port: effectiveCredentials.smtp_port,
+          auth: { username: effectiveCredentials.smtp_user, password: effectiveCredentials.smtp_password },
         };
         if (useTLS) connectionConfig.tls = true;
 
