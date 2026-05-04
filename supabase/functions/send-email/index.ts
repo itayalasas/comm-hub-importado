@@ -305,7 +305,17 @@ Deno.serve(async (req: Request) => {
         await client.close();
         console.log('[send-email] Email sent successfully via SMTP');
       } else {
-        console.log('[send-email] Resend config:', { api_key_length: credentials.resend_api_key?.length });
+        // Use the platform RESEND_API_KEY secret when the stored key is absent/invalid
+        // (length < 20 is a safe proxy for "not a real Resend key")
+        const storedKey = credentials.resend_api_key ?? '';
+        const resendApiKey = storedKey.length >= 20
+          ? storedKey
+          : Deno.env.get('RESEND_API_KEY')!;
+
+        console.log('[send-email] Resend config:', {
+          using_platform_key: storedKey.length < 20,
+          api_key_source: storedKey.length >= 20 ? 'db' : 'env',
+        });
 
         const resendPayload: any = {
           from: fromName ? `${fromName} <${actualFromEmail}>` : actualFromEmail,
@@ -328,7 +338,7 @@ Deno.serve(async (req: Request) => {
         const resendResponse = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${credentials.resend_api_key}`,
+            'Authorization': `Bearer ${resendApiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(resendPayload),
