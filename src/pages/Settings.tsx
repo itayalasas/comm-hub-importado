@@ -73,11 +73,33 @@ export const Settings = () => {
     }
   }, [user]);
 
+  const provisionDefaultEmail = async (appId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      await fetch(`${supabaseUrl}/functions/v1/provision-default-email`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ application_id: appId }),
+      });
+    } catch (err) {
+      console.error('Error provisioning default email:', err);
+    }
+  };
+
   useEffect(() => {
-    if (selectedApp) {
+    if (!selectedApp) return;
+    if (!canUseSmtp && !canUseResend) {
+      // Auto-provision platform default email silently, then load to confirm active
+      provisionDefaultEmail(selectedApp).then(() => loadCredentials(selectedApp));
+    } else {
       loadCredentials(selectedApp);
     }
-  }, [selectedApp]);
+  }, [selectedApp, canUseSmtp, canUseResend]);
 
   const copyReturnUrl = () => {
     navigator.clipboard.writeText(subscriptionReturnUrl);
@@ -463,25 +485,33 @@ export const Settings = () => {
               <div className="flex items-center space-x-2">
                 <Server className="w-5 h-5 text-cyan-400" />
                 <h3 className="text-lg font-semibold text-white">
-                  Configuración de Email {credentials && `(${credentials.provider_type === 'smtp' ? 'SMTP' : 'Resend'})`}
+                  Configuración de Email
+                  {!canUseSmtp && !canUseResend
+                    ? ' (Plataforma)'
+                    : credentials
+                    ? ` (${credentials.provider_type === 'smtp' ? 'SMTP' : 'Resend'})`
+                    : ''}
                 </h3>
               </div>
-              <button
-                onClick={openModal}
-                className="flex items-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
-              >
-                {credentials ? (
-                  <>
-                    <Server className="w-4 h-4" />
-                    <span>Editar</span>
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" />
-                    <span>Configurar Email</span>
-                  </>
-                )}
-              </button>
+              {/* Only show edit button when the plan allows custom provider config */}
+              {(canUseSmtp || canUseResend) && (
+                <button
+                  onClick={openModal}
+                  className="flex items-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
+                >
+                  {credentials ? (
+                    <>
+                      <Server className="w-4 h-4" />
+                      <span>Editar</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      <span>Configurar Email</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             <div className="mb-4 flex space-x-2 overflow-x-auto pb-2">
@@ -500,7 +530,29 @@ export const Settings = () => {
               ))}
             </div>
 
-            {credentials ? (
+            {/* Plan uses platform email — show locked status only */}
+            {!canUseSmtp && !canUseResend ? (
+              <div className="flex items-start gap-4 bg-slate-900/50 border border-slate-700/60 rounded-xl p-5">
+                <div className="w-10 h-10 flex-shrink-0 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white mb-1">Correo configurado por la plataforma</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Los envíos de email para esta aplicación están gestionados por la plataforma.
+                    Para configurar tu propio proveedor de email, actualiza tu plan.
+                  </p>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setShowUpgradeModal(true)}
+                      className="mt-3 text-xs text-cyan-400 hover:text-cyan-300 underline decoration-cyan-400/40 transition-colors"
+                    >
+                      Ver planes disponibles
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : credentials ? (
               <div className="space-y-3">
                 <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3 mb-3">
                   <div className="text-xs text-cyan-400 mb-1">Proveedor Activo</div>
