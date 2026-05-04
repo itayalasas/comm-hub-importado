@@ -197,10 +197,167 @@ const TrialExpiredBlocker = () => {
   );
 };
 
+/* ── User limit blocker ─────────────────────────────────────────── */
+
+const UserLimitBlocker = ({ activeUsersCount, maxUsers }: { activeUsersCount: number; maxUsers: number }) => {
+  const { plans, loading } = usePlans();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
+
+  const paidPlans = plans.filter(p => p.price > 0 || p.trial_days === 0);
+
+  return (
+    <div className="fixed inset-0 z-[999] bg-[#050d1a]/98 backdrop-blur-sm flex flex-col items-center justify-center px-4 py-8 overflow-y-auto">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute top-0 left-1/4 w-[600px] h-[400px] bg-amber-500 rounded-full blur-[160px] opacity-[0.06]" />
+        <div className="absolute bottom-0 right-1/4 w-[500px] h-[300px] bg-cyan-500 rounded-full blur-[140px] opacity-[0.06]" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-5xl mx-auto">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 mb-5">
+            <AlertTriangle className="w-8 h-8 text-amber-400" />
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-3">
+            Límite de usuarios alcanzado
+          </h1>
+          <p className="text-slate-400 text-base max-w-lg mx-auto leading-relaxed">
+            Tu plan permite hasta <span className="text-white font-bold">{maxUsers} {maxUsers === 1 ? 'usuario' : 'usuarios'}</span>,
+            pero tu cuenta tiene <span className="text-amber-400 font-bold">{activeUsersCount} usuarios activos</span>.
+            {isAdmin
+              ? ' Actualiza tu plan para restablecer el acceso.'
+              : ' Contacta a tu administrador para actualizar el plan.'
+            }
+          </p>
+
+          {/* Counter visual */}
+          <div className="inline-flex items-center gap-4 mt-6 bg-slate-800/60 border border-slate-700/60 rounded-2xl px-6 py-4">
+            <div className="text-center">
+              <p className="text-2xl font-extrabold text-amber-400">{activeUsersCount}</p>
+              <p className="text-xs text-slate-500 mt-0.5">Usuarios activos</p>
+            </div>
+            <div className="w-px h-10 bg-slate-700" />
+            <div className="text-center">
+              <p className="text-2xl font-extrabold text-slate-300">{maxUsers}</p>
+              <p className="text-xs text-slate-500 mt-0.5">Límite del plan</p>
+            </div>
+          </div>
+        </div>
+
+        {isAdmin && (
+          <>
+            {loading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
+                {paidPlans.map((plan, i) => {
+                  const styleIdx = Math.min(i + 1, 3);
+                  const style = PLAN_STYLE[styleIdx];
+                  const sortedFeatures = [...(plan.entitlements?.features ?? [])].sort((a, b) => {
+                    const ia = FEATURE_ORDER.indexOf(a.code);
+                    const ib = FEATURE_ORDER.indexOf(b.code);
+                    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+                  });
+
+                  // Highlight plans that support more users than current active count
+                  const planMaxUsers = plan.entitlements?.features?.find(f => f.code === 'max_users');
+                  const planUserLimit = planMaxUsers ? parseInt(planMaxUsers.value, 10) : null;
+                  const coversNeeds = planUserLimit === null || planUserLimit > activeUsersCount;
+
+                  return (
+                    <div
+                      key={plan.id}
+                      className={`relative rounded-2xl border ${style.border} ${style.bg} flex flex-col overflow-hidden transition-transform hover:-translate-y-1 duration-200 ${coversNeeds ? 'ring-1 ring-cyan-500/30' : 'opacity-60'}`}
+                    >
+                      {style.badge && (
+                        <div className="absolute top-0 left-0 right-0 flex justify-center">
+                          <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${styleIdx === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                            {style.badge}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className={`p-5 flex flex-col flex-1 ${style.badge ? 'pt-9' : ''}`}>
+                        <div className="mb-4">
+                          <h3 className={`text-lg font-extrabold mb-0.5 ${style.accent}`}>{plan.name}</h3>
+                          <p className="text-slate-500 text-xs">{plan.description}</p>
+                        </div>
+
+                        <div className="mb-4 flex items-baseline gap-1">
+                          <span className="text-2xl font-extrabold text-white">
+                            {plan.currency} {plan.price.toLocaleString('es-UY')}
+                          </span>
+                          <span className="text-slate-400 text-sm">/mes</span>
+                        </div>
+
+                        <div className="h-px bg-white/6 mb-4" />
+
+                        <ul className="space-y-2.5 flex-1 mb-5">
+                          {sortedFeatures.map((f) => {
+                            const label = FEATURE_LABEL[f.code] ?? f.name;
+                            const isBool = f.value_type === 'boolean';
+                            const boolOn = isBool && (f.value === 'true' || f.value === '1');
+                            const numVal = !isBool ? parseInt(f.value, 10) : null;
+                            return (
+                              <li key={f.code} className="flex items-center justify-between gap-2 text-sm">
+                                <span className="text-slate-400 text-xs">{label}</span>
+                                {isBool ? (
+                                  boolOn ? (
+                                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+                                      <Check className="w-3 h-3 text-emerald-400" />
+                                    </span>
+                                  ) : (
+                                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/5 border border-white/8 flex items-center justify-center">
+                                      <Minus className="w-3 h-3 text-slate-600" />
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className={`flex-shrink-0 font-bold text-xs ${style.accent}`}>
+                                    {numVal !== null ? numVal.toLocaleString('es-UY') : f.value}
+                                    {f.unit ? ` ${f.unit}` : ''}
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+
+                        <button
+                          onClick={() => { window.location.href = buildSubscribeUrl(plan); }}
+                          className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btn}`}
+                        >
+                          Actualizar a {plan.name}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-center text-slate-600 text-xs">
+              Precios en pesos uruguayos (UYU) · Límites compartidos por tenant
+            </p>
+          </>
+        )}
+
+        {!isAdmin && (
+          <div className="text-center mt-4 p-4 bg-slate-800/60 border border-slate-700 rounded-xl max-w-sm mx-auto">
+            <p className="text-slate-400 text-sm">
+              Por favor comunícate con el administrador de tu cuenta para actualizar el plan de suscripción.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ── Main Layout ────────────────────────────────────────────────── */
 
 export const Layout = ({ children, currentPage }: LayoutProps) => {
-  const { hasMenuAccess, subscription } = useAuth();
+  const { hasMenuAccess, subscription, user } = useAuth();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -217,6 +374,12 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
   const isTrialing = subscription?.status === 'trialing';
   const trialEndDate = subscription?.trial_end ? new Date(subscription.trial_end) : null;
   const trialExpiredBlocked = isTrialing && trialEndDate !== null && trialEndDate < new Date();
+
+  // Check user limit against plan's max_users feature
+  const maxUsersFeature = subscription?.entitlements?.features?.find(f => f.code === 'max_users');
+  const maxUsers = maxUsersFeature ? parseInt(maxUsersFeature.value, 10) : null;
+  const activeUsersCount = user?.active_users_count ?? 0;
+  const userLimitExceeded = maxUsers !== null && activeUsersCount > maxUsers;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -246,6 +409,11 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
 
       {/* Full-page blocker when trial has expired */}
       {trialExpiredBlocked && <TrialExpiredBlocker />}
+
+      {/* Full-page blocker when active users exceed plan limit */}
+      {!trialExpiredBlocked && userLimitExceeded && maxUsers !== null && (
+        <UserLimitBlocker activeUsersCount={activeUsersCount} maxUsers={maxUsers} />
+      )}
 
       <div className="flex relative">
         {isMobileMenuOpen && (

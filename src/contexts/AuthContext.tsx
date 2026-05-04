@@ -62,6 +62,7 @@ interface User {
   subscription?: Subscription;
   tenant_id?: string;
   tenant_name?: string;
+  active_users_count?: number;
 }
 
 interface AuthContextType {
@@ -443,6 +444,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           permissions: userData.permissions || {},
           tenant_id: userData.tenant_id || undefined,
           tenant_name: userData.tenant_name || undefined,
+          active_users_count: userData.active_users_count !== undefined ? Number(userData.active_users_count) : undefined,
         };
 
         if (authResponse.data.subscription) {
@@ -529,6 +531,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           permissions: tokenUser.permissions || decodedToken.permissions || {},
           tenant_id: tokenUser.tenant_id || decodedToken.tenant_id || undefined,
           tenant_name: tokenUser.tenant_name || decodedToken.tenant_name || undefined,
+          active_users_count: tokenUser.active_users_count !== undefined
+            ? Number(tokenUser.active_users_count)
+            : decodedToken.active_users_count !== undefined
+            ? Number(decodedToken.active_users_count)
+            : undefined,
         };
       } else {
         throw new Error('Failed to get user info from token or auth response');
