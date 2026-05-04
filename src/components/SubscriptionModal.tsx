@@ -30,8 +30,10 @@ function formatFeatureValue(value: string, unit?: string | null): string {
 }
 
 export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
-  const { subscription } = useAuth();
+  const { subscription, user } = useAuth();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
 
   const features = subscription?.entitlements?.features ?? [];
   const planPrice = typeof subscription?.plan_price === 'number' ? subscription.plan_price : 0;
@@ -90,12 +92,14 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
               <CreditCard className="w-14 h-14 text-slate-600 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-white mb-2">Sin Suscripción Activa</h3>
               <p className="text-slate-400 text-sm mb-6">No tienes una suscripción activa en este momento.</p>
-              <button
-                onClick={() => setShowUpgradeModal(true)}
-                className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors font-semibold"
-              >
-                Ver Planes Disponibles
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors font-semibold"
+                >
+                  Ver Planes Disponibles
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -219,13 +223,19 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
 
               {/* Actions */}
               <div className="flex gap-3 pt-1">
-                <button
-                  onClick={() => setShowUpgradeModal(true)}
-                  className="flex-1 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-white rounded-xl font-bold text-sm transition-all hover:shadow-lg hover:shadow-cyan-500/25"
-                >
-                  {trialExpired ? 'Suscribirse ahora' : 'Actualizar Plan'}
-                </button>
-                {!trialExpired && (
+                {isAdmin ? (
+                  <button
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="flex-1 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-white rounded-xl font-bold text-sm transition-all hover:shadow-lg hover:shadow-cyan-500/25"
+                  >
+                    {trialExpired ? 'Suscribirse ahora' : 'Actualizar Plan'}
+                  </button>
+                ) : (
+                  <div className="flex-1 flex items-center gap-2 px-4 py-2.5 bg-slate-800/60 border border-slate-700/50 rounded-xl">
+                    <span className="text-xs text-slate-400">Solo un Administrador puede cambiar el plan</span>
+                  </div>
+                )}
+                {(!trialExpired || !isAdmin) && (
                   <button
                     onClick={onClose}
                     className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-colors"
