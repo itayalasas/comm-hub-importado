@@ -30,7 +30,7 @@ interface EmailCredentials {
 export const Settings = () => {
   const { user } = useAuth();
   const toast = useToast();
-  const { checkApplicationLimit, refreshCounts } = useSubscriptionLimits();
+  const { checkApplicationLimit, refreshCounts, hasFeature } = useSubscriptionLimits();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [defaultApp, setDefaultApp] = useState<string | null>(null);
@@ -47,6 +47,10 @@ export const Settings = () => {
   });
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
+
+  // Plan feature gates for email providers
+  const canUseSmtp = hasFeature('configuracion_smtp');
+  const canUseResend = hasFeature('acceso_api_resend');
   const [copiedReturnUrl, setCopiedReturnUrl] = useState(false);
   const { plans } = usePlans();
   // back_url is set by the subscription service on the plan — grab it from the first paid plan
@@ -205,10 +209,20 @@ export const Settings = () => {
   };
 
   const openModal = () => {
+    // Resolve default provider: respect saved value only if that provider is still allowed by plan
+    const resolveProvider = (saved?: 'smtp' | 'resend'): 'smtp' | 'resend' => {
+      if (saved === 'resend' && canUseResend) return 'resend';
+      if (saved === 'smtp'   && canUseSmtp)   return 'smtp';
+      // Fallback: pick first allowed, or smtp as last resort
+      if (canUseSmtp)   return 'smtp';
+      if (canUseResend) return 'resend';
+      return 'smtp';
+    };
+
     if (credentials) {
       setFormData({
         id: credentials.id,
-        provider_type: credentials.provider_type || 'smtp',
+        provider_type: resolveProvider(credentials.provider_type),
         smtp_host: credentials.smtp_host || '',
         smtp_port: credentials.smtp_port || 587,
         smtp_user: credentials.smtp_user || '',
@@ -220,7 +234,7 @@ export const Settings = () => {
       });
     } else {
       setFormData({
-        provider_type: 'smtp',
+        provider_type: resolveProvider(),
         smtp_host: '',
         smtp_port: 587,
         smtp_user: '',
@@ -656,31 +670,74 @@ export const Settings = () => {
                   Proveedor de Email
                 </label>
                 <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, provider_type: 'smtp' })}
-                    className={`p-4 rounded-lg border-2 transition-all ${
-                      formData.provider_type === 'smtp'
-                        ? 'border-cyan-500 bg-cyan-500/10'
-                        : 'border-slate-700 bg-slate-900/50 hover:border-slate-600'
-                    }`}
-                  >
-                    <div className="text-white font-semibold mb-1">SMTP</div>
-                    <div className="text-xs text-slate-400">Servidor SMTP tradicional</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, provider_type: 'resend' })}
-                    className={`p-4 rounded-lg border-2 transition-all ${
-                      formData.provider_type === 'resend'
-                        ? 'border-cyan-500 bg-cyan-500/10'
-                        : 'border-slate-700 bg-slate-900/50 hover:border-slate-600'
-                    }`}
-                  >
-                    <div className="text-white font-semibold mb-1">Resend</div>
-                    <div className="text-xs text-slate-400">API moderna de email</div>
-                  </button>
+                  {/* SMTP option */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      disabled={!canUseSmtp}
+                      onClick={() => canUseSmtp && setFormData({ ...formData, provider_type: 'smtp' })}
+                      className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
+                        !canUseSmtp
+                          ? 'border-slate-700/50 bg-slate-900/30 opacity-50 cursor-not-allowed'
+                          : formData.provider_type === 'smtp'
+                          ? 'border-cyan-500 bg-cyan-500/10'
+                          : 'border-slate-700 bg-slate-900/50 hover:border-slate-600'
+                      }`}
+                    >
+                      <div className={`font-semibold mb-1 ${!canUseSmtp ? 'text-slate-500' : 'text-white'}`}>SMTP</div>
+                      <div className="text-xs text-slate-400">Servidor SMTP tradicional</div>
+                    </button>
+                    {!canUseSmtp && (
+                      <div className="absolute top-2 right-2">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-amber-400">
+                          Plan superior
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Resend option */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      disabled={!canUseResend}
+                      onClick={() => canUseResend && setFormData({ ...formData, provider_type: 'resend' })}
+                      className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
+                        !canUseResend
+                          ? 'border-slate-700/50 bg-slate-900/30 opacity-50 cursor-not-allowed'
+                          : formData.provider_type === 'resend'
+                          ? 'border-cyan-500 bg-cyan-500/10'
+                          : 'border-slate-700 bg-slate-900/50 hover:border-slate-600'
+                      }`}
+                    >
+                      <div className={`font-semibold mb-1 ${!canUseResend ? 'text-slate-500' : 'text-white'}`}>Resend</div>
+                      <div className="text-xs text-slate-400">API moderna de email</div>
+                    </button>
+                    {!canUseResend && (
+                      <div className="absolute top-2 right-2">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-amber-400">
+                          Plan superior
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Inline upgrade hint when a provider is blocked */}
+                {(!canUseSmtp || !canUseResend) && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Algunas opciones requieren un plan superior.{' '}
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowModal(false); setShowUpgradeModal(true); }}
+                        className="text-cyan-400 hover:text-cyan-300 underline decoration-cyan-400/40 transition-colors"
+                      >
+                        Actualizar plan
+                      </button>
+                    )}
+                  </p>
+                )}
               </div>
 
               {formData.provider_type === 'smtp' ? (
