@@ -281,20 +281,10 @@ Deno.serve(async (req: Request) => {
     htmlContent += '<img src="' + trackingPixelUrl + '" width="1" height="1" style="display:none" />';
 
     try {
-      // When the stored Resend key is absent/short (<20 chars) the credentials
-      // belong to the platform default account — override all sender details.
-      const storedResendKey = effectiveCredentials.resend_api_key ?? '';
-      const usingPlatformAccount = providerType === 'resend' && storedResendKey.length < 20;
+      const actualFromEmail = effectiveCredentials.from_email;
+      const fromName = effectiveCredentials.from_name || application.name || 'SendCraft';
 
-
-      const actualFromEmail = usingPlatformAccount
-        ? 'no-reply@sendcraft.net'
-        : effectiveCredentials.from_email;
-      const fromName = usingPlatformAccount
-        ? 'SandCraft'
-        : (effectiveCredentials.from_name || application.name || 'SandCraft');
-
-      console.log('[send-email] From email:', actualFromEmail, 'Name:', fromName, 'Platform account:', usingPlatformAccount);
+      console.log('[send-email] From email:', actualFromEmail, 'Name:', fromName);
 
       if (providerType === 'smtp') {
         const useTLS = effectiveCredentials.smtp_port === 465;
@@ -331,12 +321,10 @@ Deno.serve(async (req: Request) => {
         await client.close();
         console.log('[send-email] Email sent successfully via SMTP');
       } else {
-        const resendApiKey = usingPlatformAccount
-          ? Deno.env.get('RESEND_API_KEY')!
-          : storedResendKey;
+        const resendApiKey = effectiveCredentials.resend_api_key || Deno.env.get('RESEND_API_KEY')!;
 
         console.log('[send-email] Resend config:', {
-          api_key_source: usingPlatformAccount ? 'env (platform)' : 'db (custom)',
+          api_key_source: effectiveCredentials.resend_api_key ? 'db' : 'env (platform fallback)',
         });
 
         const resendPayload: any = {
