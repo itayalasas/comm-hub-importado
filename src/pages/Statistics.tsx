@@ -648,6 +648,26 @@ export const Statistics = () => {
       };
     }
 
+    // For send-email-with-pdf logs: look up public_pdf_links by pdf_log_id stored in metadata
+    const pdfLogId = metadata.pdf_log_id;
+    if (pdfLogId) {
+      const { data: linkByPdfLog } = await supabase
+        .from('public_pdf_links')
+        .select('access_token, filename, created_at')
+        .eq('pdf_generation_log_id', pdfLogId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (linkByPdfLog?.access_token) {
+        return {
+          url: `${configManager.supabaseUrl}/functions/v1/view-pdf?token=${linkByPdfLog.access_token}`,
+          filename: linkByPdfLog.filename || metadata.pdf_filename || filename,
+        };
+      }
+    }
+
     const orderId = metadata.order_id || metadata?.pdf_info?.order_id;
     if (!orderId) {
       return null;
@@ -701,8 +721,10 @@ export const Statistics = () => {
 
       const mightHavePdf =
         selectedLog.communication_type === 'pdf_generation' ||
+        selectedLog.communication_type === 'email_with_pdf' ||
         selectedLog.pdf_generated ||
         !!selectedLog.metadata?.pdf_info ||
+        !!selectedLog.metadata?.pdf_log_id ||
         !!selectedLog.metadata?.order_id;
 
       if (!mightHavePdf) {

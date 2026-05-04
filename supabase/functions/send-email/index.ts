@@ -8,6 +8,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, X-Api-Key",
 };
 
+function wrapLinksForTracking(html: string, logId: string, trackingBaseUrl: string): string {
+  // Replace all <a href="..."> that point to external http(s) URLs with a tracking redirect.
+  // Skips mailto:, tel:, #anchors, and URLs that are already pointing at the tracker.
+  return html.replace(
+    /(<a\s[^>]*href=")((https?:\/\/)[^"]+)(")/gi,
+    (match, prefix, url, _scheme, suffix) => {
+      if (url.includes(trackingBaseUrl)) return match;
+      const trackingUrl = `${trackingBaseUrl}/functions/v1/track-email/click?log_id=${logId}&url=${encodeURIComponent(url)}`;
+      return `${prefix}${trackingUrl}${suffix}`;
+    },
+  );
+}
+
 function renderTemplate(template: string, data: Record<string, any>): string {
   let result = template;
   const getNestedValue = (obj: any, path: string): any => {
@@ -276,6 +289,8 @@ Deno.serve(async (req: Request) => {
       console.log('[send-email] Linking PDF log as child');
       await supabase.from('email_logs').update({ parent_log_id: logEntry.id }).eq('id', _pdf_info.pdf_email_log_id);
     }
+
+    htmlContent = wrapLinksForTracking(htmlContent, logEntry.id, supabaseUrl);
 
     const trackingPixelUrl = supabaseUrl + '/functions/v1/track-email/open?log_id=' + logEntry.id;
     htmlContent += '<img src="' + trackingPixelUrl + '" width="1" height="1" style="display:none" />';

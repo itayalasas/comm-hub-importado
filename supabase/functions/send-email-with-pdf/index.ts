@@ -75,6 +75,17 @@ function generateFilename(pattern: string, data: Record<string, any>): string {
   return renderTemplate(pattern || 'document.pdf', data);
 }
 
+function wrapLinksForTracking(html: string, logId: string, trackingBaseUrl: string): string {
+  return html.replace(
+    /(<a\s[^>]*href=")((https?:\/\/)[^"]+)(")/gi,
+    (match, prefix, url, _scheme, suffix) => {
+      if (url.includes(trackingBaseUrl)) return match;
+      const trackingUrl = `${trackingBaseUrl}/functions/v1/track-email/click?log_id=${logId}&url=${encodeURIComponent(url)}`;
+      return `${prefix}${trackingUrl}${suffix}`;
+    },
+  );
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -289,6 +300,11 @@ Deno.serve(async (req: Request) => {
         .from('pdf_generation_logs')
         .update({ email_log_id: emailLog.id })
         .eq('id', pdfLog.id);
+    }
+
+    // Wrap external links for click tracking
+    if (emailLog?.id) {
+      htmlContent = wrapLinksForTracking(htmlContent, emailLog.id, supabaseUrl);
     }
 
     // Add tracking pixel

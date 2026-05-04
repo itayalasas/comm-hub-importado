@@ -132,10 +132,12 @@ export const useSubscriptionLimits = () => {
 
       const { start, end } = getPeriodWindow();
 
+      // Count from email_logs (pdf_generation_logs has service-role-only RLS)
       const { count, error } = await supabase
-        .from('pdf_generation_logs')
+        .from('email_logs')
         .select('*', { count: 'exact', head: true })
         .in('application_id', appIds)
+        .eq('communication_type', 'pdf_generation')
         .gte('created_at', start)
         .lte('created_at', end);
 
