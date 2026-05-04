@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
-import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Save } from 'lucide-react';
+import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -45,12 +45,9 @@ export const Settings = () => {
     domain: '',
   });
 
-  // Tenant settings
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
-  const [tenantSettingsId, setTenantSettingsId] = useState<string | null>(null);
-  const [subscriptionReturnUrl, setSubscriptionReturnUrl] = useState('');
-  const [subscriptionReturnUrlDraft, setSubscriptionReturnUrlDraft] = useState('');
-  const [savingTenantSettings, setSavingTenantSettings] = useState(false);
+  const [copiedReturnUrl, setCopiedReturnUrl] = useState(false);
+  const subscriptionReturnUrl = `${window.location.origin}/dashboard`;
   const [formData, setFormData] = useState<EmailCredentials>({
     provider_type: 'smtp',
     smtp_host: '',
@@ -66,9 +63,6 @@ export const Settings = () => {
   useEffect(() => {
     if (user) {
       loadApplications();
-      if (isAdmin && user.tenant_id) {
-        loadTenantSettings();
-      }
     }
   }, [user]);
 
@@ -78,59 +72,11 @@ export const Settings = () => {
     }
   }, [selectedApp]);
 
-  const loadTenantSettings = async () => {
-    if (!user?.tenant_id) return;
-    try {
-      const { data } = await supabase
-        .from('tenant_settings')
-        .select('id, subscription_return_url')
-        .eq('tenant_id', user.tenant_id)
-        .maybeSingle();
-
-      if (data) {
-        setTenantSettingsId(data.id);
-        setSubscriptionReturnUrl(data.subscription_return_url ?? '');
-        setSubscriptionReturnUrlDraft(data.subscription_return_url ?? '');
-      }
-    } catch (error) {
-      console.error('Error loading tenant settings:', error);
-    }
-  };
-
-  const saveTenantSettings = async () => {
-    if (!user?.tenant_id) return;
-    setSavingTenantSettings(true);
-    try {
-      const payload = {
-        tenant_id: user.tenant_id,
-        subscription_return_url: subscriptionReturnUrlDraft.trim() || null,
-        updated_at: new Date().toISOString(),
-      };
-
-      if (tenantSettingsId) {
-        const { error } = await supabase
-          .from('tenant_settings')
-          .update(payload)
-          .eq('id', tenantSettingsId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from('tenant_settings')
-          .insert(payload)
-          .select('id')
-          .single();
-        if (error) throw error;
-        setTenantSettingsId(data.id);
-      }
-
-      setSubscriptionReturnUrl(subscriptionReturnUrlDraft.trim());
-      toast.success('Configuración de suscripción guardada');
-    } catch (error) {
-      console.error('Error saving tenant settings:', error);
-      toast.error('Error al guardar la configuración');
-    } finally {
-      setSavingTenantSettings(false);
-    }
+  const copyReturnUrl = () => {
+    navigator.clipboard.writeText(subscriptionReturnUrl);
+    setCopiedReturnUrl(true);
+    toast.success('URL copiada al portapapeles');
+    setTimeout(() => setCopiedReturnUrl(false), 2000);
   };
 
   const loadApplications = async () => {
@@ -600,53 +546,33 @@ export const Settings = () => {
           </div>
         )}
 
-        {/* Subscription return URL — admin only */}
-        {isAdmin && user?.tenant_id && (
+        {/* Subscription return URL — visible to admins */}
+        {isAdmin && (
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
-            <div className="flex items-center gap-2 mb-5">
+            <div className="flex items-center gap-2 mb-2">
               <Link className="w-5 h-5 text-cyan-400" />
               <h3 className="text-base sm:text-lg font-semibold text-white">URL de Retorno de Suscripción</h3>
             </div>
-
-            <p className="text-sm text-slate-400 mb-5 leading-relaxed">
-              Cuando un usuario complete el pago en MercadoPago, será redireccionado a esta URL.
-              Si no se configura, se redireccionará al dashboard de CommHub.
+            <p className="text-sm text-slate-400 mb-4 leading-relaxed">
+              Usá esta URL como <span className="text-slate-300 font-mono text-xs">back_url</span> en MercadoPago.
+              Cuando el usuario complete el pago será redireccionado aquí automáticamente.
             </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  URL de retorno
-                </label>
-                <input
-                  type="url"
-                  value={subscriptionReturnUrlDraft}
-                  onChange={(e) => setSubscriptionReturnUrlDraft(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500 font-mono placeholder:font-sans"
-                  placeholder="https://tuapp.com/suscripcion/ok"
-                />
-                <p className="text-xs text-slate-500 mt-1.5">
-                  Ejemplo: <span className="text-slate-400 font-mono">https://commhub.netlify.app/suscripcion/ok</span>
-                </p>
-              </div>
-
-              {subscriptionReturnUrl && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-cyan-500/8 border border-cyan-500/20 rounded-lg">
-                  <CheckCircle2 className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                  <span className="text-xs text-cyan-300 font-mono truncate">{subscriptionReturnUrl}</span>
-                </div>
-              )}
-
-              <div className="flex justify-end pt-1">
-                <button
-                  onClick={saveTenantSettings}
-                  disabled={savingTenantSettings || subscriptionReturnUrlDraft === subscriptionReturnUrl}
-                  className="flex items-center gap-2 px-5 py-2 bg-cyan-500 hover:bg-cyan-400 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Save className="w-4 h-4" />
-                  {savingTenantSettings ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-cyan-400 font-mono overflow-x-auto whitespace-nowrap">
+                {subscriptionReturnUrl}
+              </code>
+              <button
+                onClick={copyReturnUrl}
+                className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-semibold transition-colors"
+                title="Copiar URL"
+              >
+                {copiedReturnUrl ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+                {copiedReturnUrl ? 'Copiado' : 'Copiar'}
+              </button>
             </div>
           </div>
         )}
