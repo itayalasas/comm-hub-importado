@@ -46,20 +46,15 @@ const FEATURE_ORDER = [
 ];
 
 function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
-  const returnUrl = window.location.origin + '/dashboard';
+  // Use init_point as-is — back_url is already correctly set by the subscription service
   if (plan.mercadopago?.init_point) {
-    try {
-      const url = new URL(plan.mercadopago.init_point);
-      url.searchParams.set('back_url', returnUrl);
-      return url.toString();
-    } catch {
-      return plan.mercadopago.init_point;
-    }
+    return plan.mercadopago.init_point;
   }
   const base = configManager.authUrl;
   const appId = configManager.authAppId;
   const apiKey = configManager.authApiKey;
-  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(returnUrl)}&api_key=${apiKey}&plan_id=${plan.id}`;
+  const redirectUri = configManager.redirectUri;
+  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${plan.id}`;
 }
 
 const TrialExpiredBlocker = () => {
