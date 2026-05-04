@@ -172,6 +172,100 @@ export default function Documentation() {
       ],
     },
     {
+      id: 'send-email-with-pdf',
+      title: 'Enviar Email con PDF Adjunto',
+      method: 'POST',
+      path: '/functions/v1/send-email-with-pdf',
+      description: 'Genera un PDF desde un template y lo envía como adjunto en un único llamado. El template del email y el template del PDF se definen en secciones separadas, cada uno con sus propios datos independientes. Si el PDF supera 1MB el adjunto se reemplaza por un link de descarga inyectado en el cuerpo del email.',
+      authentication: 'API Key (x-api-key header)',
+      headers: [
+        { name: 'x-api-key', type: 'string', required: true, description: 'Tu API key de la aplicación' },
+        { name: 'Content-Type', type: 'string', required: true, description: 'application/json' },
+      ],
+      requestBody: {
+        contentType: 'application/json',
+        schema: {
+          recipient_email: 'string (required)',
+          order_id: 'string (optional)',
+          email: {
+            template_name: 'string (required)',
+            subject: 'string (optional)',
+            data: 'object (optional)',
+          },
+          attachment: {
+            pdf_template_name: 'string (required)',
+            filename: 'string (optional, soporta {{variables}})',
+            data: 'object (optional)',
+          },
+        },
+        example: {
+          recipient_email: 'payalaortiz@gmail.com',
+          order_id: 'ORD-2024-001',
+          email: {
+            template_name: 'email_envioi_pdf',
+            subject: 'Tu factura está lista',
+            data: {
+              nombre: 'Juan Pérez',
+              empresa: 'Acme SA',
+            },
+          },
+          attachment: {
+            pdf_template_name: 'invoice_pdf',
+            filename: 'factura-{{order_id}}.pdf',
+            data: {
+              cliente: 'Juan Pérez',
+              rut: '211234560018',
+              fecha: '2026-05-04',
+              items: [
+                { descripcion: 'Servicio A', cantidad: 1, precio_unitario: 1000, total: 1000 },
+              ],
+              subtotal: 1000,
+              iva: 220,
+              total: 1220,
+            },
+          },
+        },
+      },
+      responses: [
+        {
+          code: '200',
+          description: 'Email enviado con PDF adjunto',
+          example: {
+            success: true,
+            message: 'Email with PDF attachment sent successfully',
+            log_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            pdf_log_id: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
+            pdf_filename: 'factura-ORD-2024-001.pdf',
+            pdf_size_bytes: 48320,
+            pdf_attached_inline: true,
+            pdf_public_url: 'https://your-project.supabase.co/functions/v1/view-pdf?token=abc123',
+            resend_email_id: 're_abc123',
+            processing_time_ms: 1240,
+          },
+        },
+        {
+          code: '400',
+          description: 'Campos requeridos faltantes',
+          example: { success: false, error: 'attachment.pdf_template_name is required' },
+        },
+        {
+          code: '401',
+          description: 'API key inválida',
+          example: { success: false, error: 'Invalid API key' },
+        },
+        {
+          code: '404',
+          description: 'Template no encontrado',
+          example: { success: false, error: "PDF template 'invoice_pdf' not found" },
+        },
+        {
+          code: '500',
+          description: 'Error al generar PDF o enviar email',
+          example: { success: false, error: 'Failed to send email', details: 'Gotenberg service unreachable' },
+        },
+      ],
+    },
+    {
       id: 'send-email',
       title: 'Enviar Email',
       method: 'POST',

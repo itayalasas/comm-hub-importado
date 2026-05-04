@@ -82,6 +82,44 @@ const ENDPOINTS: EndpointDef[] = [
     ],
   },
   {
+    id: 'send-email-with-pdf',
+    group: 'Email',
+    title: 'Enviar Email con PDF Adjunto',
+    method: 'POST',
+    path: '/functions/v1/send-email-with-pdf',
+    description: 'Genera un PDF y lo envía como adjunto en un solo llamado. Define el template de email y el template del PDF por separado, cada uno con sus propios datos. Si el PDF supera 1MB se adjunta un link de descarga en el cuerpo del email.',
+    authType: 'api-key',
+    icon: FileText,
+    fields: [
+      { name: 'recipient_email', type: 'string', required: true, description: 'Email del destinatario', example: 'cliente@empresa.com' },
+      { name: 'order_id', type: 'string', required: false, description: 'ID del pedido para auditoría y deduplicación', example: 'ORD-2024-001' },
+      { name: 'email', type: 'object', required: true, description: 'Sección del email: template_name (required), subject (optional), data (optional)', example: { template_name: 'email_envioi_pdf', subject: 'Tu factura está lista', data: { nombre: 'Juan Pérez', empresa: 'Acme SA' } } },
+      { name: 'attachment', type: 'object', required: true, description: 'Sección del PDF adjunto: pdf_template_name (required), filename (optional, soporta {{variables}}), data (optional)', example: { pdf_template_name: 'invoice_pdf', filename: 'factura-{{order_id}}.pdf', data: { cliente: 'Juan Pérez', total: '1500.00', items: [] } } },
+    ],
+    responses: [
+      {
+        code: 200, label: 'Email enviado con PDF',
+        body: { success: true, message: 'Email with PDF attachment sent successfully', log_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', pdf_log_id: 'b2c3d4e5-f6a7-8901-bcde-f12345678901', pdf_filename: 'factura-ORD-001.pdf', pdf_size_bytes: 48320, pdf_attached_inline: true, pdf_public_url: 'https://...', resend_email_id: 're_abc123', processing_time_ms: 1240 }
+      },
+      {
+        code: 400, label: 'Campos faltantes',
+        body: { success: false, error: 'attachment.pdf_template_name is required' }
+      },
+      {
+        code: 401, label: 'No autorizado',
+        body: { success: false, error: 'Invalid or missing API key' }
+      },
+      {
+        code: 404, label: 'Template no encontrado',
+        body: { success: false, error: "PDF template 'invoice_pdf' not found" }
+      },
+      {
+        code: 500, label: 'Error del servidor',
+        body: { success: false, error: 'Failed to send email', details: 'Gotenberg service unreachable' }
+      },
+    ],
+  },
+  {
     id: 'pending-communication',
     group: 'Comunicaciones Pendientes',
     title: 'Crear Comunicación Pendiente',
