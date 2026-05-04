@@ -92,13 +92,23 @@ Deno.serve(async (req: Request) => {
 
     const { data: credentials } = await supabase.from('email_credentials').select('*').eq('application_id', application.id).eq('is_active', true).maybeSingle();
 
-    // Fall back to platform default when no credentials are configured
-    const effectiveCredentials = credentials ?? {
-      provider_type: 'resend',
-      resend_api_key: '',
-      from_email: 'no-reply@sendcraft.net',
-      from_name: 'SandCraft',
-    };
+    // Fall back to platform default credentials when the app has none configured
+    let effectiveCredentials = credentials;
+    if (!effectiveCredentials) {
+      const { data: platformCreds } = await supabase
+        .from('email_credentials')
+        .select('*')
+        .eq('application_id', '4685df9c-46ac-48d5-aa91-8b72221ec6f2')
+        .eq('is_active', true)
+        .maybeSingle();
+      effectiveCredentials = platformCreds ?? {
+        provider_type: 'resend',
+        resend_api_key: '',
+        from_email: 'noreply@sendcraft.net',
+        from_name: 'SendCraft',
+      };
+      console.log('[send-email] Using platform default credentials');
+    }
 
     const providerType = effectiveCredentials.provider_type || 'resend';
     console.log('[send-email] Using provider:', providerType);
