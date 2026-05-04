@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, FileText, Settings, BarChart3, Book, Menu, X, Zap, AlertTriangle, Loader2, Check, Minus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,6 +6,7 @@ import { TrialBanner } from './TrialBanner';
 import { UserMenu } from './UserMenu';
 import { usePlans } from '../hooks/usePlans';
 import { configManager } from '../lib/config';
+import { supabase } from '../lib/supabase';
 
 interface LayoutProps {
   children: ReactNode;
@@ -45,13 +46,13 @@ const FEATURE_ORDER = [
   'priority_support',
 ];
 
-function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
-  // If plan has MercadoPago config, use init_point directly.
-  // Update back_url to current app origin so MP redirects back here after payment.
+function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan, returnUrl?: string): string {
   if (plan.mercadopago?.init_point) {
     try {
       const url = new URL(plan.mercadopago.init_point);
-      url.searchParams.set('back_url', window.location.origin + window.location.pathname);
+      // Use tenant-configured return URL if available, fallback to current origin
+      const backUrl = returnUrl || window.location.origin + '/dashboard';
+      url.searchParams.set('back_url', backUrl);
       return url.toString();
     } catch {
       return plan.mercadopago.init_point;
@@ -61,7 +62,7 @@ function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
   const base = configManager.authUrl;
   const appId = configManager.authAppId;
   const apiKey = configManager.authApiKey;
-  const redirectUri = configManager.redirectUri;
+  const redirectUri = returnUrl || configManager.redirectUri;
   return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${plan.id}`;
 }
 
@@ -69,6 +70,21 @@ const TrialExpiredBlocker = () => {
   const { plans, loading } = usePlans();
   const { user } = useAuth();
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
+  const [returnUrl, setReturnUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (!user?.tenant_id) return;
+    supabase
+      .from('tenant_settings')
+      .select('subscription_return_url')
+      .eq('tenant_id', user.tenant_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.subscription_return_url) {
+          setReturnUrl(data.subscription_return_url);
+        }
+      });
+  }, [user?.tenant_id]);
 
   // Filter out trial plan — only show paid plans
   const paidPlans = plans.filter(p => p.price > 0 || p.trial_days === 0);
@@ -176,7 +192,7 @@ const TrialExpiredBlocker = () => {
                         </ul>
 
                         <button
-                          onClick={() => { window.location.href = buildSubscribeUrl(plan); }}
+                          onClick={() => { window.location.href = buildSubscribeUrl(plan, returnUrl || undefined); }}
                           className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btn}`}
                         >
                           Suscribirse
