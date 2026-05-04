@@ -1,7 +1,8 @@
 import { createPortal } from 'react-dom';
-import { X, CreditCard, Calendar, Check, Minus, Clock, AlertTriangle, Zap } from 'lucide-react';
+import { X, CreditCard, Calendar, Check, Minus, Clock, AlertTriangle, Zap, Users, FileText, LayoutGrid, Mail, FileOutput } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UpgradeModal } from './UpgradeModal';
+import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { useState } from 'react';
 
 interface SubscriptionModalProps {
@@ -12,6 +13,7 @@ const FEATURE_LABEL: Record<string, string> = {
   total_de_correos_mensuales: 'Emails mensuales',
   pdf_generations_monthly:    'PDFs mensuales',
   max_applications:           'Aplicaciones',
+  max_users:                  'Máximo de usuarios',
   templates:                  'Templates',
   api_access:                 'Acceso API',
   two_factor_auth:            '2FA',
@@ -20,20 +22,30 @@ const FEATURE_LABEL: Record<string, string> = {
   custom_domain:              'Dominio personalizado',
 };
 
-function formatFeatureValue(value: string, unit?: string | null): string {
-  const n = parseInt(value, 10);
+const FEATURE_ICON: Record<string, React.ElementType> = {
+  max_users:                  Users,
+  templates:                  FileText,
+  max_applications:           LayoutGrid,
+  total_de_correos_mensuales: Mail,
+  pdf_generations_monthly:    FileOutput,
+};
+
+function formatNumber(value: string | number, unit?: string | null): string {
+  const n = typeof value === 'number' ? value : parseInt(String(value), 10);
   if (!isNaN(n)) {
     const formatted = n.toLocaleString('es-UY');
     return unit ? `${formatted} ${unit}` : formatted;
   }
-  return unit ? `${value} ${unit}` : value;
+  return unit ? `${value} ${unit}` : String(value);
 }
 
 export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const { subscription, user } = useAuth();
+  const { applicationCount, templateCount } = useSubscriptionLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
+  const activeUsersCount = user?.active_users_count ?? 0;
 
   const features = subscription?.entitlements?.features ?? [];
   const planPrice = typeof subscription?.plan_price === 'number' ? subscription.plan_price : 0;
@@ -48,8 +60,6 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
 
   const isTrialing = subscription?.status === 'trialing';
   const isActive = subscription?.status === 'active';
-
-  // Trial is truly expired only when trial_end has passed AND status is still trialing
   const trialEndDate = subscription?.trial_end ? new Date(subscription.trial_end) : null;
   const now = new Date();
   const trialExpired = isTrialing && trialEndDate !== null && trialEndDate < now;
@@ -61,9 +71,40 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
 
   const isTrial = planPrice === 0 || isTrialing;
 
-  const getCurrentLimit = () => {
-    const appFeature = features.find(f => f.code === 'max_applications');
-    return appFeature ? parseInt(appFeature.value) : 0;
+  // Returns actual current usage for a given feature code
+  const getRealUsage = (featureCode: string): number | null => {
+    switch (featureCode) {
+      case 'max_applications': return applicationCount;
+      case 'templates':        return templateCount;
+      case 'max_users':        return activeUsersCount;
+      default:                 return null;
+    }
+  };
+
+  const getUsageLabel = (featureCode: string): string | null => {
+    switch (featureCode) {
+      case 'max_applications': return 'usadas';
+      case 'templates':        return 'creados';
+      case 'max_users':        return 'activos';
+      case 'total_de_correos_mensuales': return 'enviados';
+      case 'pdf_generations_monthly':    return 'generados';
+      default: return null;
+    }
+  };
+
+  const getUsagePercent = (current: number, max: number): number =>
+    Math.min(100, Math.round((current / max) * 100));
+
+  const getUsageColor = (pct: number): string => {
+    if (pct >= 90) return 'bg-red-500';
+    if (pct >= 70) return 'bg-amber-500';
+    return 'bg-cyan-500';
+  };
+
+  const getUsageTextColor = (pct: number): string => {
+    if (pct >= 90) return 'text-red-400';
+    if (pct >= 70) return 'text-amber-400';
+    return 'text-cyan-400';
   };
 
   const modalContent = !showUpgradeModal && (
@@ -186,33 +227,75 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                 </div>
               </div>
 
-              {/* Features */}
+              {/* Features with real usage */}
               {features.length > 0 && (
                 <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-4">
+                  <div className="flex items-center gap-2 mb-1">
                     <Zap className="w-4 h-4 text-cyan-400" />
-                    <h4 className="text-sm font-bold text-white">Límites y características</h4>
+                    <h4 className="text-sm font-bold text-white">Límites y uso actual</h4>
                   </div>
-                  <div className="space-y-3">
+                  <div className="flex items-center gap-4 mb-4">
+                    <span className="text-xs text-slate-500 flex items-center gap-1.5">
+                      <span className="inline-block w-2.5 h-2.5 rounded-sm bg-slate-700 border border-slate-600" />
+                      Límite del plan
+                    </span>
+                    <span className="text-xs text-slate-500 flex items-center gap-1.5">
+                      <span className="inline-block w-2.5 h-2.5 rounded-sm bg-cyan-500/40 border border-cyan-500/30" />
+                      Uso actual
+                    </span>
+                  </div>
+                  <div className="space-y-4">
                     {features.map((feature) => {
                       const isBool = feature.value_type === 'boolean';
                       const boolOn = isBool && (feature.value === 'true' || feature.value === '1');
                       const label = FEATURE_LABEL[feature.code] ?? feature.name;
+                      const Icon = FEATURE_ICON[feature.code];
+                      const realUsage = getRealUsage(feature.code);
+                      const usageLabel = getUsageLabel(feature.code);
+                      const planMax = !isBool ? parseInt(feature.value, 10) : null;
+                      const pct = realUsage !== null && planMax !== null && planMax > 0
+                        ? getUsagePercent(realUsage, planMax)
+                        : null;
+
                       return (
-                        <div key={feature.code} className="flex items-center justify-between gap-4">
-                          <span className="text-sm text-slate-300 min-w-0 flex-1">{label}</span>
-                          {isBool ? (
-                            <span className={`flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full border ${
-                              boolOn
-                                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                                : 'bg-slate-700/60 border-slate-600 text-slate-500'
-                            }`}>
-                              {boolOn ? <Check className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
-                            </span>
-                          ) : (
-                            <span className="flex-shrink-0 text-sm font-bold text-cyan-400 whitespace-nowrap">
-                              {formatFeatureValue(feature.value, feature.unit)}
-                            </span>
+                        <div key={feature.code}>
+                          <div className="flex items-center justify-between gap-4 mb-1.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {Icon && <Icon className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />}
+                              <span className="text-sm text-slate-300 truncate">{label}</span>
+                            </div>
+
+                            {isBool ? (
+                              <span className={`flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full border ${
+                                boolOn
+                                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                                  : 'bg-slate-700/60 border-slate-600 text-slate-500'
+                              }`}>
+                                {boolOn ? <Check className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
+                              </span>
+                            ) : (
+                              <div className="flex-shrink-0 flex items-center gap-2 text-right">
+                                {realUsage !== null && (
+                                  <span className={`text-xs font-semibold ${pct !== null ? getUsageTextColor(pct) : 'text-slate-400'}`}>
+                                    {realUsage.toLocaleString('es-UY')} {usageLabel}
+                                  </span>
+                                )}
+                                {realUsage !== null && <span className="text-slate-600 text-xs">/</span>}
+                                <span className="text-sm font-bold text-white whitespace-nowrap">
+                                  {formatNumber(feature.value, feature.unit)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Progress bar for numeric features with known usage */}
+                          {!isBool && realUsage !== null && planMax !== null && planMax > 0 && pct !== null && (
+                            <div className="h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${getUsageColor(pct)}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
                           )}
                         </div>
                       );
@@ -260,9 +343,6 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
       <UpgradeModal
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
-        currentLimit={getCurrentLimit()}
-        featureName="aplicaciones"
-        featureCode="max_applications"
       />
     </>
   );

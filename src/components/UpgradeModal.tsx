@@ -1,209 +1,246 @@
 import { createPortal } from 'react-dom';
-import { X, Check, Zap, TrendingUp } from 'lucide-react';
+import { X, Check, Minus, TrendingUp, Loader2, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import type { AvailablePlan } from '../contexts/AuthContext';
+import { usePlans } from '../hooks/usePlans';
+import type { PlanFeature } from '../hooks/usePlans';
 
 interface UpgradeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentLimit: number;
-  featureName: string;
+  // Legacy props kept for call-site compatibility but no longer required
+  currentLimit?: number;
+  featureName?: string;
   featureCode?: string;
 }
 
-export const UpgradeModal = ({
-  isOpen,
-  onClose,
-  currentLimit,
-  featureName,
-  featureCode
-}: UpgradeModalProps) => {
-  const { availablePlans } = useAuth();
+const FEATURE_LABEL: Record<string, string> = {
+  total_de_correos_mensuales: 'Emails / mes',
+  pdf_generations_monthly:    'PDFs / mes',
+  max_applications:           'Aplicaciones',
+  max_users:                  'Usuarios',
+  templates:                  'Templates',
+  api_access:                 'Acceso API',
+  two_factor_auth:            '2FA',
+  priority_support:           'Soporte prioritario',
+  advanced_reports:           'Reportes avanzados',
+  custom_domain:              'Dominio pers.',
+};
+
+const FEATURE_ORDER = [
+  'max_users',
+  'total_de_correos_mensuales',
+  'pdf_generations_monthly',
+  'max_applications',
+  'templates',
+  'api_access',
+  'two_factor_auth',
+  'advanced_reports',
+  'custom_domain',
+  'priority_support',
+];
+
+function formatFeatureValue(f: PlanFeature): string {
+  if (f.value_type === 'boolean') return '';
+  const n = parseInt(f.value, 10);
+  if (!isNaN(n)) {
+    return n.toLocaleString('es-UY') + (f.unit ? ` ${f.unit}` : '');
+  }
+  return f.value + (f.unit ? ` ${f.unit}` : '');
+}
+
+export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
+  const { subscription } = useAuth();
+  const { plans, loading } = usePlans();
 
   if (!isOpen) return null;
 
-  console.log('=== UPGRADE MODAL ===');
-  console.log('Available plans:', availablePlans);
-  console.log('Plans count:', availablePlans.length);
-  console.log('Feature code:', featureCode);
-  console.log('Feature name:', featureName);
-  console.log('Current limit:', currentLimit);
+  // Sort plans by price ascending
+  const sortedPlans = [...plans].sort((a, b) => a.price - b.price);
 
-  if (availablePlans.length > 0) {
-    console.log('');
-    console.log('🔍 DETAILED PLANS INSPECTION:');
-    availablePlans.forEach((plan, index) => {
-      console.log(`\n📦 Plan ${index + 1}: ${plan.name}`);
-      console.log('  ├─ ID:', plan.id);
-      console.log('  ├─ Price:', plan.price, plan.currency);
-      console.log('  ├─ Billing:', plan.billing_cycle);
-      console.log('  ├─ Is Upgrade:', plan.is_upgrade);
-      console.log('  ├─ Price Diff:', plan.price_difference);
-      console.log('  ├─ Features:', plan.entitlements?.features?.length || 0);
-      console.log('  ├─ MP Init Point:', plan.mp_init_point ? '✅ ' + plan.mp_init_point.substring(0, 50) + '...' : '❌ Missing');
-      console.log('  ├─ MP Back URL:', plan.mp_back_url ? '✅ ' + plan.mp_back_url.substring(0, 50) + '...' : '❌ Missing');
-      console.log('  ├─ MP Plan ID:', plan.mp_preapproval_plan_id || '❌ Missing');
-      console.log('  └─ MP Status:', plan.mp_status || '❌ Missing');
-    });
-    console.log('');
-  }
+  // Identify current plan by matching plan_name
+  const currentPlanName = subscription?.plan_name?.toLowerCase().trim() ?? '';
 
-  const handleUpgrade = (plan: AvailablePlan) => {
-    console.log('=== UPGRADE ACTION ===');
-    console.log('Plan:', plan.name);
-    console.log('Plan ID:', plan.id);
-    console.log('MP Init Point:', plan.mp_init_point);
+  const isCurrentPlan = (planName: string) =>
+    planName.toLowerCase().trim() === currentPlanName;
 
-    if (!plan.mp_init_point) {
-      console.error('❌ No MP Init Point available for this plan');
-      alert('Error: No se encontró el enlace de pago para este plan');
-      return;
-    }
-
-    console.log('🚀 Redirecting to Mercado Pago...');
-    console.log('URL:', plan.mp_init_point);
-
-    window.location.href = plan.mp_init_point;
+  const handleSelect = (initPoint: string | null | undefined) => {
+    if (!initPoint) return;
+    window.location.href = initPoint;
   };
 
-  const getFeatureValue = (plan: AvailablePlan, code?: string): string | null => {
-    if (!code) return null;
-    const feature = plan.entitlements.features.find(f => f.code === code);
-    return feature?.value || null;
-  };
+  // Collect all unique feature codes across all plans in defined order
+  const allCodes = Array.from(
+    new Set([
+      ...FEATURE_ORDER,
+      ...sortedPlans.flatMap(p => p.entitlements.features.map(f => f.code)),
+    ])
+  ).filter(code =>
+    sortedPlans.some(p => p.entitlements.features.find(f => f.code === code))
+  );
+
+  const getFeature = (plan: typeof sortedPlans[0], code: string): PlanFeature | undefined =>
+    plan.entitlements.features.find(f => f.code === code);
 
   const modalContent = (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200" style={{ margin: 0, left: 0, right: 0, top: 0, bottom: 0 }}>
-      <div className="relative w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] bg-slate-900 rounded-xl sm:rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-cyan-500/10 via-transparent to-transparent pointer-events-none" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-cyan-600/5 via-transparent to-transparent pointer-events-none" />
+    <div
+      className="fixed inset-0 z-[300] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md"
+      style={{ margin: 0, left: 0, right: 0, top: 0, bottom: 0 }}
+    >
+      <div className="relative w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
+        {/* Background accents */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-cyan-500/8 via-transparent to-transparent pointer-events-none" />
 
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 sm:top-4 sm:right-4 p-2 sm:p-2.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition-all z-20 group border border-slate-700"
-        >
-          <X className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" />
-        </button>
-
-        <div className="relative pt-6 sm:pt-8 px-4 sm:px-8 pb-4 sm:pb-6 flex-shrink-0">
-          <div className="flex justify-center mb-4 sm:mb-6">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-cyan-500 to-cyan-700 rounded-full shadow-2xl shadow-cyan-500/30 flex items-center justify-center border-4 border-slate-800 animate-in zoom-in duration-300">
-              <TrendingUp className="w-8 h-8 sm:w-10 sm:h-10 text-white drop-shadow-lg" />
+        {/* Header */}
+        <div className="relative flex items-center justify-between px-6 py-5 border-b border-slate-700/80 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-cyan-700 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
+              <TrendingUp className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Planes de suscripción</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Elige el plan que mejor se adapte a tus necesidades</p>
             </div>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white text-center mb-2 tracking-tight">
-            Mejora tu Plan
-          </h2>
-          <p className="text-sm sm:text-base text-slate-200 text-center mb-1">
-            Tu plan actual incluye <span className="font-bold text-cyan-400">{currentLimit}</span> {featureName}
-          </p>
-          <p className="text-xs sm:text-sm text-slate-400 text-center mb-4 sm:mb-6">
-            Desbloquea más capacidades actualizando a un plan superior
-          </p>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-slate-800 transition-colors border border-slate-700"
+          >
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
         </div>
 
-        <div className="relative flex-1 overflow-y-auto px-4 sm:px-8 pb-4 sm:pb-8 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800/50">
-          {availablePlans.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-              {availablePlans.map((plan) => {
-                const featureValue = getFeatureValue(plan, featureCode);
-
-                return (
-                  <div
-                    key={plan.id}
-                    className="relative bg-gradient-to-br from-slate-800 to-slate-800/90 backdrop-blur-sm rounded-xl p-6 border border-slate-600 hover:border-cyan-500 transition-all duration-300 group shadow-lg hover:shadow-cyan-500/20 flex flex-col"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl pointer-events-none" />
-
-                    <div className="relative flex-1 flex flex-col">
-                      <div className="mb-4">
-                        <h3 className="text-2xl font-bold text-white mb-1.5 group-hover:text-cyan-400 transition-colors">
-                          {plan.name}
-                        </h3>
-                        <p className="text-slate-300 text-sm mb-4">{plan.description}</p>
-
-                        <div className="flex items-baseline gap-2 mb-3">
-                          <span className="text-4xl font-bold bg-gradient-to-br from-white to-slate-200 bg-clip-text text-transparent">
-                            ${plan.price}
-                          </span>
-                          <span className="text-slate-400 text-sm">
-                            {plan.currency} / {plan.billing_cycle === 'monthly' ? 'mes' : 'año'}
-                          </span>
-                        </div>
-
-                        {plan.is_upgrade && (
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-cyan-500/20 to-cyan-600/20 border border-cyan-400/40 rounded-full">
-                            <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                            <span className="text-xs font-semibold text-cyan-400">
-                              +${plan.price_difference} desde tu plan actual
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {featureValue && (
-                        <div className="mb-4 p-3 bg-gradient-to-r from-cyan-500/10 to-cyan-600/10 rounded-lg border border-cyan-500/30">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1.5 bg-cyan-500/20 rounded-lg">
-                              <Check className="w-4 h-4 text-cyan-400" />
-                            </div>
-                            <span className="text-slate-100 text-sm">
-                              <span className="font-bold text-white">{featureValue}</span> {featureName}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="space-y-2.5 mb-6 flex-1">
-                        {plan.entitlements.features.slice(0, 4).map((feature, index) => (
-                          <div key={index} className="flex items-start gap-2.5 text-sm">
-                            <div className="flex-shrink-0 w-5 h-5 mt-0.5 rounded-full bg-cyan-500/15 flex items-center justify-center border border-cyan-500/40">
-                              <Check className="w-3 h-3 text-cyan-400" />
-                            </div>
-                            <span className="text-slate-200 leading-relaxed">
-                              <span className="font-semibold">{feature.name}</span>: {feature.value} {feature.unit}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <button
-                        onClick={() => handleUpgrade(plan)}
-                        disabled={!plan.mp_init_point}
-                        className={`w-full py-3.5 px-5 rounded-xl font-bold transition-all border mt-auto ${
-                          plan.mp_init_point
-                            ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white shadow-xl shadow-cyan-500/30 hover:shadow-cyan-500/50 hover:scale-[1.02] active:scale-[0.98] border-cyan-400/20 cursor-pointer'
-                            : 'bg-slate-700 text-slate-400 border-slate-600 cursor-not-allowed opacity-50'
-                        }`}
-                      >
-                        {plan.mp_init_point ? 'Actualizar ahora' : 'No disponible'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+        {/* Content */}
+        <div className="relative flex-1 overflow-y-auto px-4 sm:px-6 py-6">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+              <p className="text-slate-400 text-sm">Cargando planes...</p>
+            </div>
+          ) : sortedPlans.length === 0 ? (
+            <div className="text-center py-20">
+              <p className="text-slate-400">No hay planes disponibles en este momento.</p>
             </div>
           ) : (
-            <div className="text-center py-12 px-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-800 border border-slate-700 mb-4">
-                <Zap className="w-8 h-8 text-slate-500" />
-              </div>
-              <p className="text-slate-300 text-lg mb-2 font-medium">
-                No hay planes disponibles
-              </p>
-              <p className="text-slate-500 text-sm">
-                Los planes de actualización se cargarán después de iniciar sesión
-              </p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] border-collapse">
+                {/* Plan headers */}
+                <thead>
+                  <tr>
+                    <th className="text-left pb-4 pr-4 w-44">
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Características</span>
+                    </th>
+                    {sortedPlans.map((plan) => {
+                      const isCurrent = isCurrentPlan(plan.name);
+                      return (
+                        <th key={plan.id} className="pb-4 px-2 text-center align-bottom">
+                          <div className={`relative rounded-2xl border p-4 transition-all ${
+                            isCurrent
+                              ? 'bg-cyan-500/10 border-cyan-500/40'
+                              : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-600'
+                          }`}>
+                            {isCurrent && (
+                              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                                <span className="inline-flex items-center gap-1 bg-cyan-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg shadow-cyan-500/30 whitespace-nowrap">
+                                  <Star className="w-2.5 h-2.5 fill-current" />
+                                  Plan actual
+                                </span>
+                              </div>
+                            )}
+                            <p className={`font-extrabold text-base mb-1 ${isCurrent ? 'text-cyan-400' : 'text-white'}`}>
+                              {plan.name}
+                            </p>
+                            <div className="flex items-baseline justify-center gap-1">
+                              <span className="text-xl font-extrabold text-white">
+                                {plan.currency} {plan.price.toLocaleString('es-UY')}
+                              </span>
+                              <span className="text-slate-400 text-xs">/mes</span>
+                            </div>
+                            {!isCurrent && (
+                              <button
+                                onClick={() => handleSelect(plan.mercadopago?.init_point)}
+                                disabled={!plan.mercadopago?.init_point}
+                                className={`mt-3 w-full py-2 rounded-lg text-xs font-bold transition-all ${
+                                  plan.mercadopago?.init_point
+                                    ? 'bg-cyan-500 hover:bg-cyan-400 text-white hover:shadow-md hover:shadow-cyan-500/20'
+                                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                }`}
+                              >
+                                {plan.mercadopago?.init_point ? 'Seleccionar' : 'No disponible'}
+                              </button>
+                            )}
+                            {isCurrent && (
+                              <div className="mt-3 w-full py-2 rounded-lg text-xs font-bold bg-cyan-500/10 text-cyan-400 text-center border border-cyan-500/20">
+                                Plan activo
+                              </div>
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+
+                {/* Feature rows */}
+                <tbody className="divide-y divide-slate-800">
+                  {allCodes.map((code) => {
+                    const label = FEATURE_LABEL[code] ?? code.replace(/_/g, ' ');
+                    return (
+                      <tr key={code} className="group">
+                        <td className="py-3 pr-4 text-sm text-slate-400 font-medium group-hover:text-slate-300 transition-colors">
+                          {label}
+                        </td>
+                        {sortedPlans.map((plan) => {
+                          const feature = getFeature(plan, code);
+                          const isCurrent = isCurrentPlan(plan.name);
+
+                          if (!feature) {
+                            return (
+                              <td key={plan.id} className="py-3 px-2 text-center">
+                                <span className="flex justify-center">
+                                  <Minus className="w-4 h-4 text-slate-700" />
+                                </span>
+                              </td>
+                            );
+                          }
+
+                          const isBool = feature.value_type === 'boolean';
+                          const boolOn = isBool && (feature.value === 'true' || feature.value === '1');
+
+                          return (
+                            <td key={plan.id} className={`py-3 px-2 text-center ${isCurrent ? 'bg-cyan-500/5' : ''}`}>
+                              {isBool ? (
+                                <span className="flex justify-center">
+                                  {boolOn ? (
+                                    <span className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+                                      <Check className="w-3 h-3 text-emerald-400" />
+                                    </span>
+                                  ) : (
+                                    <span className="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center">
+                                      <Minus className="w-3 h-3 text-slate-600" />
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className={`text-sm font-semibold ${isCurrent ? 'text-cyan-400' : 'text-white'}`}>
+                                  {formatFeatureValue(feature)}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
 
-        <div className="relative px-8 py-4 border-t border-slate-700 bg-slate-900/50 flex-shrink-0">
-          <p className="text-slate-300 text-center text-sm">
-            ¿Necesitas ayuda para elegir?{' '}
-            <button className="text-cyan-400 hover:text-cyan-300 transition-colors font-semibold underline decoration-cyan-400/30 hover:decoration-cyan-400/60">
-              Contacta con soporte
-            </button>
+        {/* Footer */}
+        <div className="relative px-6 py-4 border-t border-slate-700/80 bg-slate-900/80 flex-shrink-0">
+          <p className="text-slate-500 text-center text-xs">
+            Precios en pesos uruguayos (UYU) · Los límites son compartidos por todos los usuarios del tenant
           </p>
         </div>
       </div>
