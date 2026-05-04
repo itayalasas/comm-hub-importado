@@ -41,7 +41,7 @@ function formatNumber(value: string | number, unit?: string | null): string {
 
 export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const { subscription, user } = useAuth();
-  const { applicationCount, templateCount } = useSubscriptionLimits();
+  const { applicationCount, templateCount, emailsThisMonth, pdfsThisMonth } = useSubscriptionLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
@@ -72,23 +72,25 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const isTrial = planPrice === 0 || isTrialing;
 
   // Returns actual current usage for a given feature code
-  const getRealUsage = (featureCode: string): number | null => {
+  const getRealUsage = (featureCode: string): number => {
     switch (featureCode) {
-      case 'max_applications': return applicationCount;
-      case 'templates':        return templateCount;
-      case 'max_users':        return activeUsersCount;
-      default:                 return null;
+      case 'max_applications':           return applicationCount;
+      case 'templates':                  return templateCount;
+      case 'max_users':                  return activeUsersCount;
+      case 'total_de_correos_mensuales': return emailsThisMonth;
+      case 'pdf_generations_monthly':    return pdfsThisMonth;
+      default:                           return -1; // -1 signals "no usage data for this feature"
     }
   };
 
-  const getUsageLabel = (featureCode: string): string | null => {
+  const getUsageLabel = (featureCode: string): string => {
     switch (featureCode) {
-      case 'max_applications': return 'usadas';
-      case 'templates':        return 'creados';
-      case 'max_users':        return 'activos';
+      case 'max_applications':           return 'usadas';
+      case 'templates':                  return 'creados';
+      case 'max_users':                  return 'activos';
       case 'total_de_correos_mensuales': return 'enviados';
       case 'pdf_generations_monthly':    return 'generados';
-      default: return null;
+      default:                           return 'usados';
     }
   };
 
@@ -250,10 +252,12 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                       const boolOn = isBool && (feature.value === 'true' || feature.value === '1');
                       const label = FEATURE_LABEL[feature.code] ?? feature.name;
                       const Icon = FEATURE_ICON[feature.code];
-                      const realUsage = getRealUsage(feature.code);
+                      const rawUsage = getRealUsage(feature.code);
+                      const hasUsageData = rawUsage >= 0; // -1 means no tracking for this feature
+                      const realUsage = hasUsageData ? rawUsage : 0;
                       const usageLabel = getUsageLabel(feature.code);
                       const planMax = !isBool ? parseInt(feature.value, 10) : null;
-                      const pct = realUsage !== null && planMax !== null && planMax > 0
+                      const pct = hasUsageData && planMax !== null && planMax > 0
                         ? getUsagePercent(realUsage, planMax)
                         : null;
 
@@ -275,12 +279,10 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                               </span>
                             ) : (
                               <div className="flex-shrink-0 flex items-center gap-2 text-right">
-                                {realUsage !== null && (
-                                  <span className={`text-xs font-semibold ${pct !== null ? getUsageTextColor(pct) : 'text-slate-400'}`}>
-                                    {realUsage.toLocaleString('es-UY')} {usageLabel}
-                                  </span>
-                                )}
-                                {realUsage !== null && <span className="text-slate-600 text-xs">/</span>}
+                                <span className={`text-xs font-semibold ${pct !== null ? getUsageTextColor(pct) : 'text-slate-400'}`}>
+                                  {realUsage.toLocaleString('es-UY')} {usageLabel}
+                                </span>
+                                <span className="text-slate-600 text-xs">/</span>
                                 <span className="text-sm font-bold text-white whitespace-nowrap">
                                   {formatNumber(feature.value, feature.unit)}
                                 </span>
@@ -288,12 +290,12 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                             )}
                           </div>
 
-                          {/* Progress bar for numeric features with known usage */}
-                          {!isBool && realUsage !== null && planMax !== null && planMax > 0 && pct !== null && (
+                          {/* Progress bar for numeric features */}
+                          {!isBool && planMax !== null && planMax > 0 && (
                             <div className="h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
                               <div
-                                className={`h-full rounded-full transition-all ${getUsageColor(pct)}`}
-                                style={{ width: `${pct}%` }}
+                                className={`h-full rounded-full transition-all ${pct !== null ? getUsageColor(pct) : 'bg-slate-600'}`}
+                                style={{ width: pct !== null ? `${pct}%` : '0%' }}
                               />
                             </div>
                           )}
