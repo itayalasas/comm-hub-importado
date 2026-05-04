@@ -266,9 +266,19 @@ Deno.serve(async (req: Request) => {
     htmlContent += '<img src="' + trackingPixelUrl + '" width="1" height="1" style="display:none" />';
 
     try {
-      const actualFromEmail = credentials.from_email;
-      const fromName = credentials.from_name || application.name || 'DogCatify';
-      console.log('[send-email] From email:', actualFromEmail, 'Name:', fromName);
+      // When the stored Resend key is absent/short (<20 chars) the credentials
+      // belong to the platform default account — override all sender details.
+      const storedResendKey = credentials.resend_api_key ?? '';
+      const usingPlatformAccount = providerType === 'resend' && storedResendKey.length < 20;
+
+      const actualFromEmail = usingPlatformAccount
+        ? 'no-reply@sendcraft.net'
+        : credentials.from_email;
+      const fromName = usingPlatformAccount
+        ? 'SandCraft'
+        : (credentials.from_name || application.name || 'SandCraft');
+
+      console.log('[send-email] From email:', actualFromEmail, 'Name:', fromName, 'Platform account:', usingPlatformAccount);
 
       if (providerType === 'smtp') {
         const useTLS = credentials.smtp_port === 465;
@@ -305,16 +315,12 @@ Deno.serve(async (req: Request) => {
         await client.close();
         console.log('[send-email] Email sent successfully via SMTP');
       } else {
-        // Use the platform RESEND_API_KEY secret when the stored key is absent/invalid
-        // (length < 20 is a safe proxy for "not a real Resend key")
-        const storedKey = credentials.resend_api_key ?? '';
-        const resendApiKey = storedKey.length >= 20
-          ? storedKey
-          : Deno.env.get('RESEND_API_KEY')!;
+        const resendApiKey = usingPlatformAccount
+          ? Deno.env.get('RESEND_API_KEY')!
+          : storedResendKey;
 
         console.log('[send-email] Resend config:', {
-          using_platform_key: storedKey.length < 20,
-          api_key_source: storedKey.length >= 20 ? 'db' : 'env',
+          api_key_source: usingPlatformAccount ? 'env (platform)' : 'db (custom)',
         });
 
         const resendPayload: any = {
