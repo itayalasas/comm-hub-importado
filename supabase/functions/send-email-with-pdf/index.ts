@@ -300,6 +300,25 @@ Deno.serve(async (req: Request) => {
         .from('pdf_generation_logs')
         .update({ email_log_id: emailLog.id })
         .eq('id', pdfLog.id);
+
+      // Create child email_log for the PDF so Statistics can show it nested
+      await supabase
+        .from('email_logs')
+        .insert({
+          application_id: application.id,
+          parent_log_id: emailLog.id,
+          communication_type: 'pdf_generation',
+          recipient_email: 'pdf_generation@system.local',
+          subject: `PDF Generated: ${pdfFilename}`,
+          status: 'generated',
+          metadata: {
+            pdf_log_id: pdfLog.id,
+            pdf_filename: pdfFilename,
+            pdf_size_bytes: pdfSizeBytes,
+            pdf_public_url: pdfPublicUrl ?? null,
+            order_id: order_id ?? null,
+          },
+        });
     }
 
     // Wrap external links for click tracking
