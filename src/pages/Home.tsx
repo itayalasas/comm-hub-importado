@@ -22,7 +22,9 @@ import {
   Activity,
   MousePointer,
   Eye,
+  X,
 } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePlans, type Plan } from '../hooks/usePlans';
 import { configManager } from '../lib/config';
@@ -582,10 +584,126 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   );
 }
 
+/* ─── Support Modal ─────────────────────────────────────────────── */
+type SupportForm = { name: string; email: string; subject: string; message: string };
+const EMPTY_FORM: SupportForm = { name: '', email: '', subject: '', message: '' };
+
+function SupportModal({ onClose }: { onClose: () => void }) {
+  const [form, setForm] = useState<SupportForm>(EMPTY_FORM);
+  const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    await new Promise((r) => setTimeout(r, 900));
+    setSubmitting(false);
+    setSent(true);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative bg-[#071428] border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
+        <div className="p-7">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-white">Contactar Soporte</h2>
+              <p className="text-slate-500 text-sm mt-0.5">Te respondemos en menos de 24 horas hábiles.</p>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {sent ? (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-emerald-400" />
+              </div>
+              <h3 className="text-white font-bold text-lg mb-2">Mensaje enviado</h3>
+              <p className="text-slate-400 text-sm">Gracias por contactarnos. Nos pondremos en contacto a la brevedad.</p>
+              <button onClick={onClose} className="mt-6 px-6 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-white rounded-xl font-semibold text-sm transition-all">
+                Cerrar
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Nombre</label>
+                  <input
+                    type="text"
+                    required
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="Tu nombre"
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    placeholder="tu@empresa.com"
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Asunto</label>
+                <input
+                  type="text"
+                  required
+                  value={form.subject}
+                  onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                  placeholder="¿En qué te podemos ayudar?"
+                  className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Mensaje</label>
+                <textarea
+                  required
+                  rows={4}
+                  value={form.message}
+                  onChange={(e) => setForm({ ...form, message: e.target.value })}
+                  placeholder="Describe tu consulta con el mayor detalle posible..."
+                  className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all resize-none"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-cyan-500/30 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+                ) : (
+                  <><Send className="w-4 h-4" /> Enviar mensaje</>
+                )}
+              </button>
+            </form>
+          )}
+        </div>
+        <div className="h-px bg-gradient-to-r from-transparent via-teal-400/25 to-transparent" />
+      </div>
+    </div>
+  );
+}
+
 /* ─── Page ──────────────────────────────────────────────────────── */
 export const Home = () => {
   const navigate = useNavigate();
   const { plans, loading: plansLoading } = usePlans();
+  const [supportOpen, setSupportOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#050d1a] text-white overflow-x-hidden">
@@ -951,7 +1069,12 @@ export const Home = () => {
               <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+            <div className={`grid gap-6 ${
+              plans.length === 1 ? 'grid-cols-1 max-w-sm mx-auto' :
+              plans.length === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl mx-auto' :
+              plans.length === 3 ? 'grid-cols-1 sm:grid-cols-3 max-w-5xl mx-auto' :
+              'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4'
+            }`}>
               {plans.map((plan, i) => (
                 <PlanCard key={plan.id} plan={plan} index={i} />
               ))}
@@ -1015,14 +1138,16 @@ export const Home = () => {
             <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-15" />
             <img src="/logo.svg" alt="SendCraft" className="h-7 relative" />
           </div>
-          <div className="text-slate-600 text-sm">Copyright 2024 SendCraft. Todos los derechos reservados.</div>
+          <div className="text-slate-600 text-sm">Copyright {new Date().getFullYear()} SendCraft. Todos los derechos reservados.</div>
           <div className="flex gap-6 text-sm text-slate-600">
-            {['Privacidad', 'Terminos', 'Soporte'].map((link) => (
-              <a key={link} href="#" className="hover:text-slate-300 transition-colors">{link}</a>
-            ))}
+            <button onClick={() => navigate('/privacy')} className="hover:text-slate-300 transition-colors">Privacidad</button>
+            <button onClick={() => navigate('/terms')} className="hover:text-slate-300 transition-colors">Terminos</button>
+            <button onClick={() => setSupportOpen(true)} className="hover:text-slate-300 transition-colors">Soporte</button>
           </div>
         </div>
       </footer>
+
+      {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
     </div>
   );
 };
