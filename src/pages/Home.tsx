@@ -13,7 +13,6 @@ import {
   Users,
   Clock,
   ChevronRight,
-  Star,
   Check,
   Minus,
   Loader2,
@@ -49,11 +48,6 @@ const FEATURES = [
   { icon: TrendingUp, title: 'Optimizacion Continua', description: 'Sugerencias inteligentes para mejorar tasas de apertura, entregabilidad y engagement general.', color: 'teal' },
 ];
 
-const TESTIMONIALS = [
-  { name: 'Carlos Mendoza', role: 'CTO, TechCorp Mexico', text: 'SendCraft transformo nuestra infraestructura de comunicaciones. La entregabilidad mejoro un 40% en el primer mes.', initials: 'CM', color: 'from-cyan-500 to-blue-600', stars: 5 },
-  { name: 'Ana Gomez', role: 'Directora de Operaciones, Finanza360', text: 'La generacion automatica de PDFs y el sistema de templates nos ahorra horas cada semana. Increible plataforma.', initials: 'AG', color: 'from-teal-500 to-cyan-600', stars: 5 },
-  { name: 'Roberto Silva', role: 'Gerente IT, LogiExpress', text: 'La integracion via API fue muy sencilla y el soporte tecnico es excepcional. Totalmente recomendado.', initials: 'RS', color: 'from-blue-500 to-teal-600', stars: 5 },
-];
 
 const colorMap: Record<string, { bg: string; border: string; text: string; glow: string }> = {
   cyan: { bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', text: 'text-cyan-400', glow: 'group-hover:shadow-cyan-500/20' },
@@ -755,7 +749,6 @@ export const Home = () => {
               <a href="#how" className="hover:text-white transition-colors hover:text-cyan-300">Como funciona</a>
               <a href="#features" className="hover:text-white transition-colors hover:text-cyan-300">Funcionalidades</a>
               <a href="#pricing" className="hover:text-white transition-colors hover:text-cyan-300">Precios</a>
-              <a href="#testimonials" className="hover:text-white transition-colors hover:text-cyan-300">Testimonios</a>
             </div>
             <button
               onClick={() => navigate('/login')}
@@ -1016,37 +1009,6 @@ export const Home = () => {
             <div className="float-slow relative">
               <TemplateMockup />
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── TESTIMONIALS ──────────────────────────────────────────── */}
-      <section id="testimonials" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8 bg-white/[0.015]">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Testimonios</div>
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Lo que dicen nuestros clientes</h2>
-          </div>
-          <div className="grid md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map(({ name, role, text, initials, color, stars }, i) => (
-              <div key={name} className={`card-hover bg-white/[0.03] border border-white/8 rounded-2xl p-6 hover:border-cyan-500/20 hover:bg-white/[0.05] transition-all slide-up delay-${(i + 1) * 100}`}>
-                <div className="flex gap-1 mb-4">
-                  {[...Array(stars)].map((_, j) => (
-                    <Star key={j} className="w-4 h-4 text-amber-400 fill-amber-400" />
-                  ))}
-                </div>
-                <p className="text-slate-300 text-sm leading-relaxed mb-6">"{text}"</p>
-                <div className="flex items-center gap-3 pt-4 border-t border-white/6">
-                  <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
-                    {initials}
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-white">{name}</div>
-                    <div className="text-xs text-slate-500">{role}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
