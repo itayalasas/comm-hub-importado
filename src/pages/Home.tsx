@@ -578,21 +578,49 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   );
 }
 
+const SUPPORT_API_URL = 'https://api.flowbridge.site/functions/v1/api-gateway/dcd7ec42-e7fb-46fa-93d3-ccdf3e053795';
+const SUPPORT_API_KEY = 'pub_5bc238047db11edae7d4ecb2805f0057a2505c706e625c9a243b6e95bf33cd67';
+
 /* ─── Support Modal ─────────────────────────────────────────────── */
-type SupportForm = { name: string; email: string; subject: string; message: string };
-const EMPTY_FORM: SupportForm = { name: '', email: '', subject: '', message: '' };
+type SupportForm = { name: string; email: string; phone: string; subject: string; message: string };
+const EMPTY_FORM: SupportForm = { name: '', email: '', phone: '', subject: '', message: '' };
 
 function SupportModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState<SupportForm>(EMPTY_FORM);
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setSubmitting(false);
-    setSent(true);
+    setError('');
+    try {
+      const res = await fetch(SUPPORT_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Integration-Key': SUPPORT_API_KEY,
+        },
+        body: JSON.stringify({
+          session_id: `sess_${Date.now()}`,
+          message: `[${form.subject}] ${form.message}`,
+          visitor: {
+            name: form.name,
+            email: form.email,
+            ...(form.phone ? { phone: form.phone } : {}),
+          },
+          page_url: window.location.href,
+          source_domain: window.location.hostname,
+        }),
+      });
+      if (!res.ok) throw new Error('Error al enviar');
+      setSent(true);
+    } catch {
+      setError('No se pudo enviar el mensaje. Por favor intentá de nuevo.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -651,16 +679,28 @@ function SupportModal({ onClose }: { onClose: () => void }) {
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Asunto</label>
-                <input
-                  type="text"
-                  required
-                  value={form.subject}
-                  onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                  placeholder="¿En qué te podemos ayudar?"
-                  className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Teléfono <span className="text-slate-600">(opcional)</span></label>
+                  <input
+                    type="tel"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    placeholder="+598 99 000 000"
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Asunto</label>
+                  <input
+                    type="text"
+                    required
+                    value={form.subject}
+                    onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                    placeholder="¿En qué te ayudamos?"
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Mensaje</label>
@@ -673,6 +713,9 @@ function SupportModal({ onClose }: { onClose: () => void }) {
                   className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all resize-none"
                 />
               </div>
+              {error && (
+                <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
+              )}
               <button
                 type="submit"
                 disabled={submitting}
@@ -1009,6 +1052,64 @@ export const Home = () => {
             <div className="float-slow relative">
               <TemplateMockup />
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── CONTACT ───────────────────────────────────────────────── */}
+      <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8 bg-white/[0.015]">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Contacto</div>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">¿Tienes alguna pregunta?</h2>
+            <p className="text-slate-400 max-w-lg mx-auto">Nuestro equipo está listo para ayudarte. Escribinos y te respondemos en menos de 24 horas hábiles.</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            {[
+              {
+                icon: Mail,
+                title: 'Email',
+                value: 'soporte@sendcraft.app',
+                href: 'mailto:soporte@sendcraft.app',
+                desc: 'Respondemos en menos de 24 h',
+              },
+              {
+                icon: MessageSquare,
+                title: 'Chat en vivo',
+                value: 'Abrir chat',
+                href: null,
+                desc: 'Lunes a viernes, 9 a 18 hs',
+                action: true,
+              },
+              {
+                icon: Globe,
+                title: 'Documentación',
+                value: 'docs.sendcraft.app',
+                href: '#',
+                desc: 'Guías, API reference y tutoriales',
+              },
+            ].map(({ icon: Icon, title, value, href, desc, action }) => (
+              <div key={title} className="card-hover group bg-white/[0.03] border border-white/8 rounded-2xl p-6 hover:border-cyan-500/20 hover:bg-white/[0.05] transition-all text-center">
+                <div className="w-12 h-12 bg-cyan-500/10 border border-cyan-500/20 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-cyan-500/15 transition-colors">
+                  <Icon className="w-6 h-6 text-cyan-400" />
+                </div>
+                <h3 className="text-white font-bold mb-1">{title}</h3>
+                <p className="text-slate-500 text-xs mb-3">{desc}</p>
+                {action ? (
+                  <button
+                    onClick={() => setSupportOpen(true)}
+                    className="text-cyan-400 hover:text-cyan-300 text-sm font-semibold transition-colors"
+                  >
+                    {value} →
+                  </button>
+                ) : (
+                  <a href={href!} className="text-cyan-400 hover:text-cyan-300 text-sm font-semibold transition-colors">
+                    {value} →
+                  </a>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </section>
