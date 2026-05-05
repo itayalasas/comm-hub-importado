@@ -10,29 +10,70 @@ function LoadingScreen() {
   return (
     <div style={{
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: '100vh',
-      backgroundColor: '#f5f7f9',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
+      backgroundColor: '#020c1b',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      gap: '32px',
     }}>
-      <div style={{ textAlign: 'center' }}>
+      {/* Logo */}
+      <div style={{ position: 'relative' }}>
         <div style={{
-          width: '48px',
-          height: '48px',
-          border: '4px solid #e5e7eb',
-          borderTopColor: '#3b82f6',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-          margin: '0 auto 16px'
+          position: 'absolute',
+          inset: 0,
+          borderRadius: '18px',
+          border: '1px solid rgba(34,211,238,0.2)',
+          animation: 'ping 1.5s cubic-bezier(0,0,0.2,1) infinite',
         }} />
-        <p style={{ color: '#6b7280', fontSize: '14px', margin: 0 }}>
-          Cargando configuración...
-        </p>
+        <div style={{
+          width: '80px',
+          height: '80px',
+          borderRadius: '18px',
+          background: 'linear-gradient(135deg, #22d3ee 0%, #2563eb 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 0 40px rgba(34,211,238,0.25)',
+          position: 'relative',
+        }}>
+          <svg width="40" height="40" viewBox="0 0 32 32" fill="none">
+            <rect x="5" y="8" width="22" height="16" rx="3" stroke="white" strokeWidth="2"/>
+            <path d="M6 11L16 18.5L26 11" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M21.7 3.5L22.5 5.3L24.3 6.1L22.5 6.9L21.7 8.7L20.9 6.9L19.1 6.1L20.9 5.3L21.7 3.5Z" fill="#BAE6FD"/>
+          </svg>
+        </div>
       </div>
+
+      {/* Progress bar */}
+      <div style={{
+        width: '180px',
+        height: '2px',
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderRadius: '999px',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          height: '100%',
+          width: '40%',
+          background: 'linear-gradient(90deg, #22d3ee, #2563eb)',
+          borderRadius: '999px',
+          animation: 'slide 1.4s ease-in-out infinite',
+        }} />
+      </div>
+
+      <p style={{ color: '#334155', fontSize: '12px', letterSpacing: '0.15em', textTransform: 'uppercase', margin: 0 }}>
+        SendCraft
+      </p>
+
       <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
+        @keyframes ping {
+          75%, 100% { transform: scale(1.4); opacity: 0; }
+        }
+        @keyframes slide {
+          0%   { transform: translateX(-250%); }
+          100% { transform: translateX(600%); }
         }
       `}</style>
     </div>
@@ -46,48 +87,51 @@ function ErrorScreen({ error }: { error: string }) {
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: '100vh',
-      backgroundColor: '#f5f7f9',
+      backgroundColor: '#020c1b',
       fontFamily: 'system-ui, -apple-system, sans-serif',
       padding: '20px'
     }}>
       <div style={{
         maxWidth: '400px',
+        width: '100%',
         textAlign: 'center',
-        backgroundColor: '#fff',
-        padding: '32px',
-        borderRadius: '8px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        padding: '40px 32px',
+        borderRadius: '16px',
       }}>
         <div style={{
-          width: '48px',
-          height: '48px',
-          backgroundColor: '#fee2e2',
-          color: '#dc2626',
-          borderRadius: '50%',
+          width: '52px',
+          height: '52px',
+          backgroundColor: 'rgba(239,68,68,0.1)',
+          color: '#ef4444',
+          borderRadius: '14px',
+          border: '1px solid rgba(239,68,68,0.2)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          margin: '0 auto 16px',
-          fontSize: '24px',
+          margin: '0 auto 20px',
+          fontSize: '22px',
           fontWeight: 'bold'
         }}>!</div>
-        <h2 style={{ color: '#111827', fontSize: '18px', marginBottom: '8px' }}>
-          Error al cargar la configuración
+        <h2 style={{ color: '#f1f5f9', fontSize: '18px', fontWeight: '700', marginBottom: '8px' }}>
+          Error al iniciar
         </h2>
-        <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '16px' }}>
+        <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px', lineHeight: '1.6' }}>
           {error}
         </p>
         <button
           onClick={() => window.location.reload()}
           style={{
-            backgroundColor: '#3b82f6',
+            background: 'linear-gradient(135deg, #22d3ee, #2563eb)',
             color: '#fff',
             border: 'none',
-            padding: '8px 16px',
-            borderRadius: '6px',
+            padding: '10px 24px',
+            borderRadius: '10px',
             fontSize: '14px',
-            fontWeight: '500',
-            cursor: 'pointer'
+            fontWeight: '600',
+            cursor: 'pointer',
+            letterSpacing: '0.01em',
           }}
         >
           Reintentar

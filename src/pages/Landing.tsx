@@ -4,29 +4,9 @@ import { useNavigate } from 'react-router-dom';
 
 const PLANS = [
   {
-    key: 'trial',
-    name: 'Trial',
-    tagline: '14 días gratis',
-    price: null,
-    priceLabel: 'Gratis',
-    color: 'from-slate-500/20 to-slate-600/10',
-    border: 'border-slate-500/30',
-    accent: 'text-slate-300',
-    badge: null,
-    features: [
-      { label: 'Emails / mes',          value: '100' },
-      { label: 'PDFs / mes',            value: '20' },
-      { label: 'Aplicaciones',          value: '1' },
-      { label: 'Templates',             value: '3' },
-      { label: 'Acceso API',            value: false },
-      { label: '2FA',                   value: false },
-      { label: 'Soporte prioritario',   value: false },
-    ],
-  },
-  {
     key: 'starter',
     name: 'Starter',
-    tagline: 'Para comenzar',
+    tagline: 'Para emprendedores o proyectos pequeños.',
     price: 890,
     priceLabel: 'UYU 890',
     color: 'from-cyan-500/15 to-teal-500/10',
@@ -38,7 +18,8 @@ const PLANS = [
       { label: 'PDFs / mes',            value: '200' },
       { label: 'Aplicaciones',          value: '1' },
       { label: 'Templates',             value: '10' },
-      { label: 'Acceso API',            value: false },
+      { label: 'Máximo de usuarios',    value: '5' },
+      { label: 'Acceso API',            value: true },
       { label: '2FA',                   value: false },
       { label: 'Soporte prioritario',   value: false },
     ],
@@ -46,7 +27,7 @@ const PLANS = [
   {
     key: 'business',
     name: 'Business',
-    tagline: 'Para empresas en crecimiento',
+    tagline: 'Para empresas que ya envían comunicaciones frecuentes.',
     price: 1890,
     priceLabel: 'UYU 1.890',
     color: 'from-blue-500/20 to-cyan-500/10',
@@ -58,6 +39,7 @@ const PLANS = [
       { label: 'PDFs / mes',            value: '3.000' },
       { label: 'Aplicaciones',          value: '5' },
       { label: 'Templates',             value: '50' },
+      { label: 'Máximo de usuarios',    value: '20' },
       { label: 'Acceso API',            value: true },
       { label: '2FA',                   value: true },
       { label: 'Reportes avanzados',    value: true },
@@ -67,7 +49,7 @@ const PLANS = [
   {
     key: 'pro',
     name: 'Pro',
-    tagline: 'Alto volumen · Multi-tenant',
+    tagline: 'Para SaaS, agencias o empresas con varios tenants/clientes.',
     price: 3900,
     priceLabel: 'UYU 3.900',
     color: 'from-emerald-500/15 to-teal-500/10',
@@ -79,6 +61,7 @@ const PLANS = [
       { label: 'PDFs / mes',            value: '20.000' },
       { label: 'Aplicaciones',          value: '20' },
       { label: 'Templates',             value: '200' },
+      { label: 'Máximo de usuarios',    value: '10 por tenant' },
       { label: 'Acceso API',            value: true },
       { label: '2FA',                   value: true },
       { label: 'Reportes avanzados',    value: true },
@@ -310,7 +293,7 @@ export const Landing = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {PLANS.map((plan) => (
               <div
                 key={plan.key}
@@ -383,12 +366,10 @@ export const Landing = () => {
                         ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-500/25'
                         : plan.key === 'pro'
                         ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/25'
-                        : plan.key === 'trial'
-                        ? 'bg-slate-600 hover:bg-slate-500 text-white'
                         : 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/25'
                     }`}
                   >
-                    {plan.key === 'trial' ? 'Comenzar gratis' : 'Suscribirse'}
+                    Suscribirse
                   </button>
                 </div>
               </div>
@@ -403,8 +384,15 @@ export const Landing = () => {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer className="border-t border-white/5 py-8 px-6 text-center">
-        <p className="text-slate-600 text-sm">Copyright 2024 SendCraft. Todos los derechos reservados.</p>
+      <footer className="border-t border-white/5 py-8 px-6">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-slate-600 text-sm">© {new Date().getFullYear()} SendCraft. Todos los derechos reservados.</p>
+          <div className="flex items-center gap-6 text-sm">
+            <button onClick={() => navigate('/privacy')} className="text-slate-500 hover:text-slate-300 transition-colors">Privacidad</button>
+            <button onClick={() => navigate('/terms')} className="text-slate-500 hover:text-slate-300 transition-colors">Términos</button>
+            <a href="mailto:soporte@sendcraft.app" className="text-slate-500 hover:text-slate-300 transition-colors">Soporte</a>
+          </div>
+        </div>
       </footer>
 
       {/* ── MOBILE bottom bar ── */}
