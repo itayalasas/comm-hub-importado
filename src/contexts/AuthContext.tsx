@@ -30,6 +30,10 @@ interface Subscription {
   entitlements: {
     features: Feature[];
   };
+  mp_cancel_url?: string;
+  mp_init_point?: string;
+  mp_preapproval_plan_id?: string;
+  mp_status?: string;
 }
 
 interface AvailablePlan {
@@ -77,6 +81,7 @@ interface AuthContextType {
   handleCallback: (tokenOrCode: string) => Promise<void>;
   hasPermission: (menu: string, permission: MenuPermission) => boolean;
   hasMenuAccess: (menu: string) => boolean;
+  refreshSubscription: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -167,6 +172,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       entitlements: {
         features: normalizeFeatures(rawFeatures),
       },
+      mp_cancel_url: rawSubscription.mp_cancel_url ? String(rawSubscription.mp_cancel_url) : undefined,
+      mp_init_point: rawSubscription.mp_init_point ? String(rawSubscription.mp_init_point) : undefined,
+      mp_preapproval_plan_id: rawSubscription.mp_preapproval_plan_id ? String(rawSubscription.mp_preapproval_plan_id) : undefined,
+      mp_status: rawSubscription.mp_status ? String(rawSubscription.mp_status) : undefined,
     };
   };
 
@@ -562,6 +571,49 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return false;
   };
 
+  // Re-exchange the stored refresh_token to get a fresh subscription state
+  const refreshSubscription = async (): Promise<void> => {
+    try {
+      const refreshToken = localStorage.getItem('refresh_token');
+      const accessToken = localStorage.getItem('access_token');
+      const tokenToUse = refreshToken || accessToken;
+      if (!tokenToUse) return;
+
+      await configManager.loadConfig();
+
+      const res = await fetch(configManager.authValidaToken, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: tokenToUse,
+          application_id: configManager.authAppId,
+        }),
+      });
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const rawSub =
+        data.subscription ??
+        data.data?.subscription ??
+        data.data?.user?.subscription;
+
+      if (rawSub) {
+        const normalized = normalizeSubscription(rawSub);
+        if (normalized) {
+          localStorage.setItem('subscription', JSON.stringify(normalized));
+          setSubscription(normalized);
+        }
+      } else {
+        // No subscription returned — treat as cancelled/expired
+        localStorage.removeItem('subscription');
+        setSubscription(null);
+      }
+    } catch {
+      // Silently fail — caller decides what to do next
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -576,6 +628,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         handleCallback,
         hasPermission,
         hasMenuAccess,
+        refreshSubscription,
       }}
     >
       {children}

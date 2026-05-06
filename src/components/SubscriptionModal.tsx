@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { X, CreditCard, Calendar, Check, Minus, Clock, AlertTriangle, Zap, Users, FileText, LayoutGrid, Mail, FileOutput } from 'lucide-react';
+import { X, CreditCard, Calendar, Check, Minus, Clock, AlertTriangle, Zap, Users, FileText, LayoutGrid, Mail, FileOutput, ExternalLink, RefreshCw, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UpgradeModal } from './UpgradeModal';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
@@ -40,9 +40,12 @@ function formatNumber(value: string | number, unit?: string | null): string {
 }
 
 export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
-  const { subscription, user } = useAuth();
+  const { subscription, user, refreshSubscription } = useAuth();
   const { applicationCount, templateCount, emailsThisMonth, pdfsThisMonth } = useSubscriptionLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshDone, setRefreshDone] = useState(false);
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
   const activeUsersCount = user?.active_users_count ?? 0;
@@ -70,6 +73,30 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
     : null;
 
   const isTrial = planPrice === 0 || isTrialing;
+
+  // MP active subscription: has a real MP plan linked and is active or trialing
+  const hasMpActive = !!(
+    subscription?.mp_cancel_url &&
+    subscription?.mp_status === 'active' &&
+    (isActive || isTrialing)
+  );
+
+  const handleOpenCancel = () => {
+    if (subscription?.mp_cancel_url) {
+      window.open(subscription.mp_cancel_url, '_blank', 'noopener,noreferrer');
+      setShowCancelConfirm(true);
+    }
+  };
+
+  const handleRefreshAfterCancel = async () => {
+    setRefreshing(true);
+    await refreshSubscription();
+    setRefreshing(false);
+    setRefreshDone(true);
+    setTimeout(() => {
+      onClose();
+    }, 1200);
+  };
 
   // Returns actual current usage for a given feature code
   const getRealUsage = (featureCode: string): number => {
@@ -303,6 +330,59 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                       );
                     })}
                   </div>
+                </div>
+              )}
+
+              {/* Cancel subscription block — only when MP active plan exists */}
+              {hasMpActive && isAdmin && (
+                <div className="border border-red-500/15 bg-red-500/5 rounded-xl p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-300">Cancelar suscripción</p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Serás redirigido a MercadoPago para confirmar la cancelación. Una vez cancelada, las funcionalidades del plan se desactivarán al finalizar el período.
+                      </p>
+                    </div>
+                  </div>
+
+                  {!showCancelConfirm ? (
+                    <button
+                      onClick={handleOpenCancel}
+                      className="w-full py-2.5 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Cancelar en MercadoPago
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                        ¿Ya completaste la cancelación en MercadoPago? Hacé clic en "Actualizar estado" para reflejar los cambios.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleRefreshAfterCancel}
+                          disabled={refreshing || refreshDone}
+                          className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                        >
+                          {refreshing ? (
+                            <><RefreshCw className="w-4 h-4 animate-spin" /> Actualizando...</>
+                          ) : refreshDone ? (
+                            <><Check className="w-4 h-4 text-emerald-400" /> Listo</>
+                          ) : (
+                            <><RefreshCw className="w-4 h-4" /> Actualizar estado</>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => window.open(subscription?.mp_cancel_url, '_blank', 'noopener,noreferrer')}
+                          className="px-4 py-2.5 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl text-sm transition-all flex items-center gap-1.5"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Volver a MP
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
