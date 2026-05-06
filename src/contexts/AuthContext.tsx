@@ -33,6 +33,7 @@ interface Subscription {
   mp_cancel_url?: string;
   mp_init_point?: string;
   mp_preapproval_plan_id?: string;
+  mp_preapproval_id?: string;
   mp_status?: string;
 }
 
@@ -175,6 +176,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       mp_cancel_url: rawSubscription.mp_cancel_url ? String(rawSubscription.mp_cancel_url) : undefined,
       mp_init_point: rawSubscription.mp_init_point ? String(rawSubscription.mp_init_point) : undefined,
       mp_preapproval_plan_id: rawSubscription.mp_preapproval_plan_id ? String(rawSubscription.mp_preapproval_plan_id) : undefined,
+      mp_preapproval_id: rawSubscription.mp_preapproval_id ? String(rawSubscription.mp_preapproval_id) : undefined,
       mp_status: rawSubscription.mp_status ? String(rawSubscription.mp_status) : undefined,
     };
   };

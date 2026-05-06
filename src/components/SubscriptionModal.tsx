@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { X, CreditCard, Calendar, Check, Minus, Clock, AlertTriangle, Zap, Users, FileText, LayoutGrid, Mail, FileOutput, ExternalLink, RefreshCw, XCircle } from 'lucide-react';
+import { X, CreditCard, Calendar, Check, Minus, Clock, AlertTriangle, Zap, Users, FileText, LayoutGrid, Mail, FileOutput, RefreshCw, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UpgradeModal } from './UpgradeModal';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
@@ -43,9 +43,9 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const { subscription, user, refreshSubscription } = useAuth();
   const { applicationCount, templateCount, emailsThisMonth, pdfsThisMonth } = useSubscriptionLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshDone, setRefreshDone] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelDone, setCancelDone] = useState(false);
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
   const activeUsersCount = user?.active_users_count ?? 0;
@@ -74,28 +74,37 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
 
   const isTrial = planPrice === 0 || isTrialing;
 
-  // MP active subscription: has a real MP plan linked and is active or trialing
-  const hasMpActive = !!(
-    subscription?.mp_cancel_url &&
-    subscription?.mp_status === 'active' &&
-    (isActive || isTrialing)
+  // Show cancel button only when mp_preapproval_id exists and mp_status is 'active'
+  const canCancelMp = !!(
+    subscription?.mp_preapproval_id &&
+    subscription?.mp_status === 'active'
   );
 
-  const handleOpenCancel = () => {
-    if (subscription?.mp_cancel_url) {
-      window.open(subscription.mp_cancel_url, '_blank', 'noopener,noreferrer');
-      setShowCancelConfirm(true);
+  const handleCancelSubscription = async () => {
+    if (!subscription?.mp_preapproval_id) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const res = await fetch(
+        'https://veymthufmfqhxxxzfmfi.supabase.co/functions/v1/cancel-subscription',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mp_preapproval_id: subscription.mp_preapproval_id }),
+        }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || body?.error || `Error ${res.status}`);
+      }
+      setCancelDone(true);
+      // Refresh auth state so UI reflects cancelled plan
+      await refreshSubscription();
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Error al cancelar. Intenta nuevamente.');
+    } finally {
+      setCancelling(false);
     }
-  };
-
-  const handleRefreshAfterCancel = async () => {
-    setRefreshing(true);
-    await refreshSubscription();
-    setRefreshing(false);
-    setRefreshDone(true);
-    setTimeout(() => {
-      onClose();
-    }, 1200);
   };
 
   // Returns actual current usage for a given feature code
@@ -333,55 +342,44 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                 </div>
               )}
 
-              {/* Cancel subscription block — only when MP active plan exists */}
-              {hasMpActive && isAdmin && (
+              {/* Cancel subscription — only for admin when mp_status is active */}
+              {canCancelMp && isAdmin && (
                 <div className="border border-red-500/15 bg-red-500/5 rounded-xl p-4 space-y-3">
                   <div className="flex items-start gap-3">
                     <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-semibold text-red-300">Cancelar suscripción</p>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Serás redirigido a MercadoPago para confirmar la cancelación. Una vez cancelada, las funcionalidades del plan se desactivarán al finalizar el período.
+                        Tu plan seguirá activo hasta el fin del período vigente. Al vencer se bloqueará el acceso hasta que elijas un nuevo plan.
                       </p>
                     </div>
                   </div>
 
-                  {!showCancelConfirm ? (
-                    <button
-                      onClick={handleOpenCancel}
-                      className="w-full py-2.5 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Cancelar en MercadoPago
-                    </button>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                        ¿Ya completaste la cancelación en MercadoPago? Hacé clic en "Actualizar estado" para reflejar los cambios.
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleRefreshAfterCancel}
-                          disabled={refreshing || refreshDone}
-                          className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-60"
-                        >
-                          {refreshing ? (
-                            <><RefreshCw className="w-4 h-4 animate-spin" /> Actualizando...</>
-                          ) : refreshDone ? (
-                            <><Check className="w-4 h-4 text-emerald-400" /> Listo</>
-                          ) : (
-                            <><RefreshCw className="w-4 h-4" /> Actualizar estado</>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => window.open(subscription?.mp_cancel_url, '_blank', 'noopener,noreferrer')}
-                          className="px-4 py-2.5 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl text-sm transition-all flex items-center gap-1.5"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          Volver a MP
-                        </button>
-                      </div>
+                  {cancelDone ? (
+                    <div className="flex items-center gap-2 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <p className="text-sm text-emerald-300 font-medium">Suscripción cancelada. Tu plan estará disponible hasta el {formatDate(subscription?.period_end)}.</p>
                     </div>
+                  ) : (
+                    <>
+                      {cancelError && (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+                          <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                          <p className="text-xs text-red-300">{cancelError}</p>
+                        </div>
+                      )}
+                      <button
+                        onClick={handleCancelSubscription}
+                        disabled={cancelling}
+                        className="w-full py-2.5 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {cancelling ? (
+                          <><RefreshCw className="w-4 h-4 animate-spin" /> Cancelando...</>
+                        ) : (
+                          <><XCircle className="w-4 h-4" /> Cancelar suscripción</>
+                        )}
+                      </button>
+                    </>
                   )}
                 </div>
               )}
