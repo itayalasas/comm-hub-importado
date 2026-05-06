@@ -46,6 +46,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelDone, setCancelDone] = useState(false);
+  const [cancelActiveUntil, setCancelActiveUntil] = useState<string | null>(null);
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
   const activeUsersCount = user?.active_users_count ?? 0;
@@ -93,12 +94,15 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
           body: JSON.stringify({ mp_preapproval_id: subscription.mp_preapproval_id }),
         }
       );
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
         throw new Error(body?.message || body?.error || `Error ${res.status}`);
       }
+      // Use next_payment_date from MP response as the real active-until date
+      const activeUntil: string | undefined =
+        body?.data?.next_payment_date ?? undefined;
+      setCancelActiveUntil(activeUntil ?? null);
       setCancelDone(true);
-      // Refresh auth state so UI reflects cancelled plan
       await refreshSubscription();
     } catch (err) {
       setCancelError(err instanceof Error ? err.message : 'Error al cancelar. Intenta nuevamente.');
@@ -356,9 +360,14 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                   </div>
 
                   {cancelDone ? (
-                    <div className="flex items-center gap-2 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <p className="text-sm text-emerald-300 font-medium">Suscripción cancelada. Tu plan estará disponible hasta el {formatDate(subscription?.period_end)}.</p>
+                    <div className="flex items-start gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-emerald-300 font-semibold">Suscripción cancelada</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Tu plan sigue activo hasta el <span className="text-white font-medium">{formatDate(cancelActiveUntil ?? subscription?.period_end)}</span>. Al vencer, el acceso se bloqueará hasta que elijas un nuevo plan.
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <>
