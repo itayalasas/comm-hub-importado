@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
@@ -13,7 +13,8 @@ import {
   Activity,
   Server,
   Zap,
-  ArrowRight
+  ArrowRight,
+  RefreshCw,
 } from 'lucide-react';
 
 interface Stats {
@@ -47,7 +48,7 @@ interface ServiceStatus {
 }
 
 export const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, refreshSubscription } = useAuth();
   const navigate = useNavigate();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
@@ -62,6 +63,34 @@ export const Dashboard = () => {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mpActivating, setMpActivating] = useState(false);
+  const [mpPlanName, setMpPlanName] = useState<string | null>(null);
+  const mpHandled = useRef(false);
+
+  // Detect MP subscription callback params and refresh session
+  useEffect(() => {
+    if (mpHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const subscriptionId = params.get('subscription_id');
+    const planName = params.get('plan_name');
+
+    if (!subscriptionId) return;
+
+    mpHandled.current = true;
+    setMpPlanName(planName);
+    setMpActivating(true);
+
+    // Clean URL immediately so params don't persist on refresh
+    window.history.replaceState({}, '', window.location.pathname);
+
+    // Give MP backend a moment to process, then refresh our session
+    const timer = setTimeout(async () => {
+      await refreshSubscription();
+      setMpActivating(false);
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -356,6 +385,33 @@ export const Dashboard = () => {
 
   return (
     <Layout currentPage="dashboard">
+      {/* MP subscription activation overlay */}
+      {mpActivating && (
+        <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-6">
+          <div className="relative">
+            <div className="w-20 h-20 rounded-2xl border border-cyan-500/20 absolute inset-0 animate-ping opacity-20" />
+            <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-2xl shadow-cyan-500/30">
+              <RefreshCw className="w-9 h-9 text-white animate-spin" />
+            </div>
+          </div>
+          <div className="text-center space-y-1.5">
+            <p className="text-white font-semibold text-lg">Activando tu suscripción</p>
+            <p className="text-slate-400 text-sm">
+              {mpPlanName ? `Plan ${mpPlanName} · ` : ''}Actualizando tu sesión…
+            </p>
+          </div>
+          <div className="w-48 h-0.5 bg-white/5 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full animate-[loading_1.4s_ease-in-out_infinite]" style={{ width: '40%' }} />
+          </div>
+          <style>{`
+            @keyframes loading {
+              0%   { transform: translateX(-200%); }
+              100% { transform: translateX(400%); }
+            }
+          `}</style>
+        </div>
+      )}
+
       <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Dashboard</h1>
