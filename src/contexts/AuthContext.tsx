@@ -391,14 +391,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           localStorage.setItem('refresh_token', refreshToken);
         }
 
-        if (authResponse.subscription || authResponse.data?.subscription) {
-          const rawSubscription = authResponse.subscription || authResponse.data.subscription;
-          const normalizedSubscription = normalizeSubscription(rawSubscription);
-
+        // Save subscription from exchange response immediately (before JWT decode)
+        const earlyRawSub =
+          authResponse.subscription ??
+          authResponse.data?.subscription ??
+          authResponse.data?.user?.subscription;
+        if (earlyRawSub) {
+          const normalizedSubscription = normalizeSubscription(earlyRawSub);
           if (normalizedSubscription) {
             localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
             setSubscription(normalizedSubscription);
           }
+        }
+
+        // Save available_plans from exchange response
+        const earlyPlans =
+          authResponse.available_plans ??
+          authResponse.data?.available_plans ??
+          authResponse.data?.user?.available_plans;
+        if (earlyPlans && Array.isArray(earlyPlans)) {
+          const normalizedPlans = normalizeAvailablePlans(earlyPlans);
+          localStorage.setItem('available_plans', JSON.stringify(normalizedPlans));
+          setAvailablePlans(normalizedPlans);
         }
       }
 
@@ -413,27 +427,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       let decodedToken = decodeJWT(accessToken);
       console.log('Decoded token:', decodedToken ? 'SUCCESS' : 'FAILED');
 
-      if (decodedToken) {
-        console.log('Token payload preview:', {
-          sub: decodedToken.sub,
-          email: decodedToken.email,
-          name: decodedToken.name,
-          hasSubscription: !!decodedToken.subscription,
-          hasPermissions: !!decodedToken.permissions,
-          hasAvailablePlans: !!decodedToken.available_plans,
-          availablePlansCount: Array.isArray(decodedToken.available_plans) ? decodedToken.available_plans.length : 0
-        });
-
-        if (decodedToken.available_plans) {
-          console.log('Available plans raw data:', JSON.stringify(decodedToken.available_plans, null, 2));
-        }
-      }
-
       let userInfo: User;
 
       if (!decodedToken && authResponse?.data) {
         console.log('=== TOKEN NO ES JWT, USANDO DATA DE AUTH RESPONSE ===');
-        // The auth response may nest user data under authResponse.data.user or flat in authResponse.data
         const userData = authResponse.data.user || authResponse.data;
         userInfo = {
           sub: userData.id || userData.user_id || userData.sub || 'unknown',
@@ -447,81 +444,49 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           active_users_count: userData.active_users_count !== undefined ? Number(userData.active_users_count) : undefined,
         };
 
-        if (authResponse.data.subscription) {
-          const normalizedSubscription = normalizeSubscription(authResponse.data.subscription);
-          console.log('=== SUBSCRIPTION INFO FROM AUTH RESPONSE ===');
-          console.log('Status:', authResponse.data.subscription.status);
-          console.log('Plan:', authResponse.data.subscription.plan_name);
-          console.log('Trial End:', authResponse.data.subscription.trial_end);
+        // Subscription already saved above; re-apply if not yet set
+        const subSource = authResponse.data.subscription ?? authResponse.data.user?.subscription;
+        if (subSource) {
+          const normalizedSubscription = normalizeSubscription(subSource);
           if (normalizedSubscription) {
             localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
             setSubscription(normalizedSubscription);
           }
         }
       } else if (decodedToken) {
-        if (decodedToken.subscription) {
-          const normalizedSubscription = normalizeSubscription(decodedToken.subscription);
-          console.log('=== SUBSCRIPTION INFO FROM TOKEN ===');
-          console.log('Status:', decodedToken.subscription.status);
-          console.log('Plan:', decodedToken.subscription.plan_name);
-          console.log('Trial Start:', decodedToken.subscription.trial_start);
-          console.log('Trial End:', decodedToken.subscription.trial_end);
-          console.log('Full subscription:', JSON.stringify(decodedToken.subscription, null, 2));
-          if (normalizedSubscription) {
-            localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
-            setSubscription(normalizedSubscription);
-          }
-        } else if (authResponse?.data?.subscription) {
-          const normalizedSubscription = normalizeSubscription(authResponse.data.subscription);
-          console.log('=== SUBSCRIPTION INFO FROM AUTH RESPONSE ===');
-          console.log('Status:', authResponse.data.subscription.status);
-          console.log('Plan:', authResponse.data.subscription.plan_name);
-          console.log('Trial End:', authResponse.data.subscription.trial_end);
+        // Prefer subscription from authResponse (more complete) over JWT payload
+        const rawSub =
+          authResponse?.subscription ??
+          authResponse?.data?.subscription ??
+          authResponse?.data?.user?.subscription ??
+          decodedToken.subscription;
 
+        if (rawSub) {
+          const normalizedSubscription = normalizeSubscription(rawSub);
+          console.log('=== SUBSCRIPTION SAVED ===', rawSub.status, rawSub.plan_name);
           if (normalizedSubscription) {
             localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
             setSubscription(normalizedSubscription);
           }
         }
 
-        if (decodedToken.available_plans && Array.isArray(decodedToken.available_plans)) {
-          console.log('=== AVAILABLE PLANS FROM TOKEN ===');
-          console.log('Plans count:', decodedToken.available_plans.length);
-          console.log('');
+        // available_plans: prefer authResponse over JWT
+        const rawPlans =
+          authResponse?.available_plans ??
+          authResponse?.data?.available_plans ??
+          authResponse?.data?.user?.available_plans ??
+          decodedToken.available_plans;
 
-          decodedToken.available_plans.forEach((plan: any, index: number) => {
-            console.log(`📦 Plan ${index + 1}:`, plan.name);
-            console.log('  ├─ ID:', plan.id);
-            console.log('  ├─ Description:', plan.description);
-            console.log('  ├─ Price:', plan.price, plan.currency);
-            console.log('  ├─ Billing Cycle:', plan.billing_cycle);
-            console.log('  ├─ Is Upgrade:', plan.is_upgrade);
-            console.log('  ├─ Price Difference:', plan.price_difference);
-            console.log('  ├─ Features Count:', plan.entitlements?.features?.length || 0);
-            console.log('  ├─ MP Init Point:', plan.mp_init_point ? '✅ Present' : '❌ Missing');
-            console.log('  ├─ MP Back URL:', plan.mp_back_url ? '✅ Present' : '❌ Missing');
-            console.log('  ├─ MP Preapproval Plan ID:', plan.mp_preapproval_plan_id || '❌ Missing');
-            console.log('  └─ MP Status:', plan.mp_status || '❌ Missing');
-
-            if (plan.entitlements?.features) {
-              console.log('  📋 Features:');
-              plan.entitlements.features.forEach((feature: any) => {
-                console.log(`     - ${feature.name} (${feature.code}): ${feature.value} ${feature.unit || ''}`);
-              });
-            }
-            console.log('');
-          });
-
-          console.log('💾 Full plans JSON:');
-          console.log(JSON.stringify(decodedToken.available_plans, null, 2));
-
-          const normalizedPlans = normalizeAvailablePlans(decodedToken.available_plans);
+        if (rawPlans && Array.isArray(rawPlans)) {
+          const normalizedPlans = normalizeAvailablePlans(rawPlans);
           localStorage.setItem('available_plans', JSON.stringify(normalizedPlans));
           setAvailablePlans(normalizedPlans);
         }
 
-        // tenant data may be directly in token or nested under token.user
-        const tokenUser = decodedToken.user || decodedToken;
+        // tenant data may be directly in token or nested under token.user,
+        // or in authResponse.data.user (most complete source)
+        const tokenUser = authResponse?.data?.user || decodedToken.user || decodedToken;
+        const tenantObj = authResponse?.data?.tenant;
         userInfo = {
           sub: tokenUser.id || tokenUser.sub || tokenUser.user_id,
           name: tokenUser.name || tokenUser.username || 'Usuario',
@@ -529,9 +494,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           picture: tokenUser.picture || tokenUser.avatar,
           role: tokenUser.role,
           permissions: tokenUser.permissions || decodedToken.permissions || {},
-          tenant_id: tokenUser.tenant_id || decodedToken.tenant_id || undefined,
-          tenant_name: tokenUser.tenant_name || decodedToken.tenant_name || undefined,
-          active_users_count: tokenUser.active_users_count !== undefined
+          tenant_id: tokenUser.tenant_id || decodedToken.tenant_id || tenantObj?.id || undefined,
+          tenant_name: tokenUser.tenant_name || decodedToken.tenant_name || tenantObj?.name || tenantObj?.organization_name || undefined,
+          active_users_count: tenantObj?.active_users_count !== undefined
+            ? Number(tenantObj.active_users_count)
+            : tokenUser.active_users_count !== undefined
             ? Number(tokenUser.active_users_count)
             : decodedToken.active_users_count !== undefined
             ? Number(decodedToken.active_users_count)
