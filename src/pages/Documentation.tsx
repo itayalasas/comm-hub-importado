@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Book, Code, Copy, Check, ChevronDown, ChevronRight, Info, AlertCircle } from 'lucide-react';
+import { Book, Code, Copy, Check, ChevronDown, ChevronRight, Info, AlertCircle, Mail, FileText, Zap, Globe, CheckCircle2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { configManager } from '../lib/config';
 
@@ -57,6 +57,7 @@ export default function Documentation() {
   const sections = [
     { id: 'introduction', title: 'Introducción', icon: Book },
     { id: 'authentication', title: 'Autenticación', icon: Code },
+    { id: 'connectors', title: 'Conectores', icon: Globe },
     { id: 'email-config', title: 'Configuración de Email', icon: Code },
     { id: 'endpoints', title: 'Endpoints', icon: Code },
     { id: 'templates', title: 'Variables de Template', icon: Code },
@@ -1508,12 +1509,302 @@ Content-Type: application/json`}
     </div>
   );
 
+  const CONNECTORS_DOC = [
+    {
+      id: 'sendcraft-email',
+      name: 'SendCraft Email',
+      tagline: 'Envía correos transaccionales y de campaña',
+      category: 'Email',
+      badge: 'Oficial',
+      badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+      icon: 'mail',
+      iconBg: 'bg-cyan-500',
+      version: '1.0.0',
+      protocol: 'REST/HTTPS',
+      auth: 'API Key',
+      endpoint: '/functions/v1/send-email',
+      method: 'POST',
+      description: 'Conector oficial para enviar emails transaccionales directamente desde tu CRM o automatización. Soporta templates HTML con variables dinámicas, logos, códigos QR y tracking de aperturas y clics.',
+      features: [
+        'Templates HTML con variables dinámicas',
+        'Soporte para logos y códigos QR',
+        'Seguimiento de aperturas y clics',
+        'Logs de envío en tiempo real',
+      ],
+      params: [
+        { key: 'template_name', type: 'string', required: true, description: 'Nombre del template de email' },
+        { key: 'recipient_email', type: 'string', required: true, description: 'Email del destinatario' },
+        { key: 'data', type: 'object', required: true, description: 'Variables a inyectar en el template' },
+      ],
+      example: {
+        template_name: 'bienvenida',
+        recipient_email: 'cliente@example.com',
+        data: { nombre: 'Juan Pérez', empresa: 'Acme SA' },
+      },
+    },
+    {
+      id: 'sendcraft-email-pdf',
+      name: 'SendCraft Email + PDF',
+      tagline: 'Email con PDF adjunto generado al vuelo',
+      category: 'PDF',
+      badge: 'Oficial',
+      badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+      icon: 'pdf',
+      iconBg: 'bg-blue-500',
+      version: '1.0.0',
+      protocol: 'REST/HTTPS',
+      auth: 'API Key',
+      endpoint: '/functions/v1/send-email-with-pdf',
+      method: 'POST',
+      description: 'Genera un PDF desde un template HTML y lo adjunta al email en una sola llamada API. Ideal para facturas, recibos, confirmaciones con documentos adjuntos. Si el PDF supera 1 MB se incluye un link de descarga en el email.',
+      features: [
+        'PDF generado en tiempo real desde templates HTML',
+        'Envío de email y PDF en una sola llamada',
+        'Variables dinámicas independientes para email y PDF',
+        'Fallback a link de descarga si el PDF supera 1 MB',
+      ],
+      params: [
+        { key: 'recipient_email', type: 'string', required: true, description: 'Email del destinatario' },
+        { key: 'email.template_name', type: 'string', required: true, description: 'Nombre del template de email' },
+        { key: 'email.data', type: 'object', required: false, description: 'Variables para el template de email' },
+        { key: 'attachment.pdf_template_name', type: 'string', required: true, description: 'Nombre del template PDF' },
+        { key: 'attachment.data', type: 'object', required: false, description: 'Variables para el template PDF' },
+        { key: 'attachment.filename', type: 'string', required: false, description: 'Nombre del archivo PDF (soporta variables)' },
+      ],
+      example: {
+        recipient_email: 'cliente@example.com',
+        email: { template_name: 'factura_email', data: { nombre: 'Juan Pérez' } },
+        attachment: { pdf_template_name: 'factura_pdf', filename: 'factura-{{order_id}}.pdf', data: { order_id: 'ORD-001', total: 1220 } },
+      },
+    },
+    {
+      id: 'sendcraft-pdf',
+      name: 'SendCraft PDF Generator',
+      tagline: 'Genera PDFs con URL pública de descarga',
+      category: 'PDF',
+      badge: 'Oficial',
+      badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+      icon: 'pdf',
+      iconBg: 'bg-emerald-500',
+      version: '1.0.0',
+      protocol: 'REST/HTTPS',
+      auth: 'API Key',
+      endpoint: '/functions/v1/generate-pdf',
+      method: 'POST',
+      description: 'Genera PDFs dinámicos desde templates HTML usando Chromium. Devuelve el PDF en base64 y una URL pública de descarga con expiración configurable. CSS completo soportado incluyendo fuentes, imágenes y tablas.',
+      features: [
+        'URL pública de descarga con expiración configurable',
+        'CSS completo soportado (fuentes, imágenes, tablas)',
+        'Variables dinámicas en todo el documento',
+        'Respuesta en base64 para uso directo',
+      ],
+      params: [
+        { key: 'pdf_template_name', type: 'string', required: true, description: 'Nombre del template PDF (alternativa a template_id)' },
+        { key: 'template_id', type: 'string', required: false, description: 'UUID del template (alternativa a pdf_template_name)' },
+        { key: 'data', type: 'object', required: true, description: 'Variables a inyectar en el template' },
+        { key: 'order_id', type: 'string', required: false, description: 'ID de orden para asociar el PDF' },
+      ],
+      example: {
+        pdf_template_name: 'factura_pdf',
+        data: { cliente: 'Juan Pérez', total: 1220, items: [{ descripcion: 'Servicio A', total: 1220 }] },
+      },
+    },
+    {
+      id: 'sendcraft-webhook',
+      name: 'SendCraft Webhooks',
+      tagline: 'Recibí eventos de email en tiempo real',
+      category: 'Automatización',
+      badge: 'Beta',
+      badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      icon: 'automation',
+      iconBg: 'bg-amber-500',
+      version: '0.9.0',
+      protocol: 'REST/HTTPS',
+      auth: 'API Key',
+      endpoint: '/functions/v1/track-email',
+      method: 'POST',
+      description: 'Registra un endpoint de tu CRM para recibir eventos de email en tiempo real: abierto, clic, entregado, rebotado y fallido. Incluye firma HMAC para verificar autenticidad y reintentos automáticos con backoff exponencial.',
+      features: [
+        'Eventos: abierto, clic, entregado, rebotado, fallido',
+        'Reintentos automáticos con backoff exponencial',
+        'Firma HMAC para verificar autenticidad',
+        'Filtrado por aplicación con API Key',
+      ],
+      params: [
+        { key: 'callback_url', type: 'string', required: true, description: 'URL de tu CRM que recibirá los eventos' },
+        { key: 'events', type: 'array', required: true, description: 'Lista de eventos a escuchar: opened, clicked, delivered, bounced, failed' },
+      ],
+      example: {
+        callback_url: 'https://tu-crm.com/webhooks/email',
+        events: ['opened', 'clicked', 'delivered', 'bounced'],
+      },
+    },
+  ];
+
+  const ConnectorIcon = ({ type }: { type: string }) => {
+    if (type === 'mail') return <Mail className="w-5 h-5" />;
+    if (type === 'pdf') return <FileText className="w-5 h-5" />;
+    return <Zap className="w-5 h-5" />;
+  };
+
+  const renderConnectors = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">Conectores</h2>
+        <p className="text-slate-300 mb-2">
+          SendCraft expone sus capacidades como conectores listos para instalar en cualquier CRM o plataforma de automatización. Cada conector incluye un manifiesto estandarizado con sus acciones, parámetros y autenticación.
+        </p>
+      </div>
+
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-5">
+        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+          <Globe className="w-4 h-4 text-cyan-400" />
+          Registry público
+        </h3>
+        <p className="text-slate-400 text-sm mb-3">
+          Tu CRM puede descubrir los conectores automáticamente apuntando al registry:
+        </p>
+        <div className="bg-slate-900 border border-slate-700 rounded p-3 font-mono text-sm text-cyan-400 flex items-center justify-between">
+          <span>{apiBaseUrl}/functions/v1/connectors</span>
+          <button onClick={() => copyToClipboard(`${apiBaseUrl}/functions/v1/connectors`, 'registry-url')} className="p-1 text-slate-400 hover:text-white transition-colors ml-4">
+            {copiedCode === 'registry-url' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          </button>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400">
+          <span><code className="text-cyan-400">GET /connectors</code> — lista todos los conectores</span>
+          <span><code className="text-cyan-400">GET /connectors/:id</code> — manifiesto completo de un conector</span>
+          <span className="text-slate-500">Sin autenticación — acceso público</span>
+        </div>
+      </div>
+
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <Info className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+          <div className="text-sm">
+            <p className="text-blue-400 font-semibold mb-1">Cómo funciona la integración</p>
+            <ol className="text-slate-300 space-y-1 list-decimal list-inside">
+              <li>Tu CRM hace GET al registry y descubre los conectores disponibles</li>
+              <li>El usuario elige un conector e ingresa su API Key de SendCraft</li>
+              <li>El conector queda instalado con el manifiesto de acciones listo para usar</li>
+              <li>Desde tu CRM podés disparar emails, PDFs y webhooks con una sola llamada</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {CONNECTORS_DOC.map(connector => (
+          <div key={connector.id} className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+            <div className="p-5">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl ${connector.iconBg} flex items-center justify-center text-white`}>
+                    <ConnectorIcon type={connector.icon} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <h3 className="text-white font-bold">{connector.name}</h3>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${connector.badgeColor}`}>{connector.badge}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-700/50 text-slate-400 border-slate-600">{connector.category}</span>
+                    </div>
+                    <p className="text-slate-400 text-sm">{connector.tagline}</p>
+                  </div>
+                </div>
+                <div className="text-right text-xs text-slate-500 space-y-1">
+                  <div>v{connector.version}</div>
+                  <div>{connector.protocol}</div>
+                  <div className="text-cyan-500">{connector.auth}</div>
+                </div>
+              </div>
+
+              <p className="text-slate-300 text-sm mb-4">{connector.description}</p>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Características</h4>
+                  <ul className="space-y-1.5">
+                    {connector.features.map((f, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-slate-300">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />{f}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Parámetros principales</h4>
+                  <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-800">
+                        <tr>
+                          <th className="text-left px-3 py-1.5 text-slate-300 font-medium">Campo</th>
+                          <th className="text-left px-3 py-1.5 text-slate-300 font-medium">Tipo</th>
+                          <th className="text-left px-3 py-1.5 text-slate-300 font-medium">Req.</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/50">
+                        {connector.params.map((p, i) => (
+                          <tr key={i}>
+                            <td className="px-3 py-1.5 text-cyan-400 font-mono">{p.key}</td>
+                            <td className="px-3 py-1.5 text-slate-400">{p.type}</td>
+                            <td className="px-3 py-1.5">
+                              {p.required
+                                ? <span className="text-red-400">✓</span>
+                                : <span className="text-slate-600">—</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 border-t border-slate-700/50 pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-green-500 text-white px-2 py-0.5 rounded text-xs font-bold">{connector.method}</span>
+                    <code className="text-xs text-slate-400 font-mono">{connector.endpoint}</code>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(JSON.stringify(connector.example, null, 2), `${connector.id}-example`)}
+                    className="p-1.5 hover:bg-slate-700 rounded transition-colors"
+                    title="Copiar ejemplo"
+                  >
+                    {copiedCode === `${connector.id}-example` ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                  </button>
+                </div>
+                <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-3 rounded-lg overflow-x-auto text-xs">
+                  {JSON.stringify(connector.example, null, 2)}
+                </pre>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+                <Globe className="w-3.5 h-3.5" />
+                <span>Registry:</span>
+                <code className="text-cyan-500">{apiBaseUrl}/functions/v1/connectors/{connector.id}</code>
+                <button
+                  onClick={() => copyToClipboard(`${apiBaseUrl}/functions/v1/connectors/${connector.id}`, `${connector.id}-registry`)}
+                  className="p-1 hover:bg-slate-700 rounded transition-colors"
+                >
+                  {copiedCode === `${connector.id}-registry` ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3 text-slate-500" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   const renderContent = () => {
     switch (activeSection) {
       case 'introduction':
         return renderIntroduction();
       case 'authentication':
         return renderAuthentication();
+      case 'connectors':
+        return renderConnectors();
       case 'email-config':
         return renderEmailConfig();
       case 'endpoints':
