@@ -205,6 +205,14 @@ const AppRoutes = () => {
         }
       />
       <Route
+        path="/settings/embed"
+        element={
+          <ProtectedRoute requiredMenu="settings">
+            <Settings tab="embed" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/api-explorer"
         element={
           <ProtectedRoute requiredMenu="documentation">

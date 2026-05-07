@@ -9,13 +9,22 @@
   to = "/index.html"
   status = 200
 
+# Default security headers for all routes
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
     Permissions-Policy = "interest-cohort=()"
+    X-Frame-Options = "DENY"
+
+# Allow embedding for /embed/* routes (iframe-friendly)
+[[headers]]
+  for = "/embed/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Content-Security-Policy = "frame-ancestors *"
 
 [[headers]]
   for = "/callback"

@@ -416,6 +416,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       children: [
         { name: 'Aplicaciones', icon: AppWindow, route: 'settings/apps', page: 'settings-apps' },
         { name: 'Correo Electrónico', icon: Mail, route: 'settings/email', page: 'settings-email' },
+        { name: 'Acceso al Embed', icon: Package, route: 'settings/embed', page: 'settings-embed' },
       ],
     },
   ].filter(item => hasMenuAccess(item.permissionKey));

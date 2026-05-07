@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
-import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link } from 'lucide-react';
+import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -26,7 +26,16 @@ interface EmailCredentials {
   is_active: boolean;
 }
 
-export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' }) => {
+interface EmbedCredential {
+  id: string;
+  username: string;
+  label: string;
+  is_active: boolean;
+  last_used_at: string | null;
+  created_at: string;
+}
+
+export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' }) => {
   const { user } = useAuth();
   const toast = useToast();
   const { checkApplicationLimit, refreshCounts, hasFeature } = useSubscriptionLimits();
@@ -46,6 +55,16 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' }) => {
   });
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
+
+  // ── Embed credentials state ──────────────────────────────────────────
+  const [embedCreds, setEmbedCreds] = useState<EmbedCredential[]>([]);
+  const [embedLoading, setEmbedLoading] = useState(false);
+  const [showEmbedModal, setShowEmbedModal] = useState(false);
+  const [newEmbed, setNewEmbed] = useState({ username: '', password: '', label: '' });
+  const [newEmbedError, setNewEmbedError] = useState('');
+  const [newEmbedSaving, setNewEmbedSaving] = useState(false);
+  const [showEmbedPass, setShowEmbedPass] = useState(false);
+  const [generatedPass, setGeneratedPass] = useState('');
 
   // Plan feature gates for email providers
   const canUseSmtp = hasFeature('configuracion_smtp');
@@ -70,6 +89,12 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' }) => {
       loadApplications();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user && tab === 'embed') {
+      loadEmbedCreds();
+    }
+  }, [user, tab]);
 
   const provisionDefaultEmail = async (appId: string) => {
     try {
@@ -174,6 +199,81 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' }) => {
     } catch {
       // ignore
     }
+  };
+
+  // ── Embed credential helpers ─────────────────────────────────────────
+
+  const sha256 = async (text: string): Promise<string> => {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$';
+    const arr = new Uint8Array(16);
+    crypto.getRandomValues(arr);
+    const pass = Array.from(arr).map(b => chars[b % chars.length]).join('');
+    setNewEmbed(e => ({ ...e, password: pass }));
+    setGeneratedPass(pass);
+  };
+
+  const loadEmbedCreds = async () => {
+    if (!user?.sub) return;
+    setEmbedLoading(true);
+    try {
+      const { data } = await supabase
+        .from('embed_credentials')
+        .select('id, username, label, is_active, last_used_at, created_at')
+        .eq('user_id', user.sub)
+        .order('created_at', { ascending: false });
+      setEmbedCreds(data || []);
+    } finally {
+      setEmbedLoading(false);
+    }
+  };
+
+  const saveEmbedCred = async () => {
+    if (!user?.sub) return;
+    if (!newEmbed.username.trim() || !newEmbed.password) {
+      setNewEmbedError('Usuario y contraseña son requeridos.');
+      return;
+    }
+    setNewEmbedSaving(true);
+    setNewEmbedError('');
+    try {
+      const hash = await sha256(newEmbed.password);
+      const { error } = await supabase.from('embed_credentials').insert({
+        user_id: user.sub,
+        username: newEmbed.username.trim(),
+        password_hash: hash,
+        label: newEmbed.label.trim() || newEmbed.username.trim(),
+      });
+      if (error) {
+        if (error.code === '23505') setNewEmbedError('Ese nombre de usuario ya existe.');
+        else throw error;
+        return;
+      }
+      setShowEmbedModal(false);
+      setNewEmbed({ username: '', password: '', label: '' });
+      setGeneratedPass('');
+      toast.success('Credencial creada');
+      loadEmbedCreds();
+    } catch {
+      setNewEmbedError('Error al guardar. Intentá de nuevo.');
+    } finally {
+      setNewEmbedSaving(false);
+    }
+  };
+
+  const deleteEmbedCred = async (id: string) => {
+    await supabase.from('embed_credentials').delete().eq('id', id);
+    setEmbedCreds(prev => prev.filter(c => c.id !== id));
+    toast.success('Credencial eliminada');
+  };
+
+  const toggleEmbedCred = async (id: string, current: boolean) => {
+    await supabase.from('embed_credentials').update({ is_active: !current }).eq('id', id);
+    setEmbedCreds(prev => prev.map(c => c.id === id ? { ...c, is_active: !current } : c));
   };
 
   const saveCredentials = async () => {
@@ -357,10 +457,12 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' }) => {
     }
   };
 
-  const currentPageSlug = tab === 'email' ? 'settings-email' : 'settings-apps';
-  const pageTitle = tab === 'email' ? 'Correo Electrónico' : 'Aplicaciones';
+  const currentPageSlug = tab === 'email' ? 'settings-email' : tab === 'embed' ? 'settings-embed' : 'settings-apps';
+  const pageTitle = tab === 'email' ? 'Correo Electrónico' : tab === 'embed' ? 'Acceso al Embed' : 'Aplicaciones';
   const pageDesc = tab === 'email'
     ? 'Configura el proveedor de email para cada aplicación'
+    : tab === 'embed'
+    ? 'Genera credenciales para proteger el acceso al Marketplace embebido'
     : 'Gestiona tus aplicaciones y API keys';
 
   if (loading) {
@@ -608,6 +710,111 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' }) => {
           </div>
         )}
 
+        {/* ── Embed credentials tab ──────────────────────────────────── */}
+        {tab === 'embed' && (
+          <div className="space-y-4">
+            {/* Info banner */}
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Lock className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-base sm:text-lg font-semibold text-white">Credenciales del Marketplace embebido</h3>
+              </div>
+              <p className="text-sm text-slate-400 mb-4 leading-relaxed">
+                Generá un usuario y contraseña para cada sistema que necesite acceder al Marketplace.
+                Al abrir el embed, se pedirán estas credenciales antes de mostrar los conectores.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                <div className="flex-1 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
+                  <p className="text-[10px] text-slate-500 mb-0.5">URL del embed</p>
+                  <code className="text-xs text-cyan-400 break-all">{window.location.origin}/embed/marketplace</code>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/embed/marketplace`); toast.success('URL copiada'); }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-medium transition-colors"
+                  >
+                    <Copy className="w-3.5 h-3.5" /> Copiar URL
+                  </button>
+                  <a
+                    href={`${window.location.origin}/embed/marketplace`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-medium transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Abrir
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Credentials list */}
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Key className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-sm font-semibold text-white">Usuarios de acceso</h3>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={loadEmbedCreds} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
+                    <RefreshCw className={`w-4 h-4 ${embedLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                  <button
+                    onClick={() => { setShowEmbedModal(true); setNewEmbed({ username: '', password: '', label: '' }); setGeneratedPass(''); setNewEmbedError(''); }}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg text-xs font-semibold transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Nueva credencial
+                  </button>
+                </div>
+              </div>
+
+              {embedLoading ? (
+                <div className="text-center py-6 text-slate-500 text-sm">Cargando...</div>
+              ) : embedCreds.length === 0 ? (
+                <div className="text-center py-8">
+                  <Lock className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+                  <p className="text-slate-400 text-sm mb-1">Sin credenciales aún</p>
+                  <p className="text-slate-600 text-xs">Creá una para proteger el acceso al embed</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {embedCreds.map(cred => (
+                    <div key={cred.id} className="flex items-center gap-3 bg-slate-900/50 rounded-xl border border-slate-700/50 px-4 py-3">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${cred.is_active ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-white truncate">{cred.username}</span>
+                          {cred.label && cred.label !== cred.username && (
+                            <span className="text-xs text-slate-500 truncate">({cred.label})</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          {cred.last_used_at ? (
+                            <span className="text-[10px] text-slate-600">Último uso: {new Date(cred.last_used_at).toLocaleDateString('es')}</span>
+                          ) : (
+                            <span className="text-[10px] text-slate-700">Sin uso registrado</span>
+                          )}
+                          <span className="text-[10px] text-slate-700">Creado: {new Date(cred.created_at).toLocaleDateString('es')}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => toggleEmbedCred(cred.id, cred.is_active)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors ${cred.is_active ? 'bg-emerald-500/10 text-emerald-400 hover:bg-red-500/10 hover:text-red-400' : 'bg-slate-700 text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400'}`}
+                        >
+                          {cred.is_active ? 'Activo' : 'Inactivo'}
+                        </button>
+                        <button onClick={() => deleteEmbedCred(cred.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-slate-600 hover:text-red-400 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Subscription return URL — visible to admins on email tab */}
         {tab === 'email' && isAdmin && (
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
@@ -639,6 +846,95 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' }) => {
           </div>
         )}
       </div>
+
+      {showEmbedModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-slate-700">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-cyan-400" />
+                <h2 className="text-base font-bold text-white">Nueva credencial de embed</h2>
+              </div>
+              <button onClick={() => setShowEmbedModal(false)} className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
+                <span className="text-lg leading-none">×</span>
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Etiqueta (para identificarla)</label>
+                <input
+                  type="text"
+                  value={newEmbed.label}
+                  onChange={e => setNewEmbed(d => ({ ...d, label: e.target.value }))}
+                  placeholder="Ej: CRM Principal, Sistema de Ventas"
+                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-colors"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Nombre de usuario</label>
+                <input
+                  type="text"
+                  value={newEmbed.username}
+                  onChange={e => { setNewEmbed(d => ({ ...d, username: e.target.value })); setNewEmbedError(''); }}
+                  placeholder="crm_principal"
+                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-colors"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Contraseña</label>
+                  <button onClick={generatePassword} className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1">
+                    <RefreshCw className="w-3 h-3" /> Generar automática
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showEmbedPass ? 'text' : 'password'}
+                    value={newEmbed.password}
+                    onChange={e => { setNewEmbed(d => ({ ...d, password: e.target.value })); setGeneratedPass(''); }}
+                    placeholder="••••••••"
+                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 pr-10 focus:outline-none focus:border-cyan-500 transition-colors font-mono"
+                  />
+                  <button type="button" onClick={() => setShowEmbedPass(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                    {showEmbedPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {generatedPass && (
+                  <div className="flex items-center justify-between bg-slate-900/60 border border-cyan-500/20 rounded-lg px-3 py-2">
+                    <code className="text-xs text-cyan-400 font-mono">{generatedPass}</code>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(generatedPass); toast.success('Contraseña copiada'); }}
+                      className="text-slate-500 hover:text-slate-300 transition-colors ml-2"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-600">Guardá la contraseña ahora — no se puede recuperar después.</p>
+              </div>
+
+              {newEmbedError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                  <p className="text-xs text-red-400">{newEmbedError}</p>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setShowEmbedModal(false)} className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors">
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveEmbedCred}
+                  disabled={newEmbedSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-bold transition-colors"
+                >
+                  {newEmbedSaving ? 'Guardando...' : 'Crear credencial'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showNewAppModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
