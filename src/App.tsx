@@ -181,7 +181,23 @@ const AppRoutes = () => {
         path="/settings"
         element={
           <ProtectedRoute requiredMenu="settings">
-            <Settings />
+            <Settings tab="apps" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/apps"
+        element={
+          <ProtectedRoute requiredMenu="settings">
+            <Settings tab="apps" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/email"
+        element={
+          <ProtectedRoute requiredMenu="settings">
+            <Settings tab="email" />
           </ProtectedRoute>
         }
       />

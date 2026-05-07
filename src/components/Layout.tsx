@@ -1,6 +1,10 @@
 import { ReactNode, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, Settings, BarChart3, Book, Menu, X, Zap, AlertTriangle, Loader2, Check, Minus } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
+  AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
+  Mail, Briefcase, AppWindow,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
 import { UserMenu } from './UserMenu';
@@ -12,7 +16,7 @@ interface LayoutProps {
   currentPage: string;
 }
 
-/* ── Trial-expired blocker ─────────────────────────────────────── */
+/* ── Plan styles ─────────────────────────────────────────────────── */
 
 const PLAN_STYLE: Record<number, { accent: string; border: string; bg: string; btn: string; badge: string | null }> = {
   0: { accent: 'text-slate-300',   border: 'border-white/10',      bg: 'bg-white/[0.03]',                                 btn: 'bg-slate-600 hover:bg-slate-500 text-white',                              badge: null },
@@ -46,10 +50,7 @@ const FEATURE_ORDER = [
 ];
 
 function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
-  // Use init_point as-is — back_url is already correctly set by the subscription service
-  if (plan.mercadopago?.init_point) {
-    return plan.mercadopago.init_point;
-  }
+  if (plan.mercadopago?.init_point) return plan.mercadopago.init_point;
   const base = configManager.authUrl;
   const appId = configManager.authAppId;
   const apiKey = configManager.authApiKey;
@@ -57,24 +58,122 @@ function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
   return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${plan.id}`;
 }
 
-const TrialExpiredBlocker = () => {
+/* ── Plan card list (shared by blockers) ────────────────────────── */
+
+const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) => {
   const { plans, loading } = usePlans();
+  const paidPlans = plans.filter(p => p.price > 0 || p.trial_days === 0);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
+        {paidPlans.map((plan, i) => {
+          const styleIdx = Math.min(i + 1, 3);
+          const style = PLAN_STYLE[styleIdx];
+          const sortedFeatures = [...(plan.entitlements?.features ?? [])].sort((a, b) => {
+            const ia = FEATURE_ORDER.indexOf(a.code);
+            const ib = FEATURE_ORDER.indexOf(b.code);
+            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+          });
+
+          const planMaxUsers = plan.entitlements?.features?.find(f => f.code === 'max_users');
+          const planUserLimit = planMaxUsers ? parseInt(planMaxUsers.value, 10) : null;
+          const coversNeeds = highlightUsersAbove === undefined || planUserLimit === null || planUserLimit > highlightUsersAbove;
+
+          return (
+            <div
+              key={plan.id}
+              className={`relative rounded-2xl border ${style.border} ${style.bg} flex flex-col overflow-hidden transition-transform hover:-translate-y-1 duration-200 ${
+                highlightUsersAbove !== undefined && !coversNeeds ? 'opacity-60' : ''
+              } ${highlightUsersAbove !== undefined && coversNeeds ? 'ring-1 ring-cyan-500/30' : ''}`}
+            >
+              {style.badge && (
+                <div className="absolute top-0 left-0 right-0 flex justify-center">
+                  <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${styleIdx === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                    {style.badge}
+                  </span>
+                </div>
+              )}
+              <div className={`p-5 flex flex-col flex-1 ${style.badge ? 'pt-9' : ''}`}>
+                <div className="mb-4">
+                  <h3 className={`text-lg font-extrabold mb-0.5 ${style.accent}`}>{plan.name}</h3>
+                  <p className="text-slate-500 text-xs">{plan.description}</p>
+                </div>
+                <div className="mb-4 flex items-baseline gap-1">
+                  <span className="text-2xl font-extrabold text-white">
+                    {plan.currency} {plan.price.toLocaleString('es-UY')}
+                  </span>
+                  <span className="text-slate-400 text-sm">/mes</span>
+                </div>
+                <div className="h-px bg-white/6 mb-4" />
+                <ul className="space-y-2.5 flex-1 mb-5">
+                  {sortedFeatures.map((f) => {
+                    const label = FEATURE_LABEL[f.code] ?? f.name;
+                    const isBool = f.value_type === 'boolean';
+                    const boolOn = isBool && (f.value === 'true' || f.value === '1');
+                    const numVal = !isBool ? parseInt(f.value, 10) : null;
+                    return (
+                      <li key={f.code} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-slate-400 text-xs">{label}</span>
+                        {isBool ? (
+                          boolOn ? (
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+                              <Check className="w-3 h-3 text-emerald-400" />
+                            </span>
+                          ) : (
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/5 border border-white/8 flex items-center justify-center">
+                              <Minus className="w-3 h-3 text-slate-600" />
+                            </span>
+                          )
+                        ) : (
+                          <span className={`flex-shrink-0 font-bold text-xs ${style.accent}`}>
+                            {numVal !== null ? numVal.toLocaleString('es-UY') : f.value}
+                            {f.unit ? ` ${f.unit}` : ''}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <button
+                  onClick={() => { window.location.href = buildSubscribeUrl(plan); }}
+                  className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btn}`}
+                >
+                  {highlightUsersAbove !== undefined ? `Actualizar a ${plan.name}` : 'Suscribirse'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-center text-slate-600 text-xs">
+        Precios en pesos uruguayos (UYU) · Límites compartidos por tenant
+      </p>
+    </>
+  );
+};
+
+/* ── Trial-expired blocker ─────────────────────────────────────────── */
+
+const TrialExpiredBlocker = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
 
-  // Filter out trial plan — only show paid plans
-  const paidPlans = plans.filter(p => p.price > 0 || p.trial_days === 0);
-
   return (
     <div className="fixed inset-0 z-[999] bg-[#050d1a]/98 backdrop-blur-sm flex flex-col items-center justify-center px-4 py-8 overflow-y-auto">
-      {/* Ambient glows */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute top-0 left-1/4 w-[600px] h-[400px] bg-red-500 rounded-full blur-[160px] opacity-[0.06]" />
         <div className="absolute bottom-0 right-1/4 w-[500px] h-[300px] bg-cyan-500 rounded-full blur-[140px] opacity-[0.06]" />
       </div>
-
       <div className="relative z-10 w-full max-w-5xl mx-auto">
-        {/* Alert header */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-500/15 border border-red-500/30 mb-5">
             <AlertTriangle className="w-8 h-8 text-red-400" />
@@ -89,103 +188,7 @@ const TrialExpiredBlocker = () => {
             }
           </p>
         </div>
-
-        {/* Plans grid */}
-        {isAdmin && (
-          <>
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
-                {paidPlans.map((plan, i) => {
-                  // Map index to style (skip Trial style at index 0)
-                  const styleIdx = Math.min(i + 1, 3);
-                  const style = PLAN_STYLE[styleIdx];
-                  const sortedFeatures = [...(plan.entitlements?.features ?? [])].sort((a, b) => {
-                    const ia = FEATURE_ORDER.indexOf(a.code);
-                    const ib = FEATURE_ORDER.indexOf(b.code);
-                    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-                  });
-
-                  return (
-                    <div
-                      key={plan.id}
-                      className={`relative rounded-2xl border ${style.border} ${style.bg} flex flex-col overflow-hidden transition-transform hover:-translate-y-1 duration-200`}
-                    >
-                      {style.badge && (
-                        <div className="absolute top-0 left-0 right-0 flex justify-center">
-                          <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${styleIdx === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
-                            {style.badge}
-                          </span>
-                        </div>
-                      )}
-
-                      <div className={`p-5 flex flex-col flex-1 ${style.badge ? 'pt-9' : ''}`}>
-                        <div className="mb-4">
-                          <h3 className={`text-lg font-extrabold mb-0.5 ${style.accent}`}>{plan.name}</h3>
-                          <p className="text-slate-500 text-xs">{plan.description}</p>
-                        </div>
-
-                        <div className="mb-4 flex items-baseline gap-1">
-                          <span className="text-2xl font-extrabold text-white">
-                            {plan.currency} {plan.price.toLocaleString('es-UY')}
-                          </span>
-                          <span className="text-slate-400 text-sm">/mes</span>
-                        </div>
-
-                        <div className="h-px bg-white/6 mb-4" />
-
-                        <ul className="space-y-2.5 flex-1 mb-5">
-                          {sortedFeatures.map((f) => {
-                            const label = FEATURE_LABEL[f.code] ?? f.name;
-                            const isBool = f.value_type === 'boolean';
-                            const boolOn = isBool && (f.value === 'true' || f.value === '1');
-                            const numVal = !isBool ? parseInt(f.value, 10) : null;
-                            return (
-                              <li key={f.code} className="flex items-center justify-between gap-2 text-sm">
-                                <span className="text-slate-400 text-xs">{label}</span>
-                                {isBool ? (
-                                  boolOn ? (
-                                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
-                                      <Check className="w-3 h-3 text-emerald-400" />
-                                    </span>
-                                  ) : (
-                                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/5 border border-white/8 flex items-center justify-center">
-                                      <Minus className="w-3 h-3 text-slate-600" />
-                                    </span>
-                                  )
-                                ) : (
-                                  <span className={`flex-shrink-0 font-bold text-xs ${style.accent}`}>
-                                    {numVal !== null ? numVal.toLocaleString('es-UY') : f.value}
-                                    {f.unit ? ` ${f.unit}` : ''}
-                                  </span>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-
-                        <button
-                          onClick={() => { window.location.href = buildSubscribeUrl(plan); }}
-                          className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btn}`}
-                        >
-                          Suscribirse
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <p className="text-center text-slate-600 text-xs">
-              Precios en pesos uruguayos (UYU) · Límites compartidos por tenant
-            </p>
-          </>
-        )}
-
-        {!isAdmin && (
+        {isAdmin ? <PlanCards /> : (
           <div className="text-center mt-4 p-4 bg-slate-800/60 border border-slate-700 rounded-xl max-w-sm mx-auto">
             <p className="text-slate-400 text-sm">
               Por favor comunícate con el administrador de tu cuenta para renovar la suscripción.
@@ -200,11 +203,8 @@ const TrialExpiredBlocker = () => {
 /* ── User limit blocker ─────────────────────────────────────────── */
 
 const UserLimitBlocker = ({ activeUsersCount, maxUsers }: { activeUsersCount: number; maxUsers: number }) => {
-  const { plans, loading } = usePlans();
   const { user } = useAuth();
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
-
-  const paidPlans = plans.filter(p => p.price > 0 || p.trial_days === 0);
 
   return (
     <div className="fixed inset-0 z-[999] bg-[#050d1a]/98 backdrop-blur-sm flex flex-col items-center justify-center px-4 py-8 overflow-y-auto">
@@ -212,7 +212,6 @@ const UserLimitBlocker = ({ activeUsersCount, maxUsers }: { activeUsersCount: nu
         <div className="absolute top-0 left-1/4 w-[600px] h-[400px] bg-amber-500 rounded-full blur-[160px] opacity-[0.06]" />
         <div className="absolute bottom-0 right-1/4 w-[500px] h-[300px] bg-cyan-500 rounded-full blur-[140px] opacity-[0.06]" />
       </div>
-
       <div className="relative z-10 w-full max-w-5xl mx-auto">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 mb-5">
@@ -224,13 +223,8 @@ const UserLimitBlocker = ({ activeUsersCount, maxUsers }: { activeUsersCount: nu
           <p className="text-slate-400 text-base max-w-lg mx-auto leading-relaxed">
             Tu plan permite hasta <span className="text-white font-bold">{maxUsers} {maxUsers === 1 ? 'usuario' : 'usuarios'}</span>,
             pero tu cuenta tiene <span className="text-amber-400 font-bold">{activeUsersCount} usuarios activos</span>.
-            {isAdmin
-              ? ' Actualiza tu plan para restablecer el acceso.'
-              : ' Contacta a tu administrador para actualizar el plan.'
-            }
+            {isAdmin ? ' Actualiza tu plan para restablecer el acceso.' : ' Contacta a tu administrador para actualizar el plan.'}
           </p>
-
-          {/* Counter visual */}
           <div className="inline-flex items-center gap-4 mt-6 bg-slate-800/60 border border-slate-700/60 rounded-2xl px-6 py-4">
             <div className="text-center">
               <p className="text-2xl font-extrabold text-amber-400">{activeUsersCount}</p>
@@ -243,106 +237,7 @@ const UserLimitBlocker = ({ activeUsersCount, maxUsers }: { activeUsersCount: nu
             </div>
           </div>
         </div>
-
-        {isAdmin && (
-          <>
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
-                {paidPlans.map((plan, i) => {
-                  const styleIdx = Math.min(i + 1, 3);
-                  const style = PLAN_STYLE[styleIdx];
-                  const sortedFeatures = [...(plan.entitlements?.features ?? [])].sort((a, b) => {
-                    const ia = FEATURE_ORDER.indexOf(a.code);
-                    const ib = FEATURE_ORDER.indexOf(b.code);
-                    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-                  });
-
-                  // Highlight plans that support more users than current active count
-                  const planMaxUsers = plan.entitlements?.features?.find(f => f.code === 'max_users');
-                  const planUserLimit = planMaxUsers ? parseInt(planMaxUsers.value, 10) : null;
-                  const coversNeeds = planUserLimit === null || planUserLimit > activeUsersCount;
-
-                  return (
-                    <div
-                      key={plan.id}
-                      className={`relative rounded-2xl border ${style.border} ${style.bg} flex flex-col overflow-hidden transition-transform hover:-translate-y-1 duration-200 ${coversNeeds ? 'ring-1 ring-cyan-500/30' : 'opacity-60'}`}
-                    >
-                      {style.badge && (
-                        <div className="absolute top-0 left-0 right-0 flex justify-center">
-                          <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${styleIdx === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
-                            {style.badge}
-                          </span>
-                        </div>
-                      )}
-
-                      <div className={`p-5 flex flex-col flex-1 ${style.badge ? 'pt-9' : ''}`}>
-                        <div className="mb-4">
-                          <h3 className={`text-lg font-extrabold mb-0.5 ${style.accent}`}>{plan.name}</h3>
-                          <p className="text-slate-500 text-xs">{plan.description}</p>
-                        </div>
-
-                        <div className="mb-4 flex items-baseline gap-1">
-                          <span className="text-2xl font-extrabold text-white">
-                            {plan.currency} {plan.price.toLocaleString('es-UY')}
-                          </span>
-                          <span className="text-slate-400 text-sm">/mes</span>
-                        </div>
-
-                        <div className="h-px bg-white/6 mb-4" />
-
-                        <ul className="space-y-2.5 flex-1 mb-5">
-                          {sortedFeatures.map((f) => {
-                            const label = FEATURE_LABEL[f.code] ?? f.name;
-                            const isBool = f.value_type === 'boolean';
-                            const boolOn = isBool && (f.value === 'true' || f.value === '1');
-                            const numVal = !isBool ? parseInt(f.value, 10) : null;
-                            return (
-                              <li key={f.code} className="flex items-center justify-between gap-2 text-sm">
-                                <span className="text-slate-400 text-xs">{label}</span>
-                                {isBool ? (
-                                  boolOn ? (
-                                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
-                                      <Check className="w-3 h-3 text-emerald-400" />
-                                    </span>
-                                  ) : (
-                                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/5 border border-white/8 flex items-center justify-center">
-                                      <Minus className="w-3 h-3 text-slate-600" />
-                                    </span>
-                                  )
-                                ) : (
-                                  <span className={`flex-shrink-0 font-bold text-xs ${style.accent}`}>
-                                    {numVal !== null ? numVal.toLocaleString('es-UY') : f.value}
-                                    {f.unit ? ` ${f.unit}` : ''}
-                                  </span>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-
-                        <button
-                          onClick={() => { window.location.href = buildSubscribeUrl(plan); }}
-                          className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btn}`}
-                        >
-                          Actualizar a {plan.name}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <p className="text-center text-slate-600 text-xs">
-              Precios en pesos uruguayos (UYU) · Límites compartidos por tenant
-            </p>
-          </>
-        )}
-
-        {!isAdmin && (
+        {isAdmin ? <PlanCards highlightUsersAbove={activeUsersCount} /> : (
           <div className="text-center mt-4 p-4 bg-slate-800/60 border border-slate-700 rounded-xl max-w-sm mx-auto">
             <p className="text-slate-400 text-sm">
               Por favor comunícate con el administrador de tu cuenta para actualizar el plan de suscripción.
@@ -354,105 +249,253 @@ const UserLimitBlocker = ({ activeUsersCount, maxUsers }: { activeUsersCount: nu
   );
 };
 
+/* ── Nav item types ─────────────────────────────────────────────── */
+
+interface SubItem {
+  name: string;
+  icon: any;
+  route: string;
+  page: string;
+}
+
+interface NavItem {
+  name: string;
+  icon: any;
+  page: string;
+  route: string;
+  permissionKey: string;
+  children?: SubItem[];
+}
+
+/* ── Sidebar nav item ───────────────────────────────────────────── */
+
+const NavItemRow = ({
+  item,
+  currentPage,
+  onClose,
+}: {
+  item: NavItem;
+  currentPage: string;
+  onClose: () => void;
+}) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isActive = location.pathname === `/${item.route}` || currentPage === item.page;
+  const isChildActive = item.children?.some(
+    c => location.pathname === `/${c.route}` || currentPage === c.page
+  );
+
+  const [open, setOpen] = useState(isActive || !!isChildActive);
+  const Icon = item.icon;
+
+  if (!item.children) {
+    return (
+      <Link
+        to={`/${item.route}`}
+        onClick={onClose}
+        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group ${
+          isActive
+            ? 'bg-cyan-500/10 text-cyan-400'
+            : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+        }`}
+      >
+        <Icon className="w-4 h-4 flex-shrink-0" />
+        <span className="text-sm font-medium">{item.name}</span>
+      </Link>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        onClick={() => {
+          setOpen(o => !o);
+          if (!open && item.children && item.children.length > 0) {
+            navigate(`/${item.children[0].route}`);
+            onClose();
+          }
+        }}
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
+          isActive || isChildActive
+            ? 'bg-cyan-500/10 text-cyan-400'
+            : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+        }`}
+      >
+        <Icon className="w-4 h-4 flex-shrink-0" />
+        <span className="text-sm font-medium flex-1 text-left">{item.name}</span>
+        {open
+          ? <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+          : <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+        }
+      </button>
+
+      {open && (
+        <div className="mt-0.5 ml-3 pl-4 border-l border-slate-700/60 space-y-0.5">
+          {item.children.map(child => {
+            const CIcon = child.icon;
+            const childActive = location.pathname === `/${child.route}` || currentPage === child.page;
+            return (
+              <Link
+                key={child.route}
+                to={`/${child.route}`}
+                onClick={onClose}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 ${
+                  childActive
+                    ? 'bg-cyan-500/10 text-cyan-400'
+                    : 'text-slate-500 hover:bg-slate-800/60 hover:text-white'
+                }`}
+              >
+                <CIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="text-xs font-medium">{child.name}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ── Main Layout ────────────────────────────────────────────────── */
 
 export const Layout = ({ children, currentPage }: LayoutProps) => {
   const { hasMenuAccess, subscription, user } = useAuth();
-  const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const navigation = [
-    { name: 'Dashboard',     icon: LayoutDashboard, page: 'dashboard',    route: 'dashboard',    permissionKey: 'dashboard' },
-    { name: 'Templates',     icon: FileText,        page: 'templates',    route: 'templates',    permissionKey: 'templates' },
-    { name: 'Estadísticas',  icon: BarChart3,        page: 'statistics',   route: 'statistics',   permissionKey: 'statistics' },
-    { name: 'Documentación', icon: Book,            page: 'documentation',route: 'documentation',permissionKey: 'documentation' },
-    { name: 'API Explorer',  icon: Zap,             page: 'api-explorer', route: 'api-explorer', permissionKey: 'documentation' },
-    { name: 'Configuración', icon: Settings,        page: 'settings',     route: 'settings',     permissionKey: 'settings' },
+  const closeMobile = () => setIsMobileMenuOpen(false);
+
+  const allNavItems: NavItem[] = [
+    {
+      name: 'Dashboard',
+      icon: LayoutDashboard,
+      page: 'dashboard',
+      route: 'dashboard',
+      permissionKey: 'dashboard',
+    },
+    {
+      name: 'Templates',
+      icon: FileText,
+      page: 'templates',
+      route: 'templates',
+      permissionKey: 'templates',
+    },
+    {
+      name: 'Tareas',
+      icon: Briefcase,
+      page: 'statistics',
+      route: 'statistics',
+      permissionKey: 'statistics',
+      children: [
+        { name: 'Jobs — Email', icon: Mail, route: 'statistics', page: 'statistics' },
+      ],
+    },
+    {
+      name: 'Documentación',
+      icon: Book,
+      page: 'documentation',
+      route: 'documentation',
+      permissionKey: 'documentation',
+    },
+    {
+      name: 'API Explorer',
+      icon: Zap,
+      page: 'api-explorer',
+      route: 'api-explorer',
+      permissionKey: 'documentation',
+    },
+    {
+      name: 'Configuración',
+      icon: Settings,
+      page: 'settings',
+      route: 'settings',
+      permissionKey: 'settings',
+      children: [
+        { name: 'Aplicaciones', icon: AppWindow, route: 'settings/apps', page: 'settings-apps' },
+        { name: 'Correo Electrónico', icon: Mail, route: 'settings/email', page: 'settings-email' },
+      ],
+    },
   ].filter(item => hasMenuAccess(item.permissionKey));
 
-  // Determine if trial is expired and no active subscription exists
   const isTrialing = subscription?.status === 'trialing';
   const trialEndDate = subscription?.trial_end ? new Date(subscription.trial_end) : null;
   const trialExpiredBlocked = isTrialing && trialEndDate !== null && trialEndDate < new Date();
 
-  // Check user limit against plan's max_users feature
   const maxUsersFeature = subscription?.entitlements?.features?.find(f => f.code === 'max_users');
   const maxUsers = maxUsersFeature ? parseInt(maxUsersFeature.value, 10) : null;
   const activeUsersCount = user?.active_users_count ?? 0;
   const userLimitExceeded = maxUsers !== null && activeUsersCount > maxUsers;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <nav className="sticky top-0 z-40 border-b border-slate-700 bg-slate-900/50 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden p-2 rounded-lg hover:bg-slate-800/50 transition-colors"
-                aria-label="Toggle menu"
-              >
-                {isMobileMenuOpen ? (
-                  <X className="w-6 h-6 text-slate-400" />
-                ) : (
-                  <Menu className="w-6 h-6 text-slate-400" />
-                )}
-              </button>
-              <img src="/logo.svg" alt="SendCraft" className="h-8" />
-            </div>
-            <UserMenu />
-          </div>
+    <div className="min-h-screen bg-[#0a1628]">
+      {/* Top header — only for mobile hamburger + user menu */}
+      <header className="sticky top-0 z-40 lg:hidden border-b border-slate-700/60 bg-slate-900/80 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-4 h-14">
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 rounded-lg hover:bg-slate-800/50 transition-colors"
+            aria-label="Toggle menu"
+          >
+            {isMobileMenuOpen
+              ? <X className="w-5 h-5 text-slate-400" />
+              : <Menu className="w-5 h-5 text-slate-400" />
+            }
+          </button>
+          <img src="/logo.svg" alt="SendCraft" className="h-7" />
+          <UserMenu />
         </div>
-      </nav>
+      </header>
 
       <TrialBanner />
-
-      {/* Full-page blocker when trial has expired */}
       {trialExpiredBlocked && <TrialExpiredBlocker />}
-
-      {/* Full-page blocker when active users exceed plan limit */}
       {!trialExpiredBlocked && userLimitExceeded && maxUsers !== null && (
         <UserLimitBlocker activeUsersCount={activeUsersCount} maxUsers={maxUsers} />
       )}
 
-      <div className="flex relative">
+      <div className="flex">
+        {/* Mobile overlay */}
         {isMobileMenuOpen && (
           <div
-            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
-            onClick={() => setIsMobileMenuOpen(false)}
+            className="fixed inset-0 bg-black/60 z-30 lg:hidden"
+            onClick={closeMobile}
           />
         )}
 
+        {/* Sidebar */}
         <aside className={`
-          fixed lg:static inset-y-0 left-0 z-40
-          w-64 min-h-[calc(100vh-4rem)] border-r border-slate-700 bg-slate-900/95 backdrop-blur-sm
+          fixed lg:sticky lg:top-0
+          inset-y-0 left-0 z-40
+          w-60 min-h-screen
+          bg-[#07111f] border-r border-slate-700/50
+          flex flex-col
           transform transition-transform duration-300 ease-in-out lg:transform-none
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}>
-          <nav className="p-4 space-y-2 mt-16 lg:mt-0">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === `/${item.route}` || currentPage === item.page;
-              return (
-                <Link
-                  key={item.name}
-                  to={`/${item.route}`}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-cyan-500/10 text-cyan-400'
-                      : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.name}</span>
-                </Link>
-              );
-            })}
+          {/* Logo section */}
+          <div className="flex flex-col items-center py-6 px-4 border-b border-slate-700/40">
+            <img src="/logo.svg" alt="SendCraft" className="h-9 mb-1" />
+          </div>
+
+          {/* Nav items */}
+          <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+            {allNavItems.map(item => (
+              <NavItemRow
+                key={item.route + item.name}
+                item={item}
+                currentPage={currentPage}
+                onClose={closeMobile}
+              />
+            ))}
           </nav>
+
+          {/* Bottom user menu — desktop only */}
+          <div className="hidden lg:flex items-center border-t border-slate-700/40 px-3 py-3">
+            <UserMenu />
+          </div>
         </aside>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full lg:w-auto">
+        {/* Main content */}
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 lg:min-h-screen">
           <div className="max-w-7xl mx-auto">{children}</div>
         </main>
       </div>

@@ -7,7 +7,7 @@ import { verifyApplicationOwnership } from '../lib/security';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
-import { Plus, CreditCard as Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { Plus, CreditCard as Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X, Download, Upload } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -335,6 +335,73 @@ export const Templates = () => {
     return html;
   };
 
+  const exportTemplate = (template: Template) => {
+    const exportData = {
+      sendcraft_template_version: '1.0',
+      exported_at: new Date().toISOString(),
+      template: {
+        name: template.name,
+        description: template.description,
+        channel: template.channel,
+        subject: template.subject,
+        html_content: template.html_content,
+        variables: template.variables,
+        has_attachment: template.has_attachment,
+        attachment_variable: template.attachment_variable,
+        has_logo: template.has_logo,
+        logo_variable: template.logo_variable,
+        has_qr: template.has_qr,
+        qr_variable: template.qr_variable,
+        template_type: template.template_type,
+        pdf_filename_pattern: template.pdf_filename_pattern,
+      },
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `template-${template.name.toLowerCase().replace(/\s+/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Template "${template.name}" exportado`);
+  };
+
+  const importTemplate = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const json = JSON.parse(ev.target?.result as string);
+        const tpl = json.template ?? json;
+        setEditingTemplate(null);
+        setFormData({
+          name: tpl.name || '',
+          description: tpl.description || '',
+          channel: tpl.channel || 'email',
+          subject: tpl.subject || '',
+          html_content: tpl.html_content || '',
+          variables: tpl.variables || [],
+          has_attachment: tpl.has_attachment || false,
+          attachment_variable: tpl.attachment_variable || '',
+          has_logo: tpl.has_logo || false,
+          logo_variable: tpl.logo_variable || '',
+          has_qr: tpl.has_qr || false,
+          qr_variable: tpl.qr_variable || '',
+          template_type: tpl.template_type || 'email',
+          pdf_template_id: null,
+          pdf_filename_pattern: tpl.pdf_filename_pattern || '',
+        });
+        setShowEditor(true);
+        toast.success('Template importado — revisá los datos y guardá');
+      } catch {
+        toast.error('El archivo no es un template válido de SendCraft');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   if (loading) {
     return (
       <Layout currentPage="templates">
@@ -350,31 +417,48 @@ export const Templates = () => {
       <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Templates</h1>
-          {selectedApp && canCreate && (() => {
-            const tplLimit = checkTemplateLimit();
-            return tplLimit.limitReached ? (
-              <div className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-slate-400 rounded-lg text-sm cursor-not-allowed" title={`Límite de templates alcanzado (${tplLimit.currentCount}/${tplLimit.maxLimit})`}>
-                <Plus className="w-5 h-5" />
-                <span>Nuevo Template</span>
-                <span className="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
-                  {tplLimit.currentCount}/{tplLimit.maxLimit}
-                </span>
-              </div>
-            ) : (
-              <button
-                onClick={() => openEditor()}
-                className="flex items-center justify-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Nuevo Template</span>
-                {tplLimit.maxLimit !== Infinity && (
-                  <span className="text-xs bg-white/10 px-1.5 py-0.5 rounded-full">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Import button */}
+            {selectedApp && canCreate && (
+              <label className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white rounded-lg text-sm cursor-pointer transition-colors">
+                <Upload className="w-4 h-4" />
+                <span>Importar</span>
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={importTemplate}
+                />
+              </label>
+            )}
+
+            {/* New template button */}
+            {selectedApp && canCreate && (() => {
+              const tplLimit = checkTemplateLimit();
+              return tplLimit.limitReached ? (
+                <div className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-slate-400 rounded-lg text-sm cursor-not-allowed" title={`Límite de templates alcanzado (${tplLimit.currentCount}/${tplLimit.maxLimit})`}>
+                  <Plus className="w-5 h-5" />
+                  <span>Nuevo Template</span>
+                  <span className="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
                     {tplLimit.currentCount}/{tplLimit.maxLimit}
                   </span>
-                )}
-              </button>
-            );
-          })()}
+                </div>
+              ) : (
+                <button
+                  onClick={() => openEditor()}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>Nuevo Template</span>
+                  {tplLimit.maxLimit !== Infinity && (
+                    <span className="text-xs bg-white/10 px-1.5 py-0.5 rounded-full">
+                      {tplLimit.currentCount}/{tplLimit.maxLimit}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
+          </div>
         </div>
 
         {applications.length === 0 ? (
@@ -520,6 +604,13 @@ export const Templates = () => {
                               title="Vista previa"
                             >
                               <Eye className="w-5 h-5" />
+                            </button>
+                            <button
+                              onClick={() => exportTemplate(template)}
+                              className="p-2 text-slate-400 hover:text-emerald-400 transition-colors"
+                              title="Exportar template"
+                            >
+                              <Download className="w-5 h-5" />
                             </button>
                             {canUpdate && (
                               <button

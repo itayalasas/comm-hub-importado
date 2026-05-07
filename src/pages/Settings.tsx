@@ -26,7 +26,7 @@ interface EmailCredentials {
   is_active: boolean;
 }
 
-export const Settings = () => {
+export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' }) => {
   const { user } = useAuth();
   const toast = useToast();
   const { checkApplicationLimit, refreshCounts, hasFeature } = useSubscriptionLimits();
@@ -357,9 +357,15 @@ export const Settings = () => {
     }
   };
 
+  const currentPageSlug = tab === 'email' ? 'settings-email' : 'settings-apps';
+  const pageTitle = tab === 'email' ? 'Correo Electrónico' : 'Aplicaciones';
+  const pageDesc = tab === 'email'
+    ? 'Configura el proveedor de email para cada aplicación'
+    : 'Gestiona tus aplicaciones y API keys';
+
   if (loading) {
     return (
-      <Layout currentPage="settings">
+      <Layout currentPage={currentPageSlug}>
         <div className="text-center py-12">
           <div className="text-slate-400">Cargando...</div>
         </div>
@@ -368,15 +374,14 @@ export const Settings = () => {
   }
 
   return (
-    <Layout currentPage="settings">
+    <Layout currentPage={currentPageSlug}>
       <div className="space-y-4 sm:space-y-6">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white">Configuración</h1>
-          <p className="text-sm sm:text-base text-slate-400 mt-2">
-            Gestiona tus aplicaciones, API keys y configuración de email
-          </p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">{pageTitle}</h1>
+          <p className="text-sm sm:text-base text-slate-400 mt-2">{pageDesc}</p>
         </div>
 
+        {tab === 'apps' && (
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
             <div className="flex items-center space-x-2">
@@ -465,8 +470,9 @@ export const Settings = () => {
             </div>
           )}
         </div>
+        )}
 
-        {applications.length > 0 && (
+        {tab === 'email' && applications.length > 0 && (
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-2">
@@ -602,8 +608,8 @@ export const Settings = () => {
           </div>
         )}
 
-        {/* Subscription return URL — visible to admins */}
-        {isAdmin && (
+        {/* Subscription return URL — visible to admins on email tab */}
+        {tab === 'email' && isAdmin && (
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-2">
               <Link className="w-5 h-5 text-cyan-400" />
