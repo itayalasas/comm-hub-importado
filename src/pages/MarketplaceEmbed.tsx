@@ -104,6 +104,37 @@ const CONNECTORS: ConnectorDef[] = [
     features: ['URL pública de descarga con expiración configurable', 'CSS completo soportado (fuentes, imágenes, tablas)', 'Deduplicación automática por order_id'],
   },
   {
+    id: 'sendcraft-notify',
+    name: 'SendCraft Notify',
+    description: 'Campañas y notificaciones masivas asíncronas',
+    category: 'automation',
+    icon: 'automation',
+    iconBg: 'bg-rose-500',
+    iconColor: 'text-white',
+    badge: 'Oficial',
+    auth: { header: 'x-api-key', label: 'API Key de tu aplicación en SendCraft', placeholder: 'sk_xxxx...', hint: 'Configuración → Aplicaciones → tu app → API Key' },
+    actions: [
+      {
+        id: 'create_campaign',
+        method: 'POST',
+        endpoint: `${BASE_URL}/notify`,
+        params: [
+          { key: 'type', required: true },
+          { key: 'template_name', required: false },
+          { key: 'recipients', required: true },
+          { key: 'shared_data', required: false },
+        ],
+      },
+      {
+        id: 'get_campaign_status',
+        method: 'GET',
+        endpoint: `${BASE_URL}/notify/:job_id`,
+        params: [{ key: 'job_id', required: true }],
+      },
+    ],
+    features: ['Procesamiento asíncrono — job_id en < 200 ms', 'Tipos: email, email + PDF adjunto, solo PDF', 'Concurrencia configurable hasta 20 en paralelo'],
+  },
+  {
     id: 'sendcraft-webhook',
     name: 'SendCraft Webhooks',
     description: 'Tracking de emails en tiempo real',
