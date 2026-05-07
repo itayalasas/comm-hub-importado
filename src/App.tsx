@@ -13,6 +13,7 @@ import { Terms } from './pages/Terms';
 import { Privacy } from './pages/Privacy';
 import Documentation from './pages/Documentation';
 import ApiExplorer from './pages/ApiExplorer';
+import { Marketplace } from './pages/Marketplace';
 
 
 const AppLoader = () => (
@@ -121,7 +122,7 @@ const DashboardRedirect = () => {
   }
 
   if (isAuth && user) {
-    const menuPriority = ['dashboard', 'templates', 'statistics', 'documentation', 'settings'];
+    const menuPriority = ['dashboard', 'templates', 'statistics', 'documentation', 'marketplace', 'settings'];
 
     for (const menu of menuPriority) {
       if (hasMenuAccess(menu)) {
@@ -206,6 +207,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute requiredMenu="documentation">
             <ApiExplorer />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/marketplace"
+        element={
+          <ProtectedRoute requiredMenu="marketplace">
+            <Marketplace />
           </ProtectedRoute>
         }
       />

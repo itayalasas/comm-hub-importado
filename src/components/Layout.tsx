@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
   AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
-  Mail, Briefcase, AppWindow,
+  Mail, Briefcase, AppWindow, Package,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
@@ -399,6 +399,13 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       page: 'api-explorer',
       route: 'api-explorer',
       permissionKey: 'documentation',
+    },
+    {
+      name: 'Marketplace',
+      icon: Package,
+      page: 'marketplace',
+      route: 'marketplace',
+      permissionKey: 'marketplace',
     },
     {
       name: 'Configuración',

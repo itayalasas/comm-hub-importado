@@ -450,6 +450,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const hasMenuAccess = (menu: string): boolean => {
+    // Marketplace is always accessible to authenticated users
+    if (menu === 'marketplace') return !!user;
+
     const menuAliases: Record<string, string[]> = {
       'dashboard': ['dashboard', 'analytics', 'inicio'],
       'templates': ['templates', 'plantillas'],
