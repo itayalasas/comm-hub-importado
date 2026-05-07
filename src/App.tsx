@@ -14,6 +14,7 @@ import { Privacy } from './pages/Privacy';
 import Documentation from './pages/Documentation';
 import ApiExplorer from './pages/ApiExplorer';
 import { Marketplace } from './pages/Marketplace';
+import { MarketplaceEmbed } from './pages/MarketplaceEmbed';
 
 
 const AppLoader = () => (
@@ -146,6 +147,7 @@ const AppRoutes = () => {
       <Route path="/app" element={<DashboardRedirect />} />
       <Route path="/callback" element={<Callback />} />
       <Route path="/auth-processing" element={<AuthProcessing />} />
+      <Route path="/embed/marketplace" element={<MarketplaceEmbed />} />
       <Route
         path="/dashboard"
         element={

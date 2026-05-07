@@ -583,6 +583,102 @@ const ConnectorCard = ({
   );
 };
 
+/* ── Embed section ─────────────────────────────────────────────────── */
+
+const EMBED_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/embed/marketplace';
+
+const EMBED_CODE = `<!-- SendCraft Marketplace embebido -->
+<iframe
+  src="${EMBED_URL}"
+  id="sendcraft-marketplace"
+  width="100%"
+  height="600"
+  style="border:none; border-radius:12px;"
+></iframe>
+
+<script>
+window.addEventListener('message', function(event) {
+  if (event.data?.type === 'SENDCRAFT_CONNECTOR_INSTALLED') {
+    var data = event.data;
+    console.log('Conector instalado:', data.connector_id);
+    // data.api_key      → API Key del usuario
+    // data.auth_header  → 'x-api-key'
+    // data.manifest     → manifiesto completo con URLs y params
+    // Guardalo en tu DB y usalo para hacer las llamadas
+    saveConnector(data);
+  }
+});
+</script>`;
+
+const EmbedSection = () => {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(EMBED_CODE);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="border border-slate-700 rounded-2xl overflow-hidden">
+      {/* Header */}
+      <div className="bg-slate-800/60 px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-white">Embeber en tu CRM</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Pegá este código en tu sistema. El usuario hace click en Conectar, pega su API Key, y tu CRM recibe todo via <code className="text-slate-400">postMessage</code>.
+          </p>
+        </div>
+        <a
+          href="/embed/marketplace"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex-shrink-0"
+        >
+          <Globe className="w-3.5 h-3.5" />
+          Vista previa
+        </a>
+      </div>
+
+      {/* Code block */}
+      <div className="relative bg-slate-950/50">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800/60">
+          <span className="text-[10px] text-slate-600 font-mono uppercase tracking-wider">HTML</span>
+          <button
+            onClick={copy}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? 'Copiado' : 'Copiar código'}
+          </button>
+        </div>
+        <pre className="px-5 py-4 text-[11px] text-slate-300 overflow-x-auto leading-relaxed">{EMBED_CODE}</pre>
+      </div>
+
+      {/* postMessage payload doc */}
+      <div className="px-5 py-4 bg-slate-800/20 border-t border-slate-700/50">
+        <p className="text-xs font-semibold text-slate-400 mb-3">Payload que recibís en <code className="text-slate-300">event.data</code></p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {[
+            { key: 'type', value: '"SENDCRAFT_CONNECTOR_INSTALLED"', desc: 'Identificador del evento' },
+            { key: 'connector_id', value: '"sendcraft-email"', desc: 'ID del conector instalado' },
+            { key: 'api_key', value: '"sk_abc123..."', desc: 'API Key ingresada por el usuario' },
+            { key: 'auth_header', value: '"x-api-key"', desc: 'Header a usar en las llamadas' },
+            { key: 'manifest', value: '{ base_url, actions, ... }', desc: 'Manifiesto completo del conector' },
+            { key: 'app_name', value: '"Mi App"', desc: 'Nombre de la app en SendCraft' },
+          ].map((item, i) => (
+            <div key={i} className="flex items-start gap-2 text-xs">
+              <code className="text-cyan-400 bg-slate-900/60 px-1.5 py-0.5 rounded text-[10px] flex-shrink-0">{item.key}</code>
+              <div>
+                <span className="text-slate-500">{item.desc}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* ── Main page ─────────────────────────────────────────────────────── */
 
 const REGISTRY_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors';
@@ -696,6 +792,9 @@ export const Marketplace = () => {
             />
           ))}
         </div>
+
+        {/* Embed section */}
+        <EmbedSection />
 
         {/* Footer note */}
         <div className="text-center pt-2">
