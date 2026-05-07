@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Layout } from '../components/Layout';
 import {
   Package, CheckCircle2, Copy, X, ChevronRight,
-  Mail, FileText, Zap, Globe, ShieldCheck,
+  Mail, FileText, Zap, Globe, ShieldCheck, ExternalLink,
 } from 'lucide-react';
 
 /* ── Connector manifest types ──────────────────────────────────────── */
@@ -587,31 +587,130 @@ const ConnectorCard = ({
 
 const EMBED_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/embed/marketplace';
 
-const EMBED_CODE = `<!-- SendCraft Marketplace embebido -->
-<iframe
-  src="${EMBED_URL}"
-  id="sendcraft-marketplace"
-  width="100%"
-  height="600"
-  style="border:none; border-radius:12px;"
-></iframe>
+const EMBED_CODE = `<!-- SendCraft Marketplace — con fallback popup si el iframe es bloqueado -->
+<div id="sendcraft-wrapper"></div>
 
 <script>
-window.addEventListener('message', function(event) {
-  if (event.data?.type === 'SENDCRAFT_CONNECTOR_INSTALLED') {
-    var data = event.data;
-    console.log('Conector instalado:', data.connector_id);
-    // data.api_key      → API Key del usuario
-    // data.auth_header  → 'x-api-key'
-    // data.manifest     → manifiesto completo con URLs y params
-    // Guardalo en tu DB y usalo para hacer las llamadas
-    saveConnector(data);
+(function () {
+  var MARKET_URL = '${EMBED_URL}';
+  var wrapper = document.getElementById('sendcraft-wrapper');
+
+  function onMessage(event) {
+    if (event.data && event.data.type === 'SENDCRAFT_CONNECTOR_INSTALLED') {
+      var data = event.data;
+      console.log('Conector instalado:', data.connector_id);
+      // data.api_key      → API Key del usuario
+      // data.auth_header  → 'x-api-key'
+      // data.manifest     → manifiesto completo con URLs y params
+      // data.app_name     → nombre de la app en SendCraft
+      saveConnector(data);
+    }
   }
-});
+  window.addEventListener('message', onMessage);
+
+  // Intenta iframe; si se bloquea muestra botón popup
+  var iframe = document.createElement('iframe');
+  iframe.src = MARKET_URL;
+  iframe.id = 'sendcraft-marketplace';
+  iframe.width = '100%';
+  iframe.height = '600';
+  iframe.style.cssText = 'border:none;border-radius:12px;display:block;';
+
+  var blocked = false;
+  iframe.addEventListener('error', showFallback);
+
+  // Timeout: si a los 4 s el iframe sigue en blanco, asumimos bloqueo
+  var timer = setTimeout(function () {
+    try {
+      var doc = iframe.contentDocument || iframe.contentWindow.document;
+      if (!doc || doc.URL === 'about:blank') showFallback();
+    } catch (_) { showFallback(); }
+  }, 4000);
+
+  iframe.addEventListener('load', function () {
+    clearTimeout(timer);
+  });
+
+  function showFallback() {
+    if (blocked) return;
+    blocked = true;
+    iframe.remove();
+    var btn = document.createElement('button');
+    btn.textContent = '⚡  Abrir marketplace SendCraft';
+    btn.style.cssText = [
+      'display:flex;align-items:center;justify-content:center;gap:8px;',
+      'width:100%;padding:14px 20px;border:none;border-radius:12px;',
+      'background:#06b6d4;color:#fff;font-size:14px;font-weight:700;',
+      'cursor:pointer;transition:background .2s;'
+    ].join('');
+    btn.onmouseover = function () { btn.style.background = '#22d3ee'; };
+    btn.onmouseout  = function () { btn.style.background = '#06b6d4'; };
+    btn.onclick = openPopup;
+    wrapper.appendChild(btn);
+  }
+
+  function openPopup() {
+    var w = 480, h = 660;
+    var left = Math.round(screen.width  / 2 - w / 2);
+    var top  = Math.round(screen.height / 2 - h / 2);
+    window.open(
+      MARKET_URL,
+      'sendcraft_marketplace',
+      'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
+      ',toolbar=0,menubar=0,scrollbars=1,resizable=1'
+    );
+  }
+
+  wrapper.appendChild(iframe);
+})();
 </script>`;
+
+/* ── EmbedSection live preview ─────────────────────────────────────── */
 
 const EmbedSection = () => {
   const [copied, setCopied] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [iframeBlocked, setIframeBlocked] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // Detect if the iframe is blocked by checking for blank content after load
+    timerRef.current = setTimeout(() => {
+      const iframe = iframeRef.current;
+      if (!iframe) return;
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!doc || doc.URL === 'about:blank') setIframeBlocked(true);
+      } catch (_) {
+        setIframeBlocked(true);
+      }
+    }, 4000);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, []);
+
+  const handleIframeLoad = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc || doc.URL === 'about:blank') setIframeBlocked(true);
+    } catch (_) {
+      setIframeBlocked(true);
+    }
+  };
+
+  const openPopup = () => {
+    const w = 480, h = 660;
+    const left = Math.round(screen.width / 2 - w / 2);
+    const top  = Math.round(screen.height / 2 - h / 2);
+    window.open(
+      EMBED_URL,
+      'sendcraft_marketplace',
+      `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,scrollbars=1,resizable=1`,
+    );
+  };
+
   const copy = () => {
     navigator.clipboard.writeText(EMBED_CODE);
     setCopied(true);
@@ -625,11 +724,11 @@ const EmbedSection = () => {
         <div>
           <h2 className="text-sm font-bold text-white">Embeber en tu CRM</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Pegá este código en tu sistema. El usuario hace click en Conectar, pega su API Key, y tu CRM recibe todo via <code className="text-slate-400">postMessage</code>.
+            Pegá este código en tu sistema. El usuario instala el conector y tu CRM recibe todo via <code className="text-slate-400">postMessage</code> (iframe o popup).
           </p>
         </div>
         <a
-          href="/embed/marketplace"
+          href={EMBED_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white rounded-lg text-xs font-medium transition-colors flex-shrink-0"
@@ -637,6 +736,47 @@ const EmbedSection = () => {
           <Globe className="w-3.5 h-3.5" />
           Vista previa
         </a>
+      </div>
+
+      {/* Live preview */}
+      <div className="bg-slate-900/60 border-b border-slate-700/50 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Vista previa en vivo</span>
+          {iframeBlocked && (
+            <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+              iframe bloqueado — modo popup activo
+            </span>
+          )}
+        </div>
+        {iframeBlocked ? (
+          <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 flex flex-col items-center gap-4">
+            <div className="text-center">
+              <p className="text-sm text-slate-300 font-medium mb-1">El iframe está bloqueado por cabeceras del servidor</p>
+              <p className="text-xs text-slate-500">En producción se muestra este botón; al hacer clic se abre una ventana popup centrada.</p>
+            </div>
+            <button
+              onClick={openPopup}
+              className="flex items-center gap-2 px-5 py-3 bg-cyan-500 hover:bg-cyan-400 text-white text-sm font-bold rounded-xl transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Abrir marketplace SendCraft
+            </button>
+            <p className="text-[10px] text-slate-600">Cuando el usuario instala un conector en la ventana popup, tu página recibe el evento via <code className="text-slate-500">postMessage</code></p>
+          </div>
+        ) : (
+          <div className="rounded-xl overflow-hidden border border-slate-700/50" style={{ height: 420 }}>
+            <iframe
+              ref={iframeRef}
+              src={EMBED_URL}
+              width="100%"
+              height="100%"
+              style={{ border: 'none', display: 'block' }}
+              onLoad={handleIframeLoad}
+              onError={() => setIframeBlocked(true)}
+              title="SendCraft Marketplace"
+            />
+          </div>
+        )}
       </div>
 
       {/* Code block */}
@@ -656,21 +796,19 @@ const EmbedSection = () => {
 
       {/* postMessage payload doc */}
       <div className="px-5 py-4 bg-slate-800/20 border-t border-slate-700/50">
-        <p className="text-xs font-semibold text-slate-400 mb-3">Payload que recibís en <code className="text-slate-300">event.data</code></p>
+        <p className="text-xs font-semibold text-slate-400 mb-3">Payload que recibís en <code className="text-slate-300">event.data</code> (iframe y popup)</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {[
-            { key: 'type', value: '"SENDCRAFT_CONNECTOR_INSTALLED"', desc: 'Identificador del evento' },
-            { key: 'connector_id', value: '"sendcraft-email"', desc: 'ID del conector instalado' },
-            { key: 'api_key', value: '"sk_abc123..."', desc: 'API Key ingresada por el usuario' },
-            { key: 'auth_header', value: '"x-api-key"', desc: 'Header a usar en las llamadas' },
-            { key: 'manifest', value: '{ base_url, actions, ... }', desc: 'Manifiesto completo del conector' },
-            { key: 'app_name', value: '"Mi App"', desc: 'Nombre de la app en SendCraft' },
+            { key: 'type', desc: 'Siempre "SENDCRAFT_CONNECTOR_INSTALLED"' },
+            { key: 'connector_id', desc: 'ID del conector instalado' },
+            { key: 'api_key', desc: 'API Key ingresada por el usuario' },
+            { key: 'auth_header', desc: 'Header a usar en las llamadas (x-api-key)' },
+            { key: 'manifest', desc: 'Manifiesto completo con URLs y params' },
+            { key: 'app_name', desc: 'Nombre de la app en SendCraft' },
           ].map((item, i) => (
             <div key={i} className="flex items-start gap-2 text-xs">
               <code className="text-cyan-400 bg-slate-900/60 px-1.5 py-0.5 rounded text-[10px] flex-shrink-0">{item.key}</code>
-              <div>
-                <span className="text-slate-500">{item.desc}</span>
-              </div>
+              <span className="text-slate-500">{item.desc}</span>
             </div>
           ))}
         </div>

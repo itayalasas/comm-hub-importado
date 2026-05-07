@@ -250,7 +250,7 @@ const ConnectModal = ({ connector, onClose, onSuccess }: { connector: ConnectorD
       registry_url: `${BASE_URL}/connectors/${connector.id}`,
       actions: connector.actions.map(a => ({ id: a.id, method: a.method, endpoint: a.endpoint, params: a.params })),
     };
-    window.parent.postMessage({
+    const payload = {
       type: 'SENDCRAFT_CONNECTOR_INSTALLED',
       connector_id: connector.id,
       connector_name: connector.name,
@@ -259,7 +259,13 @@ const ConnectModal = ({ connector, onClose, onSuccess }: { connector: ConnectorD
       auth_header: connector.auth.header,
       manifest,
       timestamp: new Date().toISOString(),
-    }, '*');
+    };
+    // iframe mode
+    if (window.parent !== window) window.parent.postMessage(payload, '*');
+    // popup mode
+    if (window.opener) {
+      try { (window.opener as Window).postMessage(payload, '*'); } catch (_) {}
+    }
   };
 
   return (
