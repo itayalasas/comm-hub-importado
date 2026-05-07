@@ -425,19 +425,22 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-[#0a1628]">
       {/* Top header — only for mobile hamburger + user menu */}
-      <header className="sticky top-0 z-40 lg:hidden border-b border-slate-700/60 bg-slate-900/80 backdrop-blur-sm">
+      {/* Top header — UserMenu always visible here on all screen sizes */}
+      <header className="sticky top-0 z-40 border-b border-slate-700/60 bg-slate-900/80 backdrop-blur-sm">
         <div className="flex items-center justify-between px-4 h-14">
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 rounded-lg hover:bg-slate-800/50 transition-colors"
-            aria-label="Toggle menu"
-          >
-            {isMobileMenuOpen
-              ? <X className="w-5 h-5 text-slate-400" />
-              : <Menu className="w-5 h-5 text-slate-400" />
-            }
-          </button>
-          <img src="/logo.svg" alt="SendCraft" className="h-7" />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="lg:hidden p-2 rounded-lg hover:bg-slate-800/50 transition-colors"
+              aria-label="Toggle menu"
+            >
+              {isMobileMenuOpen
+                ? <X className="w-5 h-5 text-slate-400" />
+                : <Menu className="w-5 h-5 text-slate-400" />
+              }
+            </button>
+            <img src="/logo.svg" alt="SendCraft" className="h-7 lg:hidden" />
+          </div>
           <UserMenu />
         </div>
       </header>
@@ -484,10 +487,6 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
             ))}
           </nav>
 
-          {/* Bottom user menu — desktop only */}
-          <div className="hidden lg:flex items-center border-t border-slate-700/40 px-3 py-3">
-            <UserMenu />
-          </div>
         </aside>
 
         {/* Main content */}
