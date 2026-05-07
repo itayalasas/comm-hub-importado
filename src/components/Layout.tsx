@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
   AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
@@ -279,7 +279,6 @@ const NavItemRow = ({
   onClose: () => void;
 }) => {
   const location = useLocation();
-  const navigate = useNavigate();
 
   const isActive = location.pathname === `/${item.route}` || currentPage === item.page;
   const isChildActive = item.children?.some(
@@ -309,15 +308,9 @@ const NavItemRow = ({
   return (
     <div>
       <button
-        onClick={() => {
-          setOpen(o => !o);
-          if (!open && item.children && item.children.length > 0) {
-            navigate(`/${item.children[0].route}`);
-            onClose();
-          }
-        }}
+        onClick={() => setOpen(o => !o)}
         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
-          isActive || isChildActive
+          isChildActive
             ? 'bg-cyan-500/10 text-cyan-400'
             : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
         }`}
@@ -379,6 +372,9 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       page: 'templates',
       route: 'templates',
       permissionKey: 'templates',
+      children: [
+        { name: 'Correos', icon: Mail, route: 'templates', page: 'templates' },
+      ],
     },
     {
       name: 'Tareas',
