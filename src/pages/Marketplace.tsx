@@ -919,7 +919,7 @@ const ConnectorCard = ({
 
 /* ── Embed section ─────────────────────────────────────────────────── */
 
-const EMBED_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/embed/marketplace';
+const EMBED_URL = `${window.location.origin}/embed/marketplace`;
 
 const EMBED_CODE = `<!-- SendCraft Marketplace — con fallback popup si el iframe es bloqueado -->
 <div id="sendcraft-wrapper"></div>
