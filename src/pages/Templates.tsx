@@ -123,8 +123,8 @@ export const Templates = () => {
       } else if (data && data.length > 0) {
         setSelectedApp(data[0].id);
       }
-    } catch (error) {
-      console.error('Error loading applications:', error);
+    } catch {
+      // ignore
     } finally {
       setLoading(false);
     }
@@ -136,7 +136,6 @@ export const Templates = () => {
 
       const isOwner = await verifyApplicationOwnership(appId, user.sub, user.tenant_id);
       if (!isOwner) {
-        console.error('Unauthorized access to application');
         return;
       }
 
@@ -170,8 +169,8 @@ export const Templates = () => {
 
       if (error) throw error;
       setTemplates(data || []);
-    } catch (error) {
-      console.error('Error loading templates:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -292,8 +291,8 @@ export const Templates = () => {
 
       setShowEditor(false);
       loadTemplates(selectedApp);
-    } catch (error) {
-      console.error('Error saving template:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -310,8 +309,7 @@ export const Templates = () => {
       if (selectedApp) loadTemplates(selectedApp);
       toast.success('Template eliminado exitosamente');
       setDeleteConfirm(null);
-    } catch (error) {
-      console.error('Error deleting template:', error);
+    } catch {
       toast.error('Error al eliminar el template');
     }
   };

@@ -16,8 +16,6 @@ Deno.serve(async (req: Request) => {
   let supabase: any = null;
 
   try {
-    console.log('[pending-communication] Request received');
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     supabase = createClient(supabaseUrl, supabaseKey);
@@ -29,9 +27,7 @@ Deno.serve(async (req: Request) => {
     try {
       requestBody = await req.text();
       requestData = JSON.parse(requestBody);
-      console.log('[pending-communication] Request parsed successfully');
     } catch (parseError: any) {
-      console.error('[pending-communication] JSON parse error:', parseError);
       return new Response(
         JSON.stringify({ success: false, error: 'Invalid JSON', details: parseError.message }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -89,8 +85,6 @@ Deno.serve(async (req: Request) => {
     const waitForInvoice = requestData.wait_for_invoice;
 
     if (orderId && waitForInvoice) {
-      console.log('[pending-communication] wait_for_invoice=true, creating parent log');
-
       function renderTemplate(template: string, data: Record<string, any>): string {
         let result = template;
         const variableRegex = /\{\{([a-zA-Z0-9_.]+)\}\}/g;
@@ -147,7 +141,6 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (parentLogError || !parentLogData) {
-        console.error('[pending-communication] Failed to create parent log:', parentLogError);
         return new Response(
           JSON.stringify({ success: false, error: 'Failed to create email log', details: parentLogError?.message }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -172,14 +165,11 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (pendingError || !pendingComm) {
-        console.error('[pending-communication] Failed to create pending communication:', pendingError);
         return new Response(
           JSON.stringify({ success: false, error: 'Failed to create pending communication', details: pendingError?.message }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
-      console.log('[pending-communication] Checking for existing PDF for order_id:', orderId);
 
       const { data: pdfLogs } = await supabase
         .from('email_logs')
@@ -190,18 +180,13 @@ Deno.serve(async (req: Request) => {
         .order('created_at', { ascending: false })
         .limit(20);
 
-      console.log('[pending-communication] Found', pdfLogs?.length || 0, 'PDF logs');
-
       let existingPdf = null;
       let pdfEmailLogId = null;
 
       if (pdfLogs && pdfLogs.length > 0) {
         for (const log of pdfLogs) {
           const logOrderId = log.metadata?.order_id;
-          console.log('[pending-communication] Checking log:', log.id, 'order_id:', logOrderId);
-          
           if (logOrderId === orderId) {
-            console.log('[pending-communication] ✅ MATCH! Found PDF for order_id:', orderId);
             pdfEmailLogId = log.id;
 
             const { data: pdfData } = await supabase
@@ -211,7 +196,6 @@ Deno.serve(async (req: Request) => {
               .maybeSingle();
 
             if (pdfData && pdfData.pdf_base64) {
-              console.log('[pending-communication] PDF found, size:', pdfData.size_bytes);
               existingPdf = pdfData;
               break;
             }
@@ -220,7 +204,6 @@ Deno.serve(async (req: Request) => {
       }
 
       if (!existingPdf) {
-        console.log('[pending-communication] ❌ NO PDF found for order_id:', orderId);
         return new Response(
           JSON.stringify({
             success: true,
@@ -232,8 +215,6 @@ Deno.serve(async (req: Request) => {
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
-      console.log('[pending-communication] ✅ PDF exists! Attaching...');
 
       await supabase
         .from('email_logs')
@@ -261,8 +242,6 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', pendingComm.id);
 
-      console.log('[pending-communication] Triggering email send...');
-
       const completeUrl = `${supabaseUrl}/functions/v1/complete-pending-communication`;
       const completeResponse = await fetch(completeUrl, {
         method: 'POST',
@@ -279,7 +258,6 @@ Deno.serve(async (req: Request) => {
       try {
         completeResult = completeResponseText ? JSON.parse(completeResponseText) : {};
       } catch {
-        console.error('[pending-communication] Invalid JSON from complete-pending-communication:', completeResponseText.slice(0, 300));
         throw new Error(`Invalid JSON response from complete-pending-communication (${completeResponse.status})`);
       }
 
@@ -318,7 +296,6 @@ Deno.serve(async (req: Request) => {
     try {
       emailResult = emailResponseText ? JSON.parse(emailResponseText) : {};
     } catch {
-      console.error('[pending-communication] Invalid JSON from send-email:', emailResponseText.slice(0, 300));
       return new Response(
         JSON.stringify({
           success: false,
@@ -334,7 +311,6 @@ Deno.serve(async (req: Request) => {
       { status: emailResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
-    console.error('Error:', error);
     return new Response(
       JSON.stringify({ success: false, error: 'Internal server error', details: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

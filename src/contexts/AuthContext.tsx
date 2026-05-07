@@ -213,11 +213,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     if (storedUser && storedToken) {
       const parsedUser = JSON.parse(storedUser);
-      console.log('=== LOADING USER FROM LOCALSTORAGE ===');
-      console.log('User:', parsedUser.email);
-      console.log('Role:', parsedUser.role);
-      console.log('All Permissions:', JSON.stringify(parsedUser.permissions, null, 2));
-      console.log('Menus with access:', Object.keys(parsedUser.permissions || {}));
       setUser(parsedUser);
     }
 
@@ -229,8 +224,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     if (storedPlans) {
       const parsedPlans = JSON.parse(storedPlans);
-      console.log('=== LOADING AVAILABLE PLANS FROM LOCALSTORAGE ===');
-      console.log('Plans count:', parsedPlans.length);
       setAvailablePlans(normalizeAvailablePlans(parsedPlans));
     }
 
@@ -238,18 +231,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const login = () => {
-    console.log('=== LOGIN REDIRECT ===');
-    console.log('Auth URL:', configManager.authUrl);
-    console.log('App ID:', configManager.authAppId);
-    console.log('Redirect URI:', configManager.redirectUri);
-    console.log('API Key:', configManager.authApiKey);
-
     const authUrl = `${configManager.authUrl}/login?` +
       `app_id=${configManager.authAppId}&` +
       `redirect_uri=${encodeURIComponent(configManager.redirectUri)}&` +
       `api_key=${configManager.authApiKey}`;
 
-    console.log('Full auth URL:', authUrl);
     window.location.href = authUrl;
   };
 
@@ -278,18 +264,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const decodeJWT = (token: string): any => {
     try {
-      if (!token || typeof token !== 'string') {
-        console.error('Invalid token: not a string or empty');
-        return null;
-      }
+      if (!token || typeof token !== 'string') return null;
 
       const parts = token.split('.');
-      console.log('JWT parts count:', parts.length);
-
-      if (parts.length !== 3) {
-        console.error('Invalid JWT: expected 3 parts, got', parts.length);
-        return null;
-      }
+      if (parts.length !== 3) return null;
 
       const base64Url = parts[1];
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -298,103 +276,53 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       try {
         const rawString = atob(base64);
         jsonPayload = decodeURIComponent(escape(rawString));
-      } catch (uriError) {
-        console.warn('Failed with decodeURIComponent+escape, trying direct atob');
+      } catch {
         jsonPayload = atob(base64);
       }
 
-      const decoded = JSON.parse(jsonPayload);
-      console.log('JWT decoded successfully. Keys:', Object.keys(decoded));
-      return decoded;
-    } catch (error) {
-      console.error('Error decoding JWT:', error);
-      console.error('Token was:', token?.substring(0, 100) + '...');
+      return JSON.parse(jsonPayload);
+    } catch {
       return null;
     }
   };
 
   const handleCallback = async (tokenOrCode: string) => {
     try {
-      console.log('=== HANDLE CALLBACK START ===');
-      console.log('Token/Code received:', tokenOrCode.substring(0, 50) + '...');
-      console.log('Token/Code starts with eyJ:', tokenOrCode.startsWith('eyJ'));
-      console.log('Token/Code length:', tokenOrCode.length);
-      console.log('Config loaded:', configManager.isLoaded());
-
-      if (configManager.isLoaded()) {
-        console.log('Config values available:');
-        console.log('- Auth URL:', configManager.authUrl);
-        console.log('- Auth App ID:', configManager.authAppId);
-        console.log('- Auth Valida Token:', configManager.authValidaToken);
-      } else {
-        console.error('ConfigManager not loaded yet!');
-      }
-
       let accessToken = tokenOrCode;
       let authResponse = null;
 
       if (!tokenOrCode.startsWith('eyJ')) {
-        console.log('=== CODE EXCHANGE PROCESS ===');
-        console.log('Exchanging code for token...');
-        console.log('Using AUTH_VALIDA_TOKEN:', configManager.authValidaToken);
-        console.log('Code:', tokenOrCode);
-        console.log('Application ID:', configManager.authAppId);
-
         const requestBody = {
           code: tokenOrCode,
           application_id: configManager.authAppId,
         };
-        console.log('Request body:', JSON.stringify(requestBody, null, 2));
-
-        console.log('Making fetch request...');
-        console.log('Fetch URL:', configManager.authValidaToken);
-        console.log('Fetch starting at:', new Date().toISOString());
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          console.error('=== FETCH TIMEOUT (20s) ===');
-          controller.abort();
-        }, 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
 
         let tokenResponse;
         try {
           tokenResponse = await fetch(configManager.authValidaToken, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody),
             signal: controller.signal,
           });
           clearTimeout(timeoutId);
-          console.log('Fetch completed at:', new Date().toISOString());
         } catch (fetchError: any) {
           clearTimeout(timeoutId);
           if (fetchError.name === 'AbortError') {
-            console.error('=== FETCH ABORTED - TIMEOUT ===');
             throw new Error('La solicitud de autenticación tardó demasiado. Por favor verifica tu conexión e intenta de nuevo.');
           }
-          console.error('=== FETCH ERROR ===');
-          console.error('Error:', fetchError);
           throw new Error(`Error de red al intercambiar código: ${fetchError.message}`);
         }
 
-        console.log('Response status:', tokenResponse.status);
-        console.log('Response ok:', tokenResponse.ok);
-        console.log('Response headers:', Object.fromEntries(tokenResponse.headers.entries()));
-
         if (!tokenResponse.ok) {
           const errorText = await tokenResponse.text();
-          console.error('=== TOKEN EXCHANGE FAILED ===');
-          console.error('Status:', tokenResponse.status);
-          console.error('Error text:', errorText);
           throw new Error(`Failed to exchange code for token: ${tokenResponse.status} - ${errorText}`);
         }
 
         authResponse = await tokenResponse.json();
-        console.log('=== TOKEN EXCHANGE SUCCESS ===');
-        console.log('Auth response received:', JSON.stringify(authResponse, null, 2));
-
         accessToken = authResponse.access_token || authResponse.data?.access_token;
 
         const refreshToken = authResponse.refresh_token || authResponse.data?.refresh_token;
@@ -427,8 +355,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
       }
 
-      console.log('Access token to decode:', accessToken?.substring(0, 50) + '...');
-
       if (!accessToken) {
         throw new Error('No access token available');
       }
@@ -436,12 +362,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       localStorage.setItem('access_token', accessToken);
 
       let decodedToken = decodeJWT(accessToken);
-      console.log('Decoded token:', decodedToken ? 'SUCCESS' : 'FAILED');
-
       let userInfo: User;
 
       if (!decodedToken && authResponse?.data) {
-        console.log('=== TOKEN NO ES JWT, USANDO DATA DE AUTH RESPONSE ===');
         const userData = authResponse.data.user || authResponse.data;
         userInfo = {
           sub: userData.id || userData.user_id || userData.sub || 'unknown',
@@ -455,7 +378,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           active_users_count: userData.active_users_count !== undefined ? Number(userData.active_users_count) : undefined,
         };
 
-        // Subscription already saved above; re-apply if not yet set
         const subSource = authResponse.data.subscription ?? authResponse.data.user?.subscription;
         if (subSource) {
           const normalizedSubscription = normalizeSubscription(subSource);
@@ -465,7 +387,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           }
         }
       } else if (decodedToken) {
-        // Prefer subscription from authResponse (more complete) over JWT payload
         const rawSub =
           authResponse?.subscription ??
           authResponse?.data?.subscription ??
@@ -474,14 +395,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
         if (rawSub) {
           const normalizedSubscription = normalizeSubscription(rawSub);
-          console.log('=== SUBSCRIPTION SAVED ===', rawSub.status, rawSub.plan_name);
           if (normalizedSubscription) {
             localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
             setSubscription(normalizedSubscription);
           }
         }
 
-        // available_plans: prefer authResponse over JWT
         const rawPlans =
           authResponse?.available_plans ??
           authResponse?.data?.available_plans ??
@@ -494,8 +413,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setAvailablePlans(normalizedPlans);
         }
 
-        // tenant data may be directly in token or nested under token.user,
-        // or in authResponse.data.user (most complete source)
         const tokenUser = authResponse?.data?.user || decodedToken.user || decodedToken;
         const tenantObj = authResponse?.data?.tenant;
         userInfo = {
@@ -519,36 +436,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error('Failed to get user info from token or auth response');
       }
 
-      console.log('=== USER PERMISSIONS LOADED ===');
-      console.log('User:', userInfo.email);
-      console.log('Role:', userInfo.role);
-      console.log('All Permissions:', JSON.stringify(userInfo.permissions, null, 2));
-      console.log('Menus with access:', Object.keys(userInfo.permissions || {}));
-
       localStorage.setItem('user', JSON.stringify(userInfo));
       setUser(userInfo);
     } catch (error) {
-      console.error('=== ERROR IN HANDLECALLBACK ===');
-      console.error('Error:', error);
-      console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       throw error;
     }
   };
 
   const hasPermission = (menu: string, permission: MenuPermission): boolean => {
-    if (!user || !user.permissions) {
-      return false;
-    }
+    if (!user || !user.permissions) return false;
     const menuPermissions = user.permissions[menu];
     return menuPermissions ? menuPermissions.includes(permission) : false;
   };
 
   const hasMenuAccess = (menu: string): boolean => {
-    console.log(`🔍 hasMenuAccess("${menu}") called`);
-    console.log('👤 Current user state:', user);
-    console.log('🔐 User permissions:', user?.permissions);
-
     const menuAliases: Record<string, string[]> = {
       'dashboard': ['dashboard', 'analytics', 'inicio'],
       'templates': ['templates', 'plantillas'],
@@ -558,19 +459,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
 
     const possibleKeys = menuAliases[menu] || [menu];
-    console.log(`🔑 Checking keys for "${menu}":`, possibleKeys);
-
-    for (const key of possibleKeys) {
-      const hasReadPermission = hasPermission(key, 'read');
-      console.log(`  - Checking "${key}": ${hasReadPermission ? '✅ HAS ACCESS' : '❌ NO ACCESS'}`);
-      if (hasReadPermission) {
-        console.log(`✅ Access granted to "${menu}" via key "${key}"`);
-        return true;
-      }
-    }
-
-    console.log(`❌ Access denied to "${menu}"`);
-    return false;
+    return possibleKeys.some(key => hasPermission(key, 'read'));
   };
 
   // Re-exchange the stored refresh_token to get a fresh subscription state
@@ -607,7 +496,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setSubscription(normalized);
         }
       } else {
-        // No subscription returned — treat as cancelled/expired
         localStorage.removeItem('subscription');
         setSubscription(null);
       }

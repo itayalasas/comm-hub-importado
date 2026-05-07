@@ -43,9 +43,7 @@ class ConfigManager {
         }
 
         this.config = await response.json();
-        console.log('[Config] Loaded configuration for:', this.config?.project_name);
       } catch (error) {
-        console.error('[Config] Failed to load configuration:', error);
         throw error;
       }
     })();
@@ -61,9 +59,7 @@ class ConfigManager {
     const value = this.config.variables[key];
 
     if (!value && key === 'AUTH_VALIDA_TOKEN') {
-      const fallback = import.meta.env.AUTH_VALIDA_TOKEN || 'https://sfqtmnncgiqkveaoqckt.supabase.co/functions/v1/auth-exchange-code';
-      console.log(`[Config] Using fallback for ${key}:`, fallback);
-      return fallback;
+      return import.meta.env.AUTH_VALIDA_TOKEN || 'https://sfqtmnncgiqkveaoqckt.supabase.co/functions/v1/auth-exchange-code';
     }
 
     return value;

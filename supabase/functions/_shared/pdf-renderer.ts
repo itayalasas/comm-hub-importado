@@ -96,10 +96,6 @@ export async function renderHtmlToPdfBase64(
   const endpoint = `${normalizeBaseUrl(gotenbergUrl)}/forms/chromium/convert/html`;
   const documentHtml = ensureHtmlDocument(html, options?.title);
 
-  console.log('[pdf-renderer] Rendering HTML with Gotenberg...');
-  console.log('[pdf-renderer] Endpoint:', endpoint);
-  console.log('[pdf-renderer] HTML length:', documentHtml.length);
-
   const formData = new FormData();
   formData.set('files', new Blob([documentHtml], { type: 'text/html; charset=utf-8' }), 'index.html');
   formData.set('printBackground', 'true');
@@ -122,19 +118,13 @@ export async function renderHtmlToPdfBase64(
     body: formData,
   });
 
-  console.log('[pdf-renderer] Gotenberg response status:', response.status);
-
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('[pdf-renderer] Gotenberg API error:', errorText);
     throw new Error(`Gotenberg API error: ${response.status} - ${errorText}`);
   }
 
   const pdfArrayBuffer = await response.arrayBuffer();
   const base64 = toBase64(pdfArrayBuffer);
-
-  console.log('[pdf-renderer] PDF buffer size:', pdfArrayBuffer.byteLength, 'bytes');
-  console.log('[pdf-renderer] PDF converted to base64, length:', base64.length);
 
   return {
     base64,

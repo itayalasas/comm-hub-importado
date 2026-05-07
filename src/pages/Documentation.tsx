@@ -34,8 +34,8 @@ export default function Documentation() {
       if (configManager.isLoaded()) {
         return configManager.supabaseUrl;
       }
-    } catch (error) {
-      console.warn('[Documentation] Failed to read supabaseUrl from configManager:', error);
+    } catch {
+      // ignore
     }
 
     return import.meta.env.VITE_SUPABASE_URL || '';

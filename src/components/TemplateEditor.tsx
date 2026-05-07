@@ -109,8 +109,8 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
 
       if (error) throw error;
       setCustomVariables(data || []);
-    } catch (error) {
-      console.error('Error loading custom variables:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -135,7 +135,6 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
       setShowAddVariable(false);
       toast.success('Variable guardada exitosamente');
     } catch (error: any) {
-      console.error('Error saving custom variable:', error);
       if (error.code === '23505') {
         toast.error('Ya existe una variable con ese nombre');
       } else {
@@ -157,8 +156,7 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
       await loadCustomVariables();
       toast.success('Variable eliminada exitosamente');
       setDeleteConfirm(null);
-    } catch (error) {
-      console.error('Error deleting custom variable:', error);
+    } catch {
       toast.error('Error al eliminar la variable');
     }
   };

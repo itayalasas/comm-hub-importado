@@ -145,7 +145,6 @@ root.render(<LoadingScreen />);
 
 configManager.loadConfig()
   .then(() => {
-    console.log('[App] Configuration loaded successfully');
     root.render(
       <React.StrictMode>
         <App />
@@ -153,6 +152,5 @@ configManager.loadConfig()
     );
   })
   .catch((error) => {
-    console.error('[App] Failed to load configuration:', error);
     root.render(<ErrorScreen error={error.message || 'Error desconocido'} />);
   });

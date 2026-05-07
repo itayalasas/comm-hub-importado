@@ -64,8 +64,6 @@ Deno.serve(async (req: Request) => {
     const requestData: any = await req.json();
     const { recipient_email, template_name, data = {}, subject, pdf_base64, pdf_filename, _pdf_attachment, _pdf_info, _existing_log_id } = requestData;
 
-    console.log('[send-email] Request:', { has_existing_log_id: !!_existing_log_id, has_pdf_info: !!_pdf_info, pdf_email_log_id: _pdf_info?.pdf_email_log_id });
-
     let finalPdfBase64 = _pdf_attachment?.content || pdf_base64;
     const finalPdfFilename = _pdf_attachment?.filename || _pdf_info?.pdf_filename || pdf_filename || 'document.pdf';
     let pdfPublicUrl = null;
@@ -73,28 +71,22 @@ Deno.serve(async (req: Request) => {
     const MAX_PDF_ATTACHMENT_SIZE = 1024 * 1024;
 
     if (_pdf_info?.pdf_email_log_id && !finalPdfBase64) {
-      console.log('[send-email] Fetching PDF from database, email_log_id:', _pdf_info.pdf_email_log_id);
       const { data: pdfData } = await supabase.from('pdf_generation_logs').select('pdf_base64, filename, size_bytes, public_url').eq('email_log_id', _pdf_info.pdf_email_log_id).maybeSingle();
       if (pdfData?.pdf_base64) {
-        console.log('[send-email] PDF fetched from DB, size:', pdfData.size_bytes);
         pdfSizeBytes = pdfData.size_bytes || pdfData.pdf_base64.length;
         pdfPublicUrl = pdfData.public_url;
 
         if (pdfSizeBytes > MAX_PDF_ATTACHMENT_SIZE) {
-          console.log('[send-email] PDF too large to attach (' + pdfSizeBytes + ' bytes), will send link only');
           finalPdfBase64 = null;
         } else {
           finalPdfBase64 = pdfData.pdf_base64;
         }
-      } else {
-        console.log('[send-email] PDF not found in database');
       }
     }
 
     if (finalPdfBase64) {
       pdfSizeBytes = finalPdfBase64.length;
       if (pdfSizeBytes > MAX_PDF_ATTACHMENT_SIZE) {
-        console.log('[send-email] PDF too large to attach (' + pdfSizeBytes + ' bytes), will send link only');
         finalPdfBase64 = null;
       }
     }
@@ -120,11 +112,9 @@ Deno.serve(async (req: Request) => {
         from_email: 'noreply@sendcraft.net',
         from_name: 'SendCraft',
       };
-      console.log('[send-email] Using platform default credentials');
     }
 
     const providerType = effectiveCredentials.provider_type || 'resend';
-    console.log('[send-email] Using provider:', providerType);
 
     const { data: template } = await supabase.from('communication_templates').select('*').eq('name', template_name).eq('application_id', application.id).eq('template_type', 'email').eq('is_active', true).maybeSingle();
     if (!template) {
@@ -151,8 +141,6 @@ Deno.serve(async (req: Request) => {
         </td>
       </tr>
     ` : '';
-
-    console.log('[send-email] PDF download section:', pdfPublicUrl ? 'Added to template' : 'Not added (no URL)');
 
     // Merge root-level fields (recipient_email, order_id, etc.) so templates can
     // reference {{recipient_email}} even though it lives outside the data object.
@@ -198,11 +186,9 @@ Deno.serve(async (req: Request) => {
     let logEntry: any;
 
     if (_existing_log_id) {
-      console.log('[send-email] Using existing log:', _existing_log_id);
       const { data: existingLog } = await supabase.from('email_logs').select('*').eq('id', _existing_log_id).maybeSingle();
       if (existingLog) {
         logEntry = existingLog;
-        console.log('[send-email] Reusing existing log');
       }
     }
 
@@ -226,7 +212,6 @@ Deno.serve(async (req: Request) => {
       });
 
       if (duplicateLog && !requestData._allow_duplicate_resend) {
-        console.log('[send-email] Duplicate prevented, reusing log:', duplicateLog.id);
         return new Response(
           JSON.stringify({
             success: true,
@@ -238,7 +223,6 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      console.log('[send-email] Creating new log');
       const { data: logData } = await supabase.from('email_logs').insert({
         application_id: application.id,
         template_id: template.id,
@@ -286,7 +270,6 @@ Deno.serve(async (req: Request) => {
     };
 
     if (hasPdfAttachment && _pdf_info?.pdf_email_log_id) {
-      console.log('[send-email] Linking PDF log as child');
       await supabase.from('email_logs').update({ parent_log_id: logEntry.id }).eq('id', _pdf_info.pdf_email_log_id);
     }
 
@@ -299,11 +282,8 @@ Deno.serve(async (req: Request) => {
       const actualFromEmail = effectiveCredentials.from_email;
       const fromName = effectiveCredentials.from_name || application.name || 'SendCraft';
 
-      console.log('[send-email] From email:', actualFromEmail, 'Name:', fromName);
-
       if (providerType === 'smtp') {
         const useTLS = effectiveCredentials.smtp_port === 465;
-        console.log('[send-email] SMTP config:', { host: effectiveCredentials.smtp_host, port: effectiveCredentials.smtp_port, user: effectiveCredentials.smtp_user, tls: useTLS });
 
         const connectionConfig: any = {
           hostname: effectiveCredentials.smtp_host,
@@ -322,25 +302,14 @@ Deno.serve(async (req: Request) => {
           html: htmlContent,
         };
 
-        console.log('[send-email] SMTP Email config:', { from: actualFromEmail, fromName: fromName, to: recipient_email, subject: emailSubject });
-
         if (finalPdfBase64 && finalPdfFilename) {
           emailConfig.attachments = [{ filename: finalPdfFilename, content: finalPdfBase64, encoding: 'base64' }];
-          console.log('[send-email] PDF attached:', { filename: finalPdfFilename, size_bytes: pdfSizeBytes });
-        } else if (pdfPublicUrl && !finalPdfBase64) {
-          console.log('[send-email] Sending email with download link only (no attachment)');
         }
 
-        console.log('[send-email] Sending via SMTP...');
         await client.send(emailConfig);
         await client.close();
-        console.log('[send-email] Email sent successfully via SMTP');
       } else {
         const resendApiKey = effectiveCredentials.resend_api_key || Deno.env.get('RESEND_API_KEY')!;
-
-        console.log('[send-email] Resend config:', {
-          api_key_source: effectiveCredentials.resend_api_key ? 'db' : 'env (platform fallback)',
-        });
 
         const resendPayload: any = {
           from: fromName ? `${fromName} <${actualFromEmail}>` : actualFromEmail,
@@ -354,12 +323,8 @@ Deno.serve(async (req: Request) => {
             filename: finalPdfFilename,
             content: finalPdfBase64,
           }];
-          console.log('[send-email] PDF attached:', { filename: finalPdfFilename, size_bytes: pdfSizeBytes });
-        } else if (pdfPublicUrl && !finalPdfBase64) {
-          console.log('[send-email] Sending email with download link only (no attachment)');
         }
 
-        console.log('[send-email] Sending via Resend...');
         const resendResponse = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -375,7 +340,6 @@ Deno.serve(async (req: Request) => {
         }
 
         const resendData = await resendResponse.json();
-        console.log('[send-email] Email sent successfully via Resend, ID:', resendData.id);
 
         await supabase.from('email_logs').update({
           status: 'sent',
@@ -398,12 +362,10 @@ Deno.serve(async (req: Request) => {
 
       return new Response(JSON.stringify({ success: true, message: 'Email sent successfully', log_id: logEntry.id, processing_time_ms: Date.now() - startTime }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     } catch (emailError: any) {
-      console.error('[send-email] Error:', emailError);
       await supabase.from('email_logs').update({ status: 'failed', error_message: emailError.message }).eq('id', logEntry.id);
       return new Response(JSON.stringify({ success: false, error: 'Failed to send email', details: emailError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
   } catch (error: any) {
-    console.error('[send-email] Unexpected error:', error);
     return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });

@@ -84,8 +84,8 @@ export const Settings = () => {
         },
         body: JSON.stringify({ application_id: appId }),
       });
-    } catch (err) {
-      console.error('Error provisioning default email:', err);
+    } catch {
+      // ignore
     }
   };
 
@@ -138,8 +138,8 @@ export const Settings = () => {
       } else if (data && data.length > 0) {
         setSelectedApp(data[0].id);
       }
-    } catch (error) {
-      console.error('Error loading applications:', error);
+    } catch {
+      // ignore
     } finally {
       setLoading(false);
     }
@@ -171,8 +171,8 @@ export const Settings = () => {
           is_active: data.is_active,
         });
       }
-    } catch (error) {
-      console.error('Error loading credentials:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -222,8 +222,7 @@ export const Settings = () => {
 
       setShowModal(false);
       loadCredentials(selectedApp);
-    } catch (error) {
-      console.error('Error saving credentials:', error);
+    } catch {
       toast.error('Error al guardar las credenciales');
     }
   };
@@ -270,10 +269,7 @@ export const Settings = () => {
 
   const setAsDefault = async (appId: string) => {
     try {
-      if (!user?.sub) {
-        console.error('No user ID available');
-        return;
-      }
+      if (!user?.sub) return;
 
       const { error } = await supabase
         .from('user_preferences')
@@ -288,18 +284,12 @@ export const Settings = () => {
           }
         );
 
-      if (error) {
-        console.error('Error in upsert:', error);
-        throw error;
-      }
+      if (error) throw error;
 
       setDefaultApp(appId);
       setSelectedApp(appId);
       toast.success('Aplicación por defecto actualizada');
-
-      console.log('Default app set successfully:', appId);
-    } catch (error) {
-      console.error('Error setting default app:', error);
+    } catch {
       toast.error('Error al guardar la configuración');
     }
   };
@@ -362,8 +352,7 @@ export const Settings = () => {
       setShowNewAppModal(false);
       setNewAppData({ name: '', domain: '' });
       loadApplications();
-    } catch (error) {
-      console.error('Error creating application:', error);
+    } catch {
       toast.error('Error al crear la aplicación');
     }
   };

@@ -73,8 +73,8 @@ export const HTMLEditor = ({ value, onChange, onClose, variables }: HTMLEditorPr
 
       setLocalValue(formatted);
       onChange(formatted);
-    } catch (error) {
-      console.error('Error formatting HTML:', error);
+    } catch {
+      // ignore
     }
   };
 

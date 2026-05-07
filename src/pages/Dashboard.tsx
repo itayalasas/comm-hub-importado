@@ -142,8 +142,8 @@ export const Dashboard = () => {
       } else if (data && data.length > 0) {
         setSelectedApp(data[0].id);
       }
-    } catch (error) {
-      console.error('Error loading applications:', error);
+    } catch {
+      // ignore
     } finally {
       setLoading(false);
     }
@@ -175,8 +175,8 @@ export const Dashboard = () => {
         totalPdfs,
         successRate,
       });
-    } catch (error) {
-      console.error('Error loading stats:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -193,8 +193,8 @@ export const Dashboard = () => {
 
       if (error) throw error;
       setRecentActivity(data || []);
-    } catch (error) {
-      console.error('Error loading recent activity:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -238,8 +238,7 @@ export const Dashboard = () => {
         healthChecks[1].status = 'operational';
         healthChecks[1].responseTime = Math.floor(responseTime / 3);
       }
-    } catch (err) {
-      console.error('API/DB health check failed:', err);
+    } catch (err: any) {
       healthChecks[0].status = 'down';
       healthChecks[0].responseTime = 0;
       healthChecks[1].status = 'down';
@@ -258,7 +257,6 @@ export const Dashboard = () => {
       }
 
       const emailData = parseFunctionData(data);
-      console.log('Email health check parsed data:', emailData);
 
       if (emailData.status === 'operational' && emailData.configured) {
         healthChecks[2].status = 'operational';
@@ -276,7 +274,6 @@ export const Dashboard = () => {
 
       healthChecks[2].responseTime = emailData.responseTime || responseTime;
     } catch (err) {
-      console.error('Email service health check failed:', err);
       healthChecks[2].status = 'down';
       healthChecks[2].responseTime = 0;
       healthChecks[2].message = err instanceof Error ? err.message : 'Error desconocido';
@@ -294,7 +291,6 @@ export const Dashboard = () => {
       }
 
       const pdfData = parseFunctionData(data);
-      console.log('PDF health check parsed data:', pdfData);
 
       if (pdfData.status === 'operational' || pdfData.status === 'healthy') {
         healthChecks[3].status = 'operational';
@@ -307,7 +303,6 @@ export const Dashboard = () => {
 
       healthChecks[3].responseTime = pdfData.responseTime || responseTime;
     } catch (err) {
-      console.error('PDF service health check failed:', err);
       healthChecks[3].status = 'down';
       healthChecks[3].responseTime = 0;
       healthChecks[3].message = err instanceof Error ? err.message : 'Error desconocido';

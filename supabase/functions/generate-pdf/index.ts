@@ -22,8 +22,6 @@ function generateFilename(pattern: string, data: Record<string, any>): string {
 }
 
 async function generateQrCodeFromText(text: string): Promise<string> {
-  console.log('[generate-pdf] Generating QR code from text:', text.substring(0, 50) + '...');
-
   try {
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(text)}`;
 
@@ -43,7 +41,6 @@ async function generateQrCodeFromText(text: string): Promise<string> {
 
     return `data:image/png;base64,${base64}`;
   } catch (error) {
-    console.error('[generate-pdf] Error generating QR code:', error);
     throw error;
   }
 }
@@ -63,11 +60,9 @@ async function convertQrUrlsToBase64(data: any): Promise<any> {
     if (key === 'qr_code' || key === 'qr_url' || key === 'qr_image' || key === 'qr_text' || key === 'qr_data') {
       if (typeof value === 'string' && value.length > 0) {
         if (value.startsWith('data:image')) {
-          console.log('[generate-pdf] Value is already a base64 image, keeping as-is');
           result[key] = value;
           result[`${key}_qr`] = value;
         } else {
-          console.log('[generate-pdf] Generating QR code from text/URL for key:', key, '- value:', value.substring(0, 50));
           const qrBase64 = await generateQrCodeFromText(value);
           result[key] = qrBase64;
           result[`${key}_qr`] = qrBase64;
@@ -115,8 +110,6 @@ Deno.serve(async (req: Request) => {
 
     const apiKey = req.headers.get('x-api-key');
     if (!apiKey) {
-      console.error('[generate-pdf] Missing API key');
-
       await supabase.from('email_logs').insert({
         application_id: null,
         template_id: null,
@@ -154,8 +147,6 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (appError || !application) {
-      console.error('[generate-pdf] Invalid API key:', apiKey?.substring(0, 8) + '...');
-
       await supabase.from('email_logs').insert({
         application_id: null,
         template_id: null,
@@ -190,8 +181,6 @@ Deno.serve(async (req: Request) => {
       requestBody = await req.text();
       requestData = JSON.parse(requestBody);
     } catch (parseError: any) {
-      console.error('[generate-pdf] JSON parse error:', parseError);
-
       await supabase.from('email_logs').insert({
         application_id: application.id,
         template_id: null,
@@ -224,23 +213,12 @@ Deno.serve(async (req: Request) => {
     const { template_id, pdf_template_name, data, pending_communication_id, order_id } = requestData;
 
     if (order_id) {
-      console.log('[generate-pdf] Acquiring lock for order_id:', order_id);
-
       try {
         await supabase.from('pdf_generation_locks').insert({
           order_id,
           application_id: application.id,
         });
-        console.log('[generate-pdf] Lock acquired successfully');
-      } catch (lockError: any) {
-        if (lockError.code === '23505') {
-          console.log('[generate-pdf] Lock already exists, checking for existing PDF');
-        } else {
-          console.error('[generate-pdf] Lock error:', lockError);
-        }
-      }
-
-      console.log('[generate-pdf] Checking for existing PDF for order_id:', order_id);
+      } catch { }
 
       const { data: existingPdfLog } = await supabase
         .from('email_logs')
@@ -254,8 +232,6 @@ Deno.serve(async (req: Request) => {
       if (existingPdfLog && existingPdfLog.length > 0) {
         for (const log of existingPdfLog) {
           if (log.metadata?.order_id === order_id) {
-            console.log('[generate-pdf] ⚠️  PDF already exists for order_id:', order_id, ', log_id:', log.id);
-
             const { data: existingPdf } = await supabase
               .from('pdf_generation_logs')
               .select('*')
@@ -263,8 +239,6 @@ Deno.serve(async (req: Request) => {
               .maybeSingle();
 
             if (existingPdf) {
-              console.log('[generate-pdf] Returning existing PDF instead of generating duplicate');
-
               if (order_id) {
                 await supabase.from('pdf_generation_locks').delete().eq('order_id', order_id);
               }
@@ -292,12 +266,9 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      console.log('[generate-pdf] No existing PDF found, proceeding with generation');
     }
 
     if (!data) {
-      console.error('[generate-pdf] Missing required field: data');
-
       await supabase.from('email_logs').insert({
         application_id: application.id,
         template_id: null,
@@ -328,8 +299,6 @@ Deno.serve(async (req: Request) => {
     let pendingComm = null;
 
     if (order_id) {
-      console.log(`Looking for pending communication with order_id: ${order_id}`);
-
       const { data: pending, error: pendingError } = await supabase
         .from('pending_communications')
         .select('*')
@@ -340,13 +309,8 @@ Deno.serve(async (req: Request) => {
         .limit(1)
         .maybeSingle();
 
-      if (pendingError) {
-        console.error('Error finding pending communication:', pendingError);
-      } else if (pending) {
-        console.log(`Found pending communication for order ${order_id}:`, pending.id);
+      if (!pendingError && pending) {
         pendingComm = pending;
-      } else {
-        console.warn(`No pending communication found for order_id: ${order_id}`);
       }
     }
 
@@ -363,8 +327,6 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (templateError || !template) {
-        console.error('PDF template not found:', { template_id, error: templateError });
-
         await supabase.from('email_logs').insert({
           application_id: application.id,
           template_id: null,
@@ -408,8 +370,6 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (templateError || !template) {
-        console.error('PDF template not found:', { pdf_template_name, error: templateError });
-
         await supabase.from('email_logs').insert({
           application_id: application.id,
           template_id: null,
@@ -443,8 +403,6 @@ Deno.serve(async (req: Request) => {
 
       pdfTemplate = template;
     } else {
-      console.error('[generate-pdf] Missing template identifier');
-
       await supabase.from('email_logs').insert({
         application_id: application.id,
         template_id: null,
@@ -473,10 +431,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('Rendering HTML template with data...');
-    console.log('[generate-pdf] Data structure:', JSON.stringify(data).substring(0, 500));
-
-    console.log('[generate-pdf] Converting QR URLs to base64...');
     const processedData = await convertQrUrlsToBase64(data);
 
     const templateData = { ...processedData, data: processedData };
@@ -484,12 +438,9 @@ Deno.serve(async (req: Request) => {
 
     const filename = generateFilename(pdfTemplate.pdf_filename_pattern || 'document.pdf', processedData);
 
-    console.log('Converting HTML to PDF with Gotenberg...');
     const pdfResult = await renderHtmlToPdfBase64(htmlContent, { title: filename });
     const pdfBase64 = pdfResult.base64;
     const sizeBytes = pdfResult.sizeBytes;
-
-    console.log('PDF generated successfully:', { filename, sizeBytes });
 
     const emailLogData: any = {
       application_id: application.id,
@@ -514,7 +465,6 @@ Deno.serve(async (req: Request) => {
 
     if (pendingComm?.parent_log_id) {
       emailLogData.parent_log_id = pendingComm.parent_log_id;
-      console.log('[generate-pdf] Setting parent_log_id from pending communication:', pendingComm.parent_log_id);
     }
 
     const { data: emailLog, error: emailLogError } = await supabase
@@ -523,11 +473,6 @@ Deno.serve(async (req: Request) => {
       .select()
       .single();
 
-    if (emailLogError) {
-      console.error('[generate-pdf] Error creating email_log entry:', emailLogError);
-    } else {
-      console.log('[generate-pdf] Email log created with ID:', emailLog.id);
-    }
 
     const { data: pdfLog, error: logError } = await supabase
       .from('pdf_generation_logs')
@@ -544,8 +489,6 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (logError) {
-      console.error('Error logging PDF generation:', logError);
-
       await supabase.from('email_logs').insert({
         application_id: application.id,
         template_id: pdfTemplate.id,
@@ -576,8 +519,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('[generate-pdf] PDF generation logged successfully. email_log_id:', emailLog?.id, ', pdf_log_id:', pdfLog.id);
-
     const accessToken = crypto.randomUUID() + '-' + Date.now().toString(36);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 90);
@@ -596,11 +537,6 @@ Deno.serve(async (req: Request) => {
       .select()
       .single();
 
-    if (linkError) {
-      console.error('[generate-pdf] Error creating public link:', linkError);
-    } else {
-      console.log('[generate-pdf] Public link created:', accessToken);
-    }
 
     const publicUrl = publicLink ? `${supabaseUrl}/functions/v1/view-pdf?token=${accessToken}` : null;
 
@@ -628,8 +564,6 @@ Deno.serve(async (req: Request) => {
     const targetPendingId = pending_communication_id || (pendingComm ? pendingComm.id : null);
 
     if (targetPendingId) {
-      console.log('Updating pending communication with PDF attachment...');
-
       const { data: currentPending } = await supabase
         .from('pending_communications')
         .select('completed_data')
@@ -654,11 +588,6 @@ Deno.serve(async (req: Request) => {
         pdf_public_url: publicUrl,
       };
 
-      console.log('[generate-pdf] Saving completed_data:', JSON.stringify({
-        ...completedDataToSave,
-        pdf_attachment: { filename: pdfAttachment.filename, size: pdfAttachment.content.length }
-      }));
-
       const { error: updateError } = await supabase
         .from('pending_communications')
         .update({
@@ -669,12 +598,7 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', targetPendingId);
 
-      if (updateError) {
-        console.error('Error updating pending communication:', updateError);
-      } else {
-        console.log('Pending communication updated successfully with status: pdf_generated');
-        console.log(`Triggering email send for pending_communication_id: ${targetPendingId}...`);
-
+      if (!updateError) {
         try {
           const completeUrl = `${supabaseUrl}/functions/v1/complete-pending-communication`;
 
@@ -692,20 +616,12 @@ Deno.serve(async (req: Request) => {
 
           const completeResult = await completeResponse.json();
 
-          if (completeResult.success) {
-            console.log(`Email sent successfully for pending_communication_id: ${targetPendingId}`);
-          } else {
-            console.error(`Failed to send email for pending_communication_id ${targetPendingId}:`, completeResult);
-          }
-        } catch (emailError: any) {
-          console.error(`Error triggering email send for pending_communication_id ${targetPendingId}:`, emailError);
-        }
+        } catch { }
       }
     }
 
     if (order_id) {
       await supabase.from('pdf_generation_locks').delete().eq('order_id', order_id);
-      console.log('[generate-pdf] Lock released for order_id:', order_id);
     }
 
     return new Response(
@@ -726,8 +642,6 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error: any) {
-    console.error('Error generating PDF:', error);
-
     try {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -736,7 +650,6 @@ Deno.serve(async (req: Request) => {
       const orderId = (error as any).order_id || requestData?.order_id;
       if (orderId) {
         await supabase.from('pdf_generation_locks').delete().eq('order_id', orderId);
-        console.log('[generate-pdf] Lock released on error for order_id:', orderId);
       }
 
       await supabase.from('email_logs').insert({
@@ -757,9 +670,7 @@ Deno.serve(async (req: Request) => {
           },
         },
       });
-    } catch (logError) {
-      console.error('Failed to log error:', logError);
-    }
+    } catch { }
 
     return new Response(
       JSON.stringify({

@@ -23,7 +23,6 @@ function processEach(html: string, data: TemplateData): string {
     const arrayData = getNestedValue(data, arrayPath);
 
     if (!Array.isArray(arrayData)) {
-      console.warn(`{{#each ${arrayPath}}} - not an array or not found`);
       return '';
     }
 

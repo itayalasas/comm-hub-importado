@@ -193,8 +193,8 @@ export const Statistics = () => {
       } else if (data && data.length > 0) {
         setSelectedApp(data[0].id);
       }
-    } catch (error) {
-      console.error('Error loading applications:', error);
+    } catch {
+      // ignore
     } finally {
       setLoading(false);
     }
@@ -233,8 +233,8 @@ export const Statistics = () => {
         totalPdfs: pdfs,
         totalEmailsWithPdf: emailsWithPdf
       });
-    } catch (error) {
-      console.error('Error loading stats:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -251,8 +251,8 @@ export const Statistics = () => {
 
       if (error) throw error;
       setLogs(data || []);
-    } catch (error) {
-      console.error('Error loading logs:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -266,8 +266,8 @@ export const Statistics = () => {
 
       if (error) throw error;
       setChildLogs(prev => ({ ...prev, [parentId]: data || [] }));
-    } catch (error) {
-      console.error('Error loading child logs:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -296,8 +296,8 @@ export const Statistics = () => {
 
       if (error) throw error;
       setPendingComms(data || []);
-    } catch (error) {
-      console.error('Error loading pending communications:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -407,8 +407,7 @@ export const Statistics = () => {
         loadPendingCommunications(selectedApp);
         loadStats(selectedApp);
       }
-    } catch (error) {
-      console.error('Error deleting pending communication:', error);
+    } catch {
       toast.error('Error al eliminar la comunicación pendiente');
     }
   };
@@ -430,8 +429,7 @@ export const Statistics = () => {
         loadLogs(selectedApp);
         loadStats(selectedApp);
       }
-    } catch (error) {
-      console.error('Error deleting email log:', error);
+    } catch {
       toast.error('Error al eliminar el registro');
     }
   };
@@ -479,8 +477,6 @@ export const Statistics = () => {
         throw new Error('La aplicación no tiene una API key configurada');
       }
 
-      console.log('Reenviando con API key:', currentApp.api_key);
-
       if (!log.template_id) {
         throw new Error('El log no tiene un template_id asociado');
       }
@@ -519,7 +515,6 @@ export const Statistics = () => {
           if (pdfChildLog?.id) {
             pdfEmailLogId = pdfChildLog.id;
             pdfFilename = pdfChildLog.metadata?.filename || pdfFilename;
-            console.log('PDF email_log_id recuperado desde log hijo:', pdfEmailLogId);
           }
         }
 
@@ -533,7 +528,6 @@ export const Statistics = () => {
           if (pdfData?.pdf_base64) {
             pdfBase64 = pdfData.pdf_base64;
             pdfFilename = pdfData.filename || pdfFilename;
-            console.log('PDF recuperado desde pdf_generation_logs:', pdfEmailLogId);
           }
         }
       }
@@ -624,7 +618,6 @@ export const Statistics = () => {
         loadStats(selectedApp);
       }
     } catch (error) {
-      console.error('Error resending communication:', error);
       toast.error(error instanceof Error ? error.message : 'Error al reenviar la comunicación');
     } finally {
       setResending(false);

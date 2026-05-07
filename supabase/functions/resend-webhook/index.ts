@@ -30,7 +30,6 @@ async function verifyWebhookSignature(
   const WEBHOOK_SECRET = Deno.env.get('RESEND_WEBHOOK_SECRET');
   
   if (!WEBHOOK_SECRET) {
-    console.warn('⚠️ RESEND_WEBHOOK_SECRET not configured - ACCEPTING webhook without verification');
     return true;
   }
 
@@ -38,16 +37,7 @@ async function verifyWebhookSignature(
   const svixTimestamp = headers.get('svix-timestamp');
   const svixSignature = headers.get('svix-signature');
 
-  console.log('🔐 Webhook signature headers:', {
-    has_svix_id: !!svixId,
-    has_svix_timestamp: !!svixTimestamp,
-    has_svix_signature: !!svixSignature,
-    svix_id: svixId?.substring(0, 20) + '...',
-    svix_timestamp: svixTimestamp,
-  });
-
   if (!svixId || !svixTimestamp || !svixSignature) {
-    console.error('❌ Missing Svix headers - ACCEPTING anyway for debugging');
     return true;
   }
 
@@ -75,24 +65,15 @@ async function verifyWebhookSignature(
     const base64Signature = btoa(String.fromCharCode(...new Uint8Array(signature)));
     
     const signatures = svixSignature.split(' ');
-    
-    console.log('🔍 Checking signatures:', {
-      expected: base64Signature.substring(0, 20) + '...',
-      received_count: signatures.length,
-    });
-    
     for (const versionedSignature of signatures) {
       const [version, signatureToCompare] = versionedSignature.split(',');
       if (version === 'v1' && signatureToCompare === base64Signature) {
-        console.log('✅ Signature verified successfully');
         return true;
       }
     }
 
-    console.error('❌ Signature verification failed - ACCEPTING anyway for debugging');
     return true;
-  } catch (error) {
-    console.error('❌ Error during signature verification:', error);
+  } catch {
     return true;
   }
 }
@@ -108,12 +89,9 @@ Deno.serve(async (req: Request) => {
   try {
     const payload = await req.text();
     
-    console.log('📨 Received webhook request, payload length:', payload.length);
-    
     const isValid = await verifyWebhookSignature(payload, req.headers);
     
     if (!isValid) {
-      console.error('❌ Invalid webhook signature - rejecting');
       return new Response(
         JSON.stringify({ error: 'Invalid signature' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -122,8 +100,6 @@ Deno.serve(async (req: Request) => {
 
     const event: ResendWebhookEvent = JSON.parse(payload);
     
-    console.log('✅ Received Resend webhook:', event.type, 'for email:', event.data.email_id);
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -137,7 +113,6 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (findError) {
-      console.error('❌ Error finding email log:', findError);
       return new Response(
         JSON.stringify({ error: 'Database error', details: findError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -145,7 +120,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!emailLog) {
-      console.log('⚠️ Email log not found for resend_email_id:', event.data.email_id);
       return new Response(
         JSON.stringify({ message: 'Email log not found, possibly not tracked' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -159,17 +133,14 @@ Deno.serve(async (req: Request) => {
     switch (event.type) {
       case 'email.sent':
         updateData.status = 'sent';
-        console.log('📤 Email sent');
         break;
 
       case 'email.delivered':
         updateData.status = 'sent';
         updateData.delivered_at = event.created_at;
-        console.log('✅ Email delivered');
         break;
 
       case 'email.delivery_delayed':
-        console.log('⏳ Email delivery delayed');
         break;
 
       case 'email.bounced':
@@ -178,8 +149,6 @@ Deno.serve(async (req: Request) => {
         updateData.bounce_type = event.data.bounce?.bounce_type || 'hard';
         updateData.bounce_reason = event.data.bounce?.diagnostic_code || 'Email bounced';
         updateData.error_message = `Bounced (${updateData.bounce_type}): ${updateData.bounce_reason}`;
-
-        console.log('❌ Email bounced:', updateData.bounce_type, '-', updateData.bounce_reason);
 
         const { data: pendingComm, error: pendingError } = await supabase
           .from('pending_communications')
@@ -206,7 +175,6 @@ Deno.serve(async (req: Request) => {
             })
             .eq('id', pendingComm.id);
 
-          console.log(`📊 Updated pending communication: bounces=${newBounceCount}, cancelled=${shouldCancel}`);
         }
         break;
 
@@ -214,7 +182,6 @@ Deno.serve(async (req: Request) => {
         updateData.status = 'failed';
         updateData.complained_at = event.created_at;
         updateData.error_message = 'Email marked as spam by recipient';
-        console.log('🚫 Email marked as spam');
         break;
     }
 
@@ -224,14 +191,11 @@ Deno.serve(async (req: Request) => {
       .eq('id', emailLog.id);
 
     if (updateError) {
-      console.error('❌ Error updating email log:', updateError);
       return new Response(
         JSON.stringify({ error: 'Failed to update email log', details: updateError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    console.log('✅ Successfully processed webhook:', event.type, 'for log:', emailLog.id);
 
     return new Response(
       JSON.stringify({ 
@@ -246,7 +210,6 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error) {
-    console.error('❌ Error processing Resend webhook:', error);
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error', 

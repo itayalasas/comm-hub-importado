@@ -27,8 +27,6 @@ Deno.serve(async (req: Request) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log('[view-pdf] Looking up token:', token);
-
     const { data: link, error: linkError } = await supabase
       .from('public_pdf_links')
       .select('*, pdf_generation_logs(*)')
@@ -37,7 +35,6 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (linkError || !link) {
-      console.error('[view-pdf] Link not found or error:', linkError);
       return new Response(
         '<html><body><h1>Link Not Found</h1><p>This PDF link is invalid or has been deactivated.</p></body></html>',
         { status: 404, headers: { 'Content-Type': 'text/html' } }
@@ -45,7 +42,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (link.expires_at && new Date(link.expires_at) < new Date()) {
-      console.log('[view-pdf] Link expired:', link.expires_at);
       return new Response(
         '<html><body><h1>Link Expired</h1><p>This PDF link has expired.</p></body></html>',
         { status: 410, headers: { 'Content-Type': 'text/html' } }
@@ -54,7 +50,6 @@ Deno.serve(async (req: Request) => {
 
     const pdfLog = link.pdf_generation_logs;
     if (!pdfLog || !pdfLog.pdf_base64) {
-      console.error('[view-pdf] PDF data not found');
       return new Response(
         '<html><body><h1>PDF Not Available</h1><p>The PDF file is no longer available.</p></body></html>',
         { status: 404, headers: { 'Content-Type': 'text/html' } }
@@ -68,8 +63,6 @@ Deno.serve(async (req: Request) => {
         last_viewed_at: new Date().toISOString(),
       })
       .eq('id', link.id);
-
-    console.log('[view-pdf] Serving PDF:', link.filename, 'view_count:', link.view_count + 1);
 
     const pdfBuffer = Uint8Array.from(atob(pdfLog.pdf_base64), c => c.charCodeAt(0));
 
@@ -88,7 +81,6 @@ Deno.serve(async (req: Request) => {
       },
     });
   } catch (error: any) {
-    console.error('[view-pdf] Error:', error);
     return new Response(
       '<html><body><h1>Error</h1><p>An error occurred while retrieving the PDF.</p></body></html>',
       { status: 500, headers: { 'Content-Type': 'text/html' } }

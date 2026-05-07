@@ -72,8 +72,8 @@ export const useSubscriptionLimits = () => {
 
       if (error) throw error;
       setApplicationCount(count ?? 0);
-    } catch (error) {
-      console.error('Error loading application count:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -92,8 +92,8 @@ export const useSubscriptionLimits = () => {
 
       if (error) throw error;
       setTemplateCount(count ?? 0);
-    } catch (error) {
-      console.error('Error loading template count:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -117,8 +117,8 @@ export const useSubscriptionLimits = () => {
 
       if (error) throw error;
       setEmailsThisMonth(count ?? 0);
-    } catch (error) {
-      console.error('Error loading email count:', error);
+    } catch {
+      // ignore
     }
   };
 
@@ -143,8 +143,8 @@ export const useSubscriptionLimits = () => {
 
       if (error) throw error;
       setPdfsThisMonth(count ?? 0);
-    } catch (error) {
-      console.error('Error loading PDF count:', error);
+    } catch {
+      // ignore
     }
   };
 

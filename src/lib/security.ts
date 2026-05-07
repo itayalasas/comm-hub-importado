@@ -25,8 +25,7 @@ export async function verifyApplicationOwnership(
     if (tenantId && data.tenant_id && data.tenant_id === tenantId) return true;
 
     return false;
-  } catch (error) {
-    console.error('Error in verifyApplicationOwnership:', error);
+  } catch {
     return false;
   }
 }

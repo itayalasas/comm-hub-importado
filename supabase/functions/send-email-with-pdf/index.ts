@@ -141,10 +141,6 @@ Deno.serve(async (req: Request) => {
     const emailData: Record<string, any> = emailSection.data ?? {};
     const pdfData: Record<string, any> = attachmentSection.data ?? {};
 
-    console.log('[send-email-with-pdf] recipient:', recipient_email);
-    console.log('[send-email-with-pdf] email template:', emailSection.template_name);
-    console.log('[send-email-with-pdf] pdf template:', attachmentSection.pdf_template_name);
-
     // ── Load email credentials ─────────────────────────────────────────────────
     const { data: credentials } = await supabase
       .from('email_credentials')
@@ -167,7 +163,6 @@ Deno.serve(async (req: Request) => {
         from_email: 'noreply@sendcraft.net',
         from_name: 'SendCraft',
       };
-      console.log('[send-email-with-pdf] Using platform default credentials');
     }
 
     const providerType: string = effectiveCredentials.provider_type || 'resend';
@@ -205,7 +200,6 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Generate PDF ──────────────────────────────────────────────────────────
-    console.log('[send-email-with-pdf] Generating PDF...');
     const processedPdfData = await processQrCodes(pdfData);
     const mergedPdfData = { ...processedPdfData, data: processedPdfData };
     const renderedPdfHtml = renderTemplate(pdfTemplate.html_content, mergedPdfData);
@@ -214,8 +208,6 @@ Deno.serve(async (req: Request) => {
     const pdfFilename = generateFilename(filenamePattern, mergedPdfData);
 
     const { base64: pdfBase64, sizeBytes: pdfSizeBytes } = await renderHtmlToPdfBase64(renderedPdfHtml, { title: pdfFilename });
-    console.log('[send-email-with-pdf] PDF generated, size:', pdfSizeBytes, 'bytes');
-
     // ── Store PDF generation log ──────────────────────────────────────────────
     const { data: pdfLog } = await supabase
       .from('pdf_generation_logs')
@@ -334,8 +326,6 @@ Deno.serve(async (req: Request) => {
     const fromEmail = effectiveCredentials.from_email;
     const fromName = effectiveCredentials.from_name || application.name || 'SendCraft';
 
-    console.log('[send-email-with-pdf] Sending via', providerType, 'from', fromEmail);
-
     let resendEmailId: string | null = null;
 
     if (providerType === 'smtp') {
@@ -362,7 +352,6 @@ Deno.serve(async (req: Request) => {
 
       await client.send(emailConfig);
       await client.close();
-      console.log('[send-email-with-pdf] Sent via SMTP');
     } else {
       const resendApiKey = effectiveCredentials.resend_api_key || Deno.env.get('RESEND_API_KEY')!;
 
@@ -393,7 +382,6 @@ Deno.serve(async (req: Request) => {
       }
 
       resendEmailId = resendBody.id;
-      console.log('[send-email-with-pdf] Sent via Resend, id:', resendEmailId);
     }
 
     // ── Update email log to sent ──────────────────────────────────────────────
@@ -427,7 +415,6 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error: any) {
-    console.error('[send-email-with-pdf] Error:', error);
     return new Response(
       JSON.stringify({ success: false, error: 'Failed to send email', details: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

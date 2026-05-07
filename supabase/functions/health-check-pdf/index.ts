@@ -9,14 +9,7 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req: Request) => {
-  console.log('[health-check-pdf] Request received:', {
-    method: req.method,
-    url: req.url,
-    headers: Object.fromEntries(req.headers.entries()),
-  });
-
   if (req.method === "OPTIONS") {
-    console.log('[health-check-pdf] Responding to OPTIONS');
     return new Response(null, {
       status: 200,
       headers: corsHeaders,
@@ -24,7 +17,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    console.log('[health-check-pdf] Starting health check');
     const start = Date.now();
 
     const pdfResult = await renderHtmlToPdfBase64('<h1>Health Check</h1><p>Gotenberg renderer operational</p>', {
@@ -40,8 +32,6 @@ Deno.serve(async (req: Request) => {
       timestamp: new Date().toISOString(),
     };
 
-    console.log('[health-check-pdf] Sending success response:', responseData);
-
     return new Response(
       JSON.stringify(responseData),
       {
@@ -53,16 +43,12 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error('[health-check-pdf] Error occurred:', error);
-
     const errorData = {
       status: 'down',
       responseTime: 0,
       error: error instanceof Error ? error.message : 'Unknown error',
       timestamp: new Date().toISOString(),
     };
-
-    console.log('[health-check-pdf] Sending error response:', errorData);
 
     return new Response(
       JSON.stringify(errorData),

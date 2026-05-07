@@ -12,8 +12,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    console.log('[complete-pending] Request received');
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -53,25 +51,17 @@ Deno.serve(async (req: Request) => {
 
     const mergedData = { ...pendingComm.base_data, ...completed_data };
 
-    console.log('[complete-pending] Status:', pendingComm.status);
-    console.log('[complete-pending] Has PDF attachment:', !!pendingComm.completed_data?.pdf_attachment);
-
     if (pendingComm.status === 'waiting_data') {
       await supabase.from('pending_communications').update({
         completed_data: mergedData,
         status: 'data_received',
         completed_at: new Date().toISOString(),
       }).eq('id', pendingComm.id);
-      console.log('[complete-pending] Status updated to data_received');
     }
-
-    console.log('[complete-pending] Sending email...');
 
     const sendEmailUrl = supabaseUrl + '/functions/v1/send-email';
 
     try {
-      console.log('[complete-pending] completed_data:', JSON.stringify(pendingComm.completed_data));
-
       const pdfEmailLogId = pendingComm.completed_data?.pdf_email_log_id || pendingComm.completed_data?.pdf_generation_log_id;
 
       const pdfInfo = {
@@ -80,9 +70,6 @@ Deno.serve(async (req: Request) => {
         pdf_filename: pendingComm.completed_data?.pdf_filename,
         pdf_size_bytes: pendingComm.completed_data?.pdf_size_bytes,
       };
-
-      console.log('[complete-pending] PDF info:', JSON.stringify(pdfInfo));
-      console.log('[complete-pending] PDF email_log_id:', pdfEmailLogId);
 
       const requestBody: any = {
         template_name: pendingComm.template_name,
@@ -96,9 +83,6 @@ Deno.serve(async (req: Request) => {
         _existing_log_id: pendingComm.parent_log_id,
       };
 
-      console.log('[complete-pending] Reusing parent log ID:', pendingComm.parent_log_id);
-      console.log('[complete-pending] PDF will be fetched using email_log_id:', pdfEmailLogId);
-
       const emailResponse = await fetch(sendEmailUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
@@ -110,7 +94,6 @@ Deno.serve(async (req: Request) => {
       try {
         emailResult = emailResponseText ? JSON.parse(emailResponseText) : {};
       } catch {
-        console.error('[complete-pending] Invalid JSON from send-email:', emailResponseText.slice(0, 300));
         throw new Error(`Invalid JSON response from send-email (${emailResponse.status})`);
       }
 
@@ -122,7 +105,6 @@ Deno.serve(async (req: Request) => {
         }).eq('id', pendingComm.id);
 
         if (pendingComm.parent_log_id) {
-          console.log('[complete-pending] Updating parent email log to sent:', pendingComm.parent_log_id);
           await supabase.from('email_logs').update({
             status: 'sent',
             sent_at: new Date().toISOString(),
@@ -141,9 +123,7 @@ Deno.serve(async (req: Request) => {
                 log_id: emailResult.log_id,
               }),
             });
-          } catch (webhookError) {
-            console.error('[complete-pending] Webhook error:', webhookError);
-          }
+          } catch { }
         }
 
         return new Response(JSON.stringify({
@@ -153,7 +133,6 @@ Deno.serve(async (req: Request) => {
           log_id: emailResult.log_id,
         }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } else {
-        console.error('[complete-pending] Email send failed:', emailResult);
         await supabase.from('pending_communications').update({
           status: 'failed',
           error_message: emailResult.error || 'Failed to send email',
@@ -161,12 +140,10 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ success: false, error: 'Failed to send email', details: emailResult.error }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     } catch (sendError: any) {
-      console.error('[complete-pending] Error:', sendError);
       await supabase.from('pending_communications').update({ status: 'failed', error_message: sendError.message }).eq('id', pendingComm.id);
       return new Response(JSON.stringify({ success: false, error: 'Error sending email', details: sendError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
   } catch (error: any) {
-    console.error('[complete-pending] Error:', error);
     return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
