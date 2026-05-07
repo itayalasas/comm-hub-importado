@@ -4,18 +4,12 @@ import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  Mail,
-  FileText,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  TrendingUp,
-  Activity,
-  Server,
-  Zap,
-  ArrowRight,
-  RefreshCw,
+  Mail, FileText, CheckCircle2, XCircle, Clock, TrendingUp,
+  Activity, Server, Zap, ArrowRight, RefreshCw, Eye, AlertTriangle,
+  MousePointerClick,
 } from 'lucide-react';
+
+/* ── Types ───────────────────────────────────────────────────────── */
 
 interface Stats {
   totalEmails: number;
@@ -23,13 +17,13 @@ interface Stats {
   failedEmails: number;
   pendingEmails: number;
   totalPdfs: number;
-  successRate: number;
+  openedEmails: number;
+  clickedEmails: number;
+  deliveredEmails: number;
+  bouncedEmails: number;
 }
 
-interface Application {
-  id: string;
-  name: string;
-}
+interface Application { id: string; name: string; }
 
 interface RecentActivity {
   id: string;
@@ -47,19 +41,160 @@ interface ServiceStatus {
   message?: string;
 }
 
+interface DailyCount { date: string; sent: number; failed: number; }
+
+/* ── Sparkline (simple SVG area chart) ──────────────────────────── */
+
+const Sparkline = ({
+  data,
+  color = '#22d3ee',
+  height = 60,
+  fill = true,
+}: {
+  data: number[];
+  color?: string;
+  height?: number;
+  fill?: boolean;
+}) => {
+  if (!data.length) return null;
+  const w = 300;
+  const h = height;
+  const pad = 4;
+  const max = Math.max(...data, 1);
+  const pts = data.map((v, i) => {
+    const x = pad + (i / (data.length - 1)) * (w - pad * 2);
+    const y = h - pad - (v / max) * (h - pad * 2);
+    return `${x},${y}`;
+  });
+  const polyline = pts.join(' ');
+  const lastPt = pts[pts.length - 1];
+  const firstPt = pts[0];
+  const fillPath = `M${firstPt} L${polyline.split(' ').slice(1).join(' ')} L${lastPt.split(',')[0]},${h - pad} L${pad},${h - pad} Z`;
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height }}>
+      {fill && (
+        <defs>
+          <linearGradient id={`sg-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+      )}
+      {fill && <path d={fillPath} fill={`url(#sg-${color.replace('#', '')})`} />}
+      <polyline
+        points={polyline}
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {data.map((_, i) => {
+        const [x, y] = pts[i].split(',');
+        return (
+          <circle key={i} cx={x} cy={y} r="3" fill={color} opacity={i === data.length - 1 ? 1 : 0.4} />
+        );
+      })}
+    </svg>
+  );
+};
+
+/* ── Bar chart (daily volumes) ───────────────────────────────────── */
+
+const BarChart = ({ data }: { data: DailyCount[] }) => {
+  const maxVal = Math.max(...data.map(d => d.sent + d.failed), 1);
+  return (
+    <div className="flex items-end gap-px h-28 w-full">
+      {data.map((d, i) => {
+        const total = d.sent + d.failed;
+        const sentH = (d.sent / maxVal) * 100;
+        const failH = (d.failed / maxVal) * 100;
+        return (
+          <div
+            key={i}
+            className="group relative flex flex-col justify-end flex-1"
+            style={{ height: '100%' }}
+            title={`${d.date}: ${d.sent} enviados, ${d.failed} fallidos`}
+          >
+            <div className="flex flex-col justify-end h-full gap-px">
+              {failH > 0 && (
+                <div
+                  className="w-full rounded-t-[2px] bg-red-500/60 group-hover:bg-red-400/80 transition-colors"
+                  style={{ height: `${failH}%` }}
+                />
+              )}
+              <div
+                className="w-full rounded-t-[2px] bg-cyan-500/70 group-hover:bg-cyan-400 transition-colors"
+                style={{ height: `${sentH}%`, minHeight: total > 0 ? 2 : 0 }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/* ── Donut ring ─────────────────────────────────────────────────── */
+
+const DonutRing = ({ pct, color, size = 72 }: { pct: number; color: string; size?: number }) => {
+  const r = (size - 10) / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = (pct / 100) * circ;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
+      <circle
+        cx={size / 2} cy={size / 2} r={r}
+        fill="none" stroke={color} strokeWidth="8"
+        strokeDasharray={`${dash} ${circ - dash}`}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        style={{ transition: 'stroke-dasharray 0.6s ease' }}
+      />
+    </svg>
+  );
+};
+
+/* ── Stat card ───────────────────────────────────────────────────── */
+
+const StatCard = ({
+  icon: Icon, label, value, sub, color, trend,
+}: {
+  icon: any; label: string; value: string | number; sub?: string; color: string; trend?: string;
+}) => (
+  <div className={`bg-slate-800/50 backdrop-blur-sm rounded-xl border p-5 flex flex-col gap-3 ${color}`}>
+    <div className="flex items-center justify-between">
+      <Icon className="w-5 h-5 opacity-80" />
+      {trend && (
+        <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400">
+          <TrendingUp className="w-3 h-3" />
+          {trend}
+        </span>
+      )}
+    </div>
+    <div>
+      <div className="text-2xl font-extrabold text-white">{value}</div>
+      <div className="text-xs text-slate-400 mt-0.5">{label}</div>
+      {sub && <div className="text-xs text-slate-500 mt-0.5">{sub}</div>}
+    </div>
+  </div>
+);
+
+/* ── Main component ──────────────────────────────────────────────── */
+
 export const Dashboard = () => {
   const { user, refreshSubscription } = useAuth();
   const navigate = useNavigate();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({
-    totalEmails: 0,
-    sentEmails: 0,
-    failedEmails: 0,
-    pendingEmails: 0,
-    totalPdfs: 0,
-    successRate: 0,
+    totalEmails: 0, sentEmails: 0, failedEmails: 0, pendingEmails: 0,
+    totalPdfs: 0, openedEmails: 0, clickedEmails: 0, deliveredEmails: 0, bouncedEmails: 0,
   });
+  const [dailyData, setDailyData] = useState<DailyCount[]>([]);
+  const [weeklyActivity, setWeeklyActivity] = useState<number[]>([]);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,44 +202,31 @@ export const Dashboard = () => {
   const [mpPlanName, setMpPlanName] = useState<string | null>(null);
   const mpHandled = useRef(false);
 
-  // Detect MP subscription callback params and refresh session
   useEffect(() => {
     if (mpHandled.current) return;
     const params = new URLSearchParams(window.location.search);
     const subscriptionId = params.get('subscription_id');
     const planName = params.get('plan_name');
-
     if (!subscriptionId) return;
-
     mpHandled.current = true;
     setMpPlanName(planName);
     setMpActivating(true);
-
-    // Clean URL immediately so params don't persist on refresh
     window.history.replaceState({}, '', window.location.pathname);
-
-    // Give MP backend a moment to process, then refresh our session
     const timer = setTimeout(async () => {
       await refreshSubscription();
       setMpActivating(false);
     }, 2500);
-
     return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      loadApplications();
-    }
-  }, [user]);
-
+  useEffect(() => { if (user) loadApplications(); }, [user]);
   useEffect(() => {
     if (selectedApp) {
       loadStats();
       loadRecentActivity();
+      loadChartData();
     }
   }, [selectedApp]);
-
   useEffect(() => {
     checkServiceHealth();
     const interval = setInterval(checkServiceHealth, 60000);
@@ -114,249 +236,164 @@ export const Dashboard = () => {
   const loadApplications = async () => {
     try {
       if (!user?.sub) return;
-
       const { data: prefs } = await supabase
-        .from('user_preferences')
-        .select('default_application_id')
-        .eq('user_id', user.sub)
-        .maybeSingle();
-
-      // Filter by tenant when available so all users in the same tenant share apps
-      const appsQuery = supabase
-        .from('applications')
-        .select('id, name')
-        .order('created_at', { ascending: false });
-
-      const { data, error } = await (
-        user.tenant_id
-          ? appsQuery.eq('tenant_id', user.tenant_id)
-          : appsQuery.eq('user_id', user.sub)
-      );
-
+        .from('user_preferences').select('default_application_id')
+        .eq('user_id', user.sub).maybeSingle();
+      const appsQuery = supabase.from('applications').select('id, name').order('created_at', { ascending: false });
+      const { data, error } = await (user.tenant_id ? appsQuery.eq('tenant_id', user.tenant_id) : appsQuery.eq('user_id', user.sub));
       if (error) throw error;
-
       setApplications(data || []);
-
-      if (prefs?.default_application_id) {
-        setSelectedApp(prefs.default_application_id);
-      } else if (data && data.length > 0) {
-        setSelectedApp(data[0].id);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
+      if (prefs?.default_application_id) setSelectedApp(prefs.default_application_id);
+      else if (data && data.length > 0) setSelectedApp(data[0].id);
+    } catch { } finally { setLoading(false); }
   };
 
   const loadStats = async () => {
     if (!selectedApp) return;
-
     try {
       const { data: logs, error } = await supabase
         .from('email_logs')
-        .select('status, communication_type')
+        .select('status, communication_type, opened_at, clicked_at, delivery_status, bounce_type')
         .eq('application_id', selectedApp);
+      if (error) throw error;
+      const all = logs || [];
+      const totalEmails = all.length;
+      const sentEmails = all.filter(l => l.status === 'sent').length;
+      const failedEmails = all.filter(l => l.status === 'failed').length;
+      const pendingEmails = all.filter(l => l.status === 'pending').length;
+      const totalPdfs = all.filter(l => l.communication_type === 'pdf_generation').length;
+      const openedEmails = all.filter(l => l.opened_at).length;
+      const clickedEmails = all.filter(l => l.clicked_at).length;
+      const deliveredEmails = all.filter(l => l.delivery_status === 'delivered').length;
+      const bouncedEmails = all.filter(l => l.bounce_type).length;
+      setStats({ totalEmails, sentEmails, failedEmails, pendingEmails, totalPdfs, openedEmails, clickedEmails, deliveredEmails, bouncedEmails });
+    } catch { }
+  };
 
+  const loadChartData = async () => {
+    if (!selectedApp) return;
+    try {
+      const since = new Date();
+      since.setDate(since.getDate() - 29);
+      const { data, error } = await supabase
+        .from('email_logs')
+        .select('status, created_at')
+        .eq('application_id', selectedApp)
+        .gte('created_at', since.toISOString())
+        .order('created_at', { ascending: true });
       if (error) throw error;
 
-      const totalEmails = logs?.length || 0;
-      const sentEmails = logs?.filter(l => l.status === 'sent').length || 0;
-      const failedEmails = logs?.filter(l => l.status === 'failed').length || 0;
-      const pendingEmails = logs?.filter(l => l.status === 'pending').length || 0;
-      const totalPdfs = logs?.filter(l => l.communication_type === 'pdf_generation').length || 0;
-      const successRate = totalEmails > 0 ? Math.round((sentEmails / totalEmails) * 100) : 0;
-
-      setStats({
-        totalEmails,
-        sentEmails,
-        failedEmails,
-        pendingEmails,
-        totalPdfs,
-        successRate,
+      // Build 30-day buckets
+      const buckets: Record<string, DailyCount> = {};
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        buckets[key] = { date: key, sent: 0, failed: 0 };
+      }
+      (data || []).forEach(row => {
+        const key = new Date(row.created_at).toISOString().slice(0, 10);
+        if (buckets[key]) {
+          if (row.status === 'sent') buckets[key].sent++;
+          else if (row.status === 'failed') buckets[key].failed++;
+        }
       });
-    } catch {
-      // ignore
-    }
+      setDailyData(Object.values(buckets));
+
+      // Weekly activity (last 7 days)
+      const weekly = Object.values(buckets).slice(-7).map(d => d.sent + d.failed);
+      setWeeklyActivity(weekly);
+    } catch { }
   };
 
   const loadRecentActivity = async () => {
     if (!selectedApp) return;
-
     try {
       const { data, error } = await supabase
         .from('email_logs')
         .select('id, recipient_email, subject, status, created_at, communication_type')
         .eq('application_id', selectedApp)
         .order('created_at', { ascending: false })
-        .limit(5);
-
+        .limit(6);
       if (error) throw error;
       setRecentActivity(data || []);
-    } catch {
-      // ignore
-    }
+    } catch { }
   };
 
   const checkServiceHealth = async () => {
     const healthChecks: ServiceStatus[] = [
-      { name: 'API', status: 'down', responseTime: 0, message: '' },
-      { name: 'Base de Datos', status: 'down', responseTime: 0, message: '' },
-      { name: 'Email Service', status: 'down', responseTime: 0, message: '' },
-      { name: 'PDF Generator', status: 'down', responseTime: 0, message: '' },
+      { name: 'API', status: 'down', responseTime: 0 },
+      { name: 'Base de Datos', status: 'down', responseTime: 0 },
+      { name: 'Email Service', status: 'down', responseTime: 0 },
+      { name: 'PDF Generator', status: 'down', responseTime: 0 },
     ];
 
-    const parseFunctionData = (rawData: unknown) => {
-      if (rawData && typeof rawData === 'object') {
-        return rawData as Record<string, any>;
-      }
-
-      if (typeof rawData === 'string') {
-        try {
-          return JSON.parse(rawData) as Record<string, any>;
-        } catch {
-          throw new Error('Respuesta inválida del health check');
-        }
-      }
-
-      throw new Error('Respuesta vacía del health check');
+    const parse = (raw: unknown) => {
+      if (raw && typeof raw === 'object') return raw as Record<string, any>;
+      if (typeof raw === 'string') return JSON.parse(raw) as Record<string, any>;
+      throw new Error('Empty response');
     };
 
     try {
-      const start = Date.now();
+      const t = Date.now();
       const { error } = await supabase.from('applications').select('id').limit(1);
-      const responseTime = Date.now() - start;
-
+      const rt = Date.now() - t;
       if (error) {
-        healthChecks[0].status = 'degraded';
-        healthChecks[0].responseTime = responseTime;
-        healthChecks[1].status = 'degraded';
-        healthChecks[1].responseTime = responseTime;
+        healthChecks[0].status = 'degraded'; healthChecks[0].responseTime = rt;
+        healthChecks[1].status = 'degraded'; healthChecks[1].responseTime = rt;
       } else {
-        healthChecks[0].status = 'operational';
-        healthChecks[0].responseTime = responseTime;
-        healthChecks[1].status = 'operational';
-        healthChecks[1].responseTime = Math.floor(responseTime / 3);
+        healthChecks[0].status = 'operational'; healthChecks[0].responseTime = rt;
+        healthChecks[1].status = 'operational'; healthChecks[1].responseTime = Math.floor(rt / 3);
       }
-    } catch (err: any) {
-      healthChecks[0].status = 'down';
-      healthChecks[0].responseTime = 0;
-      healthChecks[1].status = 'down';
-      healthChecks[1].responseTime = 0;
-    }
+    } catch { }
 
     try {
-      const emailStart = Date.now();
-      const { data, error } = await supabase.functions.invoke('health-check-email', {
-        method: 'GET',
-      });
-      const responseTime = Date.now() - emailStart;
-
-      if (error) {
-        throw new Error(error.message || 'Error de conexión');
-      }
-
-      const emailData = parseFunctionData(data);
-
-      if (emailData.status === 'operational' && emailData.configured) {
-        healthChecks[2].status = 'operational';
-        healthChecks[2].message = `${emailData.provider?.toUpperCase() || 'Email'} configurado`;
-      } else if (emailData.status === 'operational' && !emailData.configured) {
-        healthChecks[2].status = 'unconfigured';
-        healthChecks[2].message = 'No configurado';
-      } else if (emailData.status === 'down') {
-        healthChecks[2].status = 'down';
-        healthChecks[2].message = emailData.error || 'Servicio caído';
-      } else {
-        healthChecks[2].status = 'degraded';
-        healthChecks[2].message = 'Degradado';
-      }
-
-      healthChecks[2].responseTime = emailData.responseTime || responseTime;
-    } catch (err) {
-      healthChecks[2].status = 'down';
-      healthChecks[2].responseTime = 0;
-      healthChecks[2].message = err instanceof Error ? err.message : 'Error desconocido';
-    }
+      const t = Date.now();
+      const { data, error } = await supabase.functions.invoke('health-check-email', { method: 'GET' });
+      const rt = Date.now() - t;
+      if (error) throw error;
+      const d = parse(data);
+      healthChecks[2].status = d.status === 'operational' ? (d.configured ? 'operational' : 'unconfigured') : d.status === 'down' ? 'down' : 'degraded';
+      healthChecks[2].message = d.configured ? `${d.provider?.toUpperCase() || 'Email'} configurado` : 'No configurado';
+      healthChecks[2].responseTime = d.responseTime || rt;
+    } catch { healthChecks[2].status = 'down'; }
 
     try {
-      const pdfStart = Date.now();
-      const { data, error } = await supabase.functions.invoke('health-check-pdf', {
-        method: 'GET',
-      });
-      const responseTime = Date.now() - pdfStart;
-
-      if (error) {
-        throw new Error(error.message || 'Error de conexión');
-      }
-
-      const pdfData = parseFunctionData(data);
-
-      if (pdfData.status === 'operational' || pdfData.status === 'healthy') {
-        healthChecks[3].status = 'operational';
-      } else if (pdfData.status === 'down') {
-        healthChecks[3].status = 'down';
-        healthChecks[3].message = pdfData.error || 'Servicio caído';
-      } else {
-        healthChecks[3].status = 'degraded';
-      }
-
-      healthChecks[3].responseTime = pdfData.responseTime || responseTime;
-    } catch (err) {
-      healthChecks[3].status = 'down';
-      healthChecks[3].responseTime = 0;
-      healthChecks[3].message = err instanceof Error ? err.message : 'Error desconocido';
-    }
+      const t = Date.now();
+      const { data, error } = await supabase.functions.invoke('health-check-pdf', { method: 'GET' });
+      const rt = Date.now() - t;
+      if (error) throw error;
+      const d = parse(data);
+      healthChecks[3].status = d.status === 'operational' || d.status === 'healthy' ? 'operational' : d.status === 'down' ? 'down' : 'degraded';
+      healthChecks[3].responseTime = d.responseTime || rt;
+    } catch { healthChecks[3].status = 'down'; }
 
     setServices(healthChecks);
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'sent':
-        return <CheckCircle2 className="w-4 h-4 text-green-400" />;
-      case 'failed':
-        return <XCircle className="w-4 h-4 text-red-400" />;
-      case 'pending':
-        return <Clock className="w-4 h-4 text-yellow-400" />;
-      default:
-        return <Activity className="w-4 h-4 text-slate-400" />;
-    }
+  const getStatusColor = (s: ServiceStatus['status']) => {
+    if (s === 'operational') return 'bg-emerald-500';
+    if (s === 'degraded') return 'bg-amber-500';
+    if (s === 'down') return 'bg-red-500';
+    return 'bg-slate-500';
   };
 
-  const getStatusColor = (status: 'operational' | 'degraded' | 'down' | 'unconfigured') => {
-    switch (status) {
-      case 'operational':
-        return 'bg-green-500';
-      case 'degraded':
-        return 'bg-yellow-500';
-      case 'down':
-        return 'bg-red-500';
-      case 'unconfigured':
-        return 'bg-slate-500';
-    }
+  const formatDate = (d: string) => {
+    const diff = Date.now() - new Date(d).getTime();
+    const m = Math.floor(diff / 60000); const h = Math.floor(m / 60); const days = Math.floor(h / 24);
+    if (m < 1) return 'Ahora'; if (m < 60) return `Hace ${m}m`; if (h < 24) return `Hace ${h}h`; return `Hace ${days}d`;
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (minutes < 1) return 'Ahora';
-    if (minutes < 60) return `Hace ${minutes}m`;
-    if (hours < 24) return `Hace ${hours}h`;
-    return `Hace ${days}d`;
-  };
+  const pct = (n: number, total: number) => total > 0 ? Math.round((n / total) * 100) : 0;
+  const openRate = pct(stats.openedEmails, stats.sentEmails);
+  const clickRate = pct(stats.clickedEmails, stats.sentEmails);
+  const deliveryRate = pct(stats.deliveredEmails || stats.sentEmails, stats.totalEmails);
+  const bounceRate = pct(stats.bouncedEmails, stats.totalEmails);
+  const successRate = pct(stats.sentEmails, stats.totalEmails);
 
   if (loading) {
     return (
       <Layout currentPage="dashboard">
-        <div className="text-center py-12">
-          <div className="text-slate-400">Cargando...</div>
-        </div>
+        <div className="text-center py-12"><div className="text-slate-400">Cargando...</div></div>
       </Layout>
     );
   }
@@ -369,18 +406,21 @@ export const Dashboard = () => {
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-12 text-center">
             <Mail className="w-16 h-16 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">No tienes aplicaciones</h3>
-            <p className="text-slate-400 mb-6">
-              Crea tu primera aplicación en Configuración para empezar a ver estadísticas
-            </p>
+            <p className="text-slate-400 mb-6">Crea tu primera aplicación en Configuración para empezar a ver estadísticas</p>
           </div>
         </div>
       </Layout>
     );
   }
 
+  const dayLabels = dailyData.filter((_, i) => i % 5 === 0).map(d => {
+    const dt = new Date(d.date);
+    return `${dt.getDate()}/${dt.getMonth() + 1}`;
+  });
+
   return (
     <Layout currentPage="dashboard">
-      {/* MP subscription activation overlay */}
+      {/* MP activation overlay */}
       {mpActivating && (
         <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-6">
           <div className="relative">
@@ -391,34 +431,26 @@ export const Dashboard = () => {
           </div>
           <div className="text-center space-y-1.5">
             <p className="text-white font-semibold text-lg">Activando tu suscripción</p>
-            <p className="text-slate-400 text-sm">
-              {mpPlanName ? `Plan ${mpPlanName} · ` : ''}Actualizando tu sesión…
-            </p>
+            <p className="text-slate-400 text-sm">{mpPlanName ? `Plan ${mpPlanName} · ` : ''}Actualizando tu sesión…</p>
           </div>
           <div className="w-48 h-0.5 bg-white/5 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full animate-[loading_1.4s_ease-in-out_infinite]" style={{ width: '40%' }} />
           </div>
-          <style>{`
-            @keyframes loading {
-              0%   { transform: translateX(-200%); }
-              100% { transform: translateX(400%); }
-            }
-          `}</style>
+          <style>{`@keyframes loading { 0% { transform: translateX(-200%); } 100% { transform: translateX(400%); } }`}</style>
         </div>
       )}
 
-      <div className="space-y-4 sm:space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Dashboard</h1>
           <div className="flex flex-wrap gap-2">
             {applications.map((app) => (
               <button
                 key={app.id}
                 onClick={() => setSelectedApp(app.id)}
-                className={`px-3 sm:px-4 py-2 rounded-lg whitespace-nowrap transition-colors text-sm sm:text-base ${
-                  selectedApp === app.id
-                    ? 'bg-cyan-500 text-white'
-                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
+                className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors text-sm font-medium ${
+                  selectedApp === app.id ? 'bg-cyan-500 text-white' : 'bg-slate-800/60 text-slate-400 hover:bg-slate-700 hover:text-white'
                 }`}
               >
                 {app.name}
@@ -427,196 +459,235 @@ export const Dashboard = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-600/5 backdrop-blur-sm rounded-xl border border-cyan-500/20 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <Mail className="w-8 h-8 text-cyan-400" />
-              <div className="flex items-center space-x-1 text-green-400 text-sm">
-                <TrendingUp className="w-4 h-4" />
-                <span>{stats.successRate}%</span>
+        {/* Primary KPI row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard
+            icon={Mail} label="Emails Totales" value={stats.totalEmails}
+            sub={`${stats.pendingEmails} pendientes`} color="border-cyan-500/20 text-cyan-400"
+            trend={successRate > 0 ? `${successRate}%` : undefined}
+          />
+          <StatCard
+            icon={CheckCircle2} label="Enviados" value={stats.sentEmails}
+            color="border-emerald-500/20 text-emerald-400"
+            sub={`Tasa de envío ${successRate}%`}
+          />
+          <StatCard
+            icon={XCircle} label="Fallidos" value={stats.failedEmails}
+            color="border-red-500/20 text-red-400"
+            sub={`Rebote ${bounceRate}%`}
+          />
+          <StatCard
+            icon={FileText} label="PDFs Generados" value={stats.totalPdfs}
+            color="border-blue-500/20 text-blue-400"
+          />
+        </div>
+
+        {/* Engagement metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Open rate */}
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5 flex items-center gap-4">
+            <div className="relative flex-shrink-0">
+              <DonutRing pct={openRate} color="#22d3ee" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-sm font-bold text-white">{openRate}%</span>
               </div>
             </div>
-            <div className="text-3xl font-bold text-white mb-1">{stats.totalEmails}</div>
-            <div className="text-sm text-slate-400">Emails Totales</div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Eye className="w-4 h-4 text-cyan-400" />
+                <span className="text-sm font-semibold text-white">Tasa de Apertura</span>
+              </div>
+              <div className="text-2xl font-extrabold text-cyan-400">{stats.openedEmails}</div>
+              <div className="text-xs text-slate-500">de {stats.sentEmails} enviados</div>
+            </div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-sm rounded-xl border border-green-500/20 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <CheckCircle2 className="w-8 h-8 text-green-400" />
+          {/* Click rate */}
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5 flex items-center gap-4">
+            <div className="relative flex-shrink-0">
+              <DonutRing pct={clickRate} color="#34d399" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-sm font-bold text-white">{clickRate}%</span>
+              </div>
             </div>
-            <div className="text-3xl font-bold text-white mb-1">{stats.sentEmails}</div>
-            <div className="text-sm text-slate-400">Enviados</div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <MousePointerClick className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm font-semibold text-white">Tasa de Clics</span>
+              </div>
+              <div className="text-2xl font-extrabold text-emerald-400">{stats.clickedEmails}</div>
+              <div className="text-xs text-slate-500">de {stats.sentEmails} enviados</div>
+            </div>
           </div>
 
-          <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 backdrop-blur-sm rounded-xl border border-red-500/20 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <XCircle className="w-8 h-8 text-red-400" />
+          {/* Bounce / delivery */}
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5 flex items-center gap-4">
+            <div className="relative flex-shrink-0">
+              <DonutRing pct={deliveryRate} color="#60a5fa" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-sm font-bold text-white">{deliveryRate}%</span>
+              </div>
             </div>
-            <div className="text-3xl font-bold text-white mb-1">{stats.failedEmails}</div>
-            <div className="text-sm text-slate-400">Fallidos</div>
-          </div>
-
-          <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-sm rounded-xl border border-purple-500/20 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <FileText className="w-8 h-8 text-purple-400" />
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle className="w-4 h-4 text-blue-400" />
+                <span className="text-sm font-semibold text-white">Tasa de Entrega</span>
+              </div>
+              <div className="text-2xl font-extrabold text-blue-400">{deliveryRate}%</div>
+              <div className="text-xs text-slate-500">Rebote: {bounceRate}%</div>
             </div>
-            <div className="text-3xl font-bold text-white mb-1">{stats.totalPdfs}</div>
-            <div className="text-sm text-slate-400">PDFs Generados</div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-          <div className="lg:col-span-2 bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
-              <div className="flex items-center space-x-2">
-                <Activity className="w-5 h-5 text-cyan-400" />
-                <h2 className="text-lg sm:text-xl font-semibold text-white">Actividad Reciente</h2>
+        {/* Charts row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Bar chart — 30-day volume */}
+          <div className="lg:col-span-2 bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-semibold text-white">Volumen de Envíos</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Últimos 30 días</p>
+              </div>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-cyan-500/70 inline-block" />Enviados</span>
+                <span className="flex items-center gap-1.5 text-slate-400"><span className="w-2.5 h-2.5 rounded-sm bg-red-500/60 inline-block" />Fallidos</span>
+              </div>
+            </div>
+            {dailyData.length > 0 ? (
+              <>
+                <BarChart data={dailyData} />
+                <div className="flex justify-between mt-1.5">
+                  {dayLabels.map((l, i) => (
+                    <span key={i} className="text-[10px] text-slate-600">{l}</span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="h-28 flex items-center justify-center text-slate-600 text-sm">Sin datos aún</div>
+            )}
+          </div>
+
+          {/* Weekly sparkline */}
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
+            <div className="mb-4">
+              <h2 className="text-base font-semibold text-white">Actividad Semanal</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Últimos 7 días</p>
+            </div>
+            {weeklyActivity.some(v => v > 0) ? (
+              <>
+                <Sparkline data={weeklyActivity} color="#22d3ee" height={80} />
+                <div className="flex justify-between mt-1.5">
+                  {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d, i) => (
+                    <span key={i} className="text-[10px] text-slate-600">{d}</span>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-700/50">
+                  <div className="text-xl font-extrabold text-cyan-400">
+                    {weeklyActivity.reduce((a, b) => a + b, 0)}
+                  </div>
+                  <div className="text-xs text-slate-500">total esta semana</div>
+                </div>
+              </>
+            ) : (
+              <div className="h-28 flex items-center justify-center text-slate-600 text-sm">Sin datos esta semana</div>
+            )}
+          </div>
+        </div>
+
+        {/* Activity + Services */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Recent activity */}
+          <div className="lg:col-span-2 bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-cyan-400" />
+                <h2 className="text-base font-semibold text-white">Actividad Reciente</h2>
               </div>
               <button
                 onClick={() => navigate('/statistics')}
-                className="flex items-center justify-center space-x-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-xs"
               >
-                <span>Ver todo</span>
-                <ArrowRight className="w-4 h-4" />
+                Ver todo <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
-
-            <div className="space-y-3">
+            <div className="space-y-2">
               {recentActivity.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  No hay actividad reciente
-                </div>
-              ) : (
-                recentActivity.map((activity) => (
-                  <div
-                    key={activity.id}
-                    className="flex items-start space-x-3 p-3 bg-slate-900/50 rounded-lg hover:bg-slate-900/70 transition-colors"
-                  >
-                    <div className="mt-1">{getStatusIcon(activity.status)}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-white font-medium truncate">
-                            {activity.subject}
-                          </div>
-                          <div className="text-xs text-slate-400 truncate">
-                            {activity.recipient_email}
-                          </div>
-                        </div>
-                        <span className="text-xs text-slate-500 whitespace-nowrap ml-2">
-                          {formatDate(activity.created_at)}
-                        </span>
+                <div className="text-center py-8 text-slate-500 text-sm">No hay actividad reciente</div>
+              ) : recentActivity.map((a) => (
+                <div key={a.id} className="flex items-start gap-3 px-3 py-2.5 bg-slate-900/40 rounded-lg hover:bg-slate-900/60 transition-colors">
+                  <div className="mt-0.5 flex-shrink-0">
+                    {a.status === 'sent' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      : a.status === 'failed' ? <XCircle className="w-4 h-4 text-red-400" />
+                      : <Clock className="w-4 h-4 text-amber-400" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm text-white font-medium truncate">{a.subject}</div>
+                        <div className="text-xs text-slate-500 truncate">{a.recipient_email}</div>
                       </div>
-                      <div className="mt-1">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
-                            activity.status === 'sent'
-                              ? 'bg-green-500/20 text-green-400'
-                              : activity.status === 'failed'
-                              ? 'bg-red-500/20 text-red-400'
-                              : 'bg-yellow-500/20 text-yellow-400'
-                          }`}
-                        >
-                          {activity.status}
-                        </span>
-                        <span className="ml-2 text-xs text-slate-500">
-                          {activity.communication_type === 'pdf_generation'
-                            ? 'PDF'
-                            : activity.communication_type === 'email_with_pdf'
-                            ? 'Email + PDF'
-                            : 'Email'}
-                        </span>
-                      </div>
+                      <span className="text-xs text-slate-600 whitespace-nowrap flex-shrink-0">{formatDate(a.created_at)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                        a.status === 'sent' ? 'bg-emerald-500/15 text-emerald-400'
+                        : a.status === 'failed' ? 'bg-red-500/15 text-red-400'
+                        : 'bg-amber-500/15 text-amber-400'
+                      }`}>{a.status}</span>
+                      <span className="text-xs text-slate-600">
+                        {a.communication_type === 'pdf_generation' ? 'PDF' : a.communication_type === 'email_with_pdf' ? 'Email + PDF' : 'Email'}
+                      </span>
                     </div>
                   </div>
-                ))
-              )}
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h2 className="text-lg sm:text-xl font-semibold text-white">Estado de Servicios</h2>
-              <Server className="w-5 h-5 text-cyan-400" />
+          {/* Services */}
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-white">Estado de Servicios</h2>
+              <Server className="w-4 h-4 text-cyan-400" />
             </div>
-
             <div className="space-y-3">
-              {services.map((service, idx) => (
-                <div key={idx} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div
-                        className={`w-3 h-3 rounded-full ${getStatusColor(
-                          service.status
-                        )} ${service.status === 'operational' ? 'animate-pulse' : ''}`}
-                      />
-                      <span className="text-sm text-white font-medium">{service.name}</span>
+              {services.map((svc, i) => (
+                <div key={i} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${getStatusColor(svc.status)} ${svc.status === 'operational' ? 'animate-pulse' : ''}`} />
+                      <span className="text-white text-xs font-medium">{svc.name}</span>
                     </div>
-                    <span className="text-xs text-slate-400">
-                      {service.responseTime > 0 ? `${service.responseTime}ms` : '0ms'}
-                    </span>
+                    <span className="text-xs text-slate-500">{svc.responseTime > 0 ? `${svc.responseTime}ms` : '—'}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 h-1.5 bg-slate-700/50 rounded-full overflow-hidden mr-3">
-                      <div
-                        className={`h-full transition-all duration-500 ${
-                          service.status === 'operational'
-                            ? 'bg-green-500'
-                            : service.status === 'degraded'
-                            ? 'bg-yellow-500'
-                            : service.status === 'unconfigured'
-                            ? 'bg-slate-500'
-                            : 'bg-red-500'
-                        }`}
-                        style={{
-                          width: service.status === 'operational'
-                            ? '100%'
-                            : service.status === 'degraded'
-                            ? '60%'
-                            : service.status === 'unconfigured'
-                            ? '40%'
-                            : '20%',
-                        }}
-                      />
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1 bg-slate-700/50 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-700 ${getStatusColor(svc.status)}`}
+                        style={{ width: svc.status === 'operational' ? '100%' : svc.status === 'degraded' ? '60%' : svc.status === 'unconfigured' ? '35%' : '15%' }} />
                     </div>
-                    {service.message && (
-                      <span className={`text-xs font-medium ${
-                        service.status === 'operational' ? 'text-green-400' :
-                        service.status === 'degraded' ? 'text-yellow-400' :
-                        service.status === 'unconfigured' ? 'text-slate-400' :
-                        'text-red-400'
-                      }`}>
-                        {service.message}
-                      </span>
+                    {svc.message && (
+                      <span className={`text-[10px] font-medium whitespace-nowrap ${
+                        svc.status === 'operational' ? 'text-emerald-400'
+                        : svc.status === 'degraded' ? 'text-amber-400'
+                        : svc.status === 'unconfigured' ? 'text-slate-400'
+                        : 'text-red-400'
+                      }`}>{svc.message}</span>
                     )}
                   </div>
                 </div>
               ))}
-
-              <div className="pt-4 border-t border-slate-700">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-400">Estado General</span>
-                  <div className="flex items-center space-x-2">
+              <div className="pt-3 border-t border-slate-700/50">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500">Estado General</span>
+                  <div className="flex items-center gap-1.5">
                     {services.some(s => s.status === 'down') ? (
-                      <>
-                        <XCircle className="w-4 h-4 text-red-400" />
-                        <span className="text-red-400 font-medium">Fuera de Servicio</span>
-                      </>
+                      <><XCircle className="w-3.5 h-3.5 text-red-400" /><span className="text-red-400 font-medium">Fuera de Servicio</span></>
                     ) : services.some(s => s.status === 'degraded') ? (
-                      <>
-                        <Activity className="w-4 h-4 text-yellow-400" />
-                        <span className="text-yellow-400 font-medium">Degradado</span>
-                      </>
+                      <><Activity className="w-3.5 h-3.5 text-amber-400" /><span className="text-amber-400 font-medium">Degradado</span></>
                     ) : services.some(s => s.status === 'unconfigured') ? (
-                      <>
-                        <Activity className="w-4 h-4 text-slate-400" />
-                        <span className="text-slate-400 font-medium">Configuración Pendiente</span>
-                      </>
+                      <><Activity className="w-3.5 h-3.5 text-slate-400" /><span className="text-slate-400 font-medium">Config. Pendiente</span></>
                     ) : (
-                      <>
-                        <Zap className="w-4 h-4 text-green-400" />
-                        <span className="text-green-400 font-medium">Operacional</span>
-                      </>
+                      <><Zap className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400 font-medium">Operacional</span></>
                     )}
                   </div>
                 </div>
