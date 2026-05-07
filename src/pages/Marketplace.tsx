@@ -78,7 +78,7 @@ const CONNECTORS: ConnectorManifest[] = [
       placeholder: 'sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
       hint: 'La encontrás en Configuración → Aplicaciones → tu app',
     },
-    baseUrl: 'https://[project].supabase.co/functions/v1',
+    baseUrl: 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1',
     actions: [
       {
         id: 'send_email',
@@ -139,7 +139,7 @@ const CONNECTORS: ConnectorManifest[] = [
       placeholder: 'sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
       hint: 'La misma API Key que usás para el conector de Email',
     },
-    baseUrl: 'https://[project].supabase.co/functions/v1',
+    baseUrl: 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1',
     actions: [
       {
         id: 'send_email_with_pdf',
@@ -189,7 +189,7 @@ const CONNECTORS: ConnectorManifest[] = [
       placeholder: 'sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
       hint: 'La misma API Key de tu aplicación en SendCraft',
     },
-    baseUrl: 'https://[project].supabase.co/functions/v1',
+    baseUrl: 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1',
     actions: [
       {
         id: 'generate_pdf',
@@ -236,7 +236,7 @@ const CONNECTORS: ConnectorManifest[] = [
       placeholder: 'sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
       hint: 'Usá la misma API Key para filtrar eventos por aplicación',
     },
-    baseUrl: 'https://[project].supabase.co/functions/v1',
+    baseUrl: 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1',
     actions: [
       {
         id: 'register_webhook',
@@ -447,12 +447,23 @@ const ConnectorModal = ({
             </div>
 
             {/* Manifest JSON download hint */}
-            <div className="flex items-center gap-3 bg-slate-800/30 rounded-xl border border-slate-700/50 px-4 py-3">
-              <Globe className="w-4 h-4 text-slate-500 flex-shrink-0" />
-              <p className="text-xs text-slate-500">
-                El manifiesto JSON de este conector está disponible en{' '}
-                <code className="text-slate-400">/api/connectors/{connector.id}</code> para que tu CRM lo consuma automáticamente.
-              </p>
+            <div className="bg-slate-800/30 rounded-xl border border-slate-700/50 px-4 py-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Globe className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                <span className="text-xs font-semibold text-white">URL pública del manifiesto</span>
+              </div>
+              <div className="flex items-center gap-2 bg-slate-950/50 border border-slate-700/50 rounded-lg px-3 py-2">
+                <code className="flex-1 text-[11px] text-cyan-300 break-all">
+                  {`https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors/${connector.id}`}
+                </code>
+                <button
+                  onClick={() => copy(`https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors/${connector.id}`, 'url')}
+                  className="flex-shrink-0 text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  {copied === 'url' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-600">Tu CRM puede hacer GET a esta URL para leer el manifiesto completo y saber cómo conectarse — sin autenticación.</p>
             </div>
           </div>
         </div>
@@ -574,9 +585,18 @@ const ConnectorCard = ({
 
 /* ── Main page ─────────────────────────────────────────────────────── */
 
+const REGISTRY_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors';
+
 export const Marketplace = () => {
   const [filter, setFilter] = useState<'all' | 'email' | 'pdf' | 'automation'>('all');
   const [selected, setSelected] = useState<ConnectorManifest | null>(null);
+  const [copiedRegistry, setCopiedRegistry] = useState(false);
+
+  const copyRegistry = () => {
+    navigator.clipboard.writeText(REGISTRY_URL);
+    setCopiedRegistry(true);
+    setTimeout(() => setCopiedRegistry(false), 2000);
+  };
 
   const filtered = filter === 'all' ? CONNECTORS : CONNECTORS.filter(c => c.category === filter);
 
@@ -607,29 +627,43 @@ export const Marketplace = () => {
           </div>
         </div>
 
-        {/* How it works banner */}
-        <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-xl p-4">
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-xs font-bold text-cyan-400">1</div>
-              <span className="text-slate-300">Elegí un conector</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-slate-600 hidden sm:block" />
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-xs font-bold text-cyan-400">2</div>
-              <span className="text-slate-300">Copiá el manifiesto JSON</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-slate-600 hidden sm:block" />
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-xs font-bold text-cyan-400">3</div>
-              <span className="text-slate-300">Instalalo en tu CRM</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-slate-600 hidden sm:block" />
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-xs font-bold text-cyan-400">4</div>
-              <span className="text-slate-300">Pegá tu API Key → listo</span>
-            </div>
+        {/* Registry URL — the main integration point */}
+        <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+            <span className="text-sm font-semibold text-white">Registry público — apuntá tu CRM a esta URL</span>
           </div>
+          <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2.5">
+            <code className="flex-1 text-xs text-cyan-300 break-all">{REGISTRY_URL}</code>
+            <button
+              onClick={copyRegistry}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg text-xs font-medium transition-colors flex-shrink-0"
+            >
+              {copiedRegistry ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              {copiedRegistry ? 'Copiado' : 'Copiar'}
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-500">
+            <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-cyan-500" /><code className="text-slate-400">GET /connectors</code> lista todos los conectores</span>
+            <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-cyan-500" /><code className="text-slate-400">GET /connectors/:id</code> devuelve el manifiesto completo</span>
+            <span className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-cyan-500" />Sin autenticación — acceso público</span>
+          </div>
+        </div>
+
+        {/* How it works steps */}
+        <div className="flex flex-wrap items-center gap-3 text-sm px-1">
+          {[
+            'Tu CRM hace GET al registry',
+            'Muestra los conectores disponibles',
+            'Usuario instala y pega su API Key',
+            'Campaña dispara → tu CRM llama la API → listo',
+          ].map((step, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-[10px] font-bold text-cyan-400 flex-shrink-0">{i + 1}</div>
+              <span className="text-slate-400">{step}</span>
+              {i < 3 && <ChevronRight className="w-3.5 h-3.5 text-slate-700 hidden sm:block" />}
+            </div>
+          ))}
         </div>
 
         {/* Filters */}
