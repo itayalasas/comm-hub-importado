@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  Mail, FileText, CheckCircle2, XCircle, Clock, TrendingUp,
-  Activity, Server, Zap, ArrowRight, RefreshCw, Eye, AlertTriangle,
+  Mail, FileText, CheckCircle2, XCircle, TrendingUp,
+  Activity, Server, Zap, RefreshCw, Eye, AlertTriangle,
   MousePointerClick,
 } from 'lucide-react';
 
@@ -24,15 +23,6 @@ interface Stats {
 }
 
 interface Application { id: string; name: string; }
-
-interface RecentActivity {
-  id: string;
-  recipient_email: string;
-  subject: string;
-  status: string;
-  created_at: string;
-  communication_type: string;
-}
 
 interface ServiceStatus {
   name: string;
@@ -186,7 +176,6 @@ const StatCard = ({
 
 export const Dashboard = () => {
   const { user, refreshSubscription } = useAuth();
-  const navigate = useNavigate();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({
@@ -195,7 +184,6 @@ export const Dashboard = () => {
   });
   const [dailyData, setDailyData] = useState<DailyCount[]>([]);
   const [weeklyActivity, setWeeklyActivity] = useState<number[]>([]);
-  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [mpActivating, setMpActivating] = useState(false);
@@ -223,7 +211,6 @@ export const Dashboard = () => {
   useEffect(() => {
     if (selectedApp) {
       loadStats();
-      loadRecentActivity();
       loadChartData();
     }
   }, [selectedApp]);
@@ -305,20 +292,6 @@ export const Dashboard = () => {
     } catch { }
   };
 
-  const loadRecentActivity = async () => {
-    if (!selectedApp) return;
-    try {
-      const { data, error } = await supabase
-        .from('email_logs')
-        .select('id, recipient_email, subject, status, created_at, communication_type')
-        .eq('application_id', selectedApp)
-        .order('created_at', { ascending: false })
-        .limit(6);
-      if (error) throw error;
-      setRecentActivity(data || []);
-    } catch { }
-  };
-
   const checkServiceHealth = async () => {
     const healthChecks: ServiceStatus[] = [
       { name: 'API', status: 'down', responseTime: 0 },
@@ -368,19 +341,6 @@ export const Dashboard = () => {
     } catch { healthChecks[3].status = 'down'; }
 
     setServices(healthChecks);
-  };
-
-  const getStatusColor = (s: ServiceStatus['status']) => {
-    if (s === 'operational') return 'bg-emerald-500';
-    if (s === 'degraded') return 'bg-amber-500';
-    if (s === 'down') return 'bg-red-500';
-    return 'bg-slate-500';
-  };
-
-  const formatDate = (d: string) => {
-    const diff = Date.now() - new Date(d).getTime();
-    const m = Math.floor(diff / 60000); const h = Math.floor(m / 60); const days = Math.floor(h / 24);
-    if (m < 1) return 'Ahora'; if (m < 60) return `Hace ${m}m`; if (h < 24) return `Hace ${h}h`; return `Hace ${days}d`;
   };
 
   const pct = (n: number, total: number) => total > 0 ? Math.round((n / total) * 100) : 0;
@@ -594,105 +554,46 @@ export const Dashboard = () => {
           </div>
         </div>
 
-        {/* Activity + Services */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Recent activity */}
-          <div className="lg:col-span-2 bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-cyan-400" />
-                <h2 className="text-base font-semibold text-white">Actividad Reciente</h2>
-              </div>
-              <button
-                onClick={() => navigate('/statistics')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-xs"
-              >
-                Ver todo <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+        {/* Services — horizontal grid cards */}
+        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Server className="w-4 h-4 text-cyan-400" />
+              <h2 className="text-base font-semibold text-white">Estado de Servicios</h2>
             </div>
-            <div className="space-y-2">
-              {recentActivity.length === 0 ? (
-                <div className="text-center py-8 text-slate-500 text-sm">No hay actividad reciente</div>
-              ) : recentActivity.map((a) => (
-                <div key={a.id} className="flex items-start gap-3 px-3 py-2.5 bg-slate-900/40 rounded-lg hover:bg-slate-900/60 transition-colors">
-                  <div className="mt-0.5 flex-shrink-0">
-                    {a.status === 'sent' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      : a.status === 'failed' ? <XCircle className="w-4 h-4 text-red-400" />
-                      : <Clock className="w-4 h-4 text-amber-400" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm text-white font-medium truncate">{a.subject}</div>
-                        <div className="text-xs text-slate-500 truncate">{a.recipient_email}</div>
-                      </div>
-                      <span className="text-xs text-slate-600 whitespace-nowrap flex-shrink-0">{formatDate(a.created_at)}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                        a.status === 'sent' ? 'bg-emerald-500/15 text-emerald-400'
-                        : a.status === 'failed' ? 'bg-red-500/15 text-red-400'
-                        : 'bg-amber-500/15 text-amber-400'
-                      }`}>{a.status}</span>
-                      <span className="text-xs text-slate-600">
-                        {a.communication_type === 'pdf_generation' ? 'PDF' : a.communication_type === 'email_with_pdf' ? 'Email + PDF' : 'Email'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center gap-1.5 text-xs">
+              {services.some(s => s.status === 'down') ? (
+                <><XCircle className="w-3.5 h-3.5 text-red-400" /><span className="text-red-400 font-medium">Fuera de Servicio</span></>
+              ) : services.some(s => s.status === 'degraded') ? (
+                <><Activity className="w-3.5 h-3.5 text-amber-400" /><span className="text-amber-400 font-medium">Degradado</span></>
+              ) : services.some(s => s.status === 'unconfigured') ? (
+                <><Activity className="w-3.5 h-3.5 text-slate-400" /><span className="text-slate-400 font-medium">Config. Pendiente</span></>
+              ) : (
+                <><Zap className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400 font-medium">Operacional</span></>
+              )}
             </div>
           </div>
-
-          {/* Services */}
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-white">Estado de Servicios</h2>
-              <Server className="w-4 h-4 text-cyan-400" />
-            </div>
-            <div className="space-y-3">
-              {services.map((svc, i) => (
-                <div key={i} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${getStatusColor(svc.status)} ${svc.status === 'operational' ? 'animate-pulse' : ''}`} />
-                      <span className="text-white text-xs font-medium">{svc.name}</span>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {services.map((svc, i) => {
+              const dotColor = svc.status === 'operational' ? 'bg-emerald-500' : svc.status === 'degraded' ? 'bg-amber-500' : svc.status === 'unconfigured' ? 'bg-slate-500' : 'bg-red-500';
+              const textColor = svc.status === 'operational' ? 'text-emerald-400' : svc.status === 'degraded' ? 'text-amber-400' : svc.status === 'unconfigured' ? 'text-slate-400' : 'text-red-400';
+              const borderColor = svc.status === 'operational' ? 'border-emerald-500/20' : svc.status === 'degraded' ? 'border-amber-500/20' : svc.status === 'unconfigured' ? 'border-slate-600/40' : 'border-red-500/20';
+              const label = svc.status === 'operational' ? 'Operacional' : svc.status === 'degraded' ? 'Degradado' : svc.status === 'unconfigured' ? 'No config.' : 'Caído';
+              return (
+                <div key={i} className={`bg-slate-900/50 rounded-lg border ${borderColor} px-4 py-3 flex items-center gap-3`}>
+                  <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotColor} ${svc.status === 'operational' ? 'animate-pulse' : ''}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-white truncate">{svc.name}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`text-[10px] font-medium ${textColor}`}>{svc.message || label}</span>
+                      {svc.responseTime > 0 && (
+                        <span className="text-[10px] text-slate-600">{svc.responseTime}ms</span>
+                      )}
                     </div>
-                    <span className="text-xs text-slate-500">{svc.responseTime > 0 ? `${svc.responseTime}ms` : '—'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1 bg-slate-700/50 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all duration-700 ${getStatusColor(svc.status)}`}
-                        style={{ width: svc.status === 'operational' ? '100%' : svc.status === 'degraded' ? '60%' : svc.status === 'unconfigured' ? '35%' : '15%' }} />
-                    </div>
-                    {svc.message && (
-                      <span className={`text-[10px] font-medium whitespace-nowrap ${
-                        svc.status === 'operational' ? 'text-emerald-400'
-                        : svc.status === 'degraded' ? 'text-amber-400'
-                        : svc.status === 'unconfigured' ? 'text-slate-400'
-                        : 'text-red-400'
-                      }`}>{svc.message}</span>
-                    )}
                   </div>
                 </div>
-              ))}
-              <div className="pt-3 border-t border-slate-700/50">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Estado General</span>
-                  <div className="flex items-center gap-1.5">
-                    {services.some(s => s.status === 'down') ? (
-                      <><XCircle className="w-3.5 h-3.5 text-red-400" /><span className="text-red-400 font-medium">Fuera de Servicio</span></>
-                    ) : services.some(s => s.status === 'degraded') ? (
-                      <><Activity className="w-3.5 h-3.5 text-amber-400" /><span className="text-amber-400 font-medium">Degradado</span></>
-                    ) : services.some(s => s.status === 'unconfigured') ? (
-                      <><Activity className="w-3.5 h-3.5 text-slate-400" /><span className="text-slate-400 font-medium">Config. Pendiente</span></>
-                    ) : (
-                      <><Zap className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400 font-medium">Operacional</span></>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
       </div>
