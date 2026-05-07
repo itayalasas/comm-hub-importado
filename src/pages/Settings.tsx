@@ -217,23 +217,31 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     setGeneratedPass(pass);
   };
 
+  const embedFetch = (path: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem('access_token') || '';
+    const base = import.meta.env.VITE_SUPABASE_URL;
+    return fetch(`${base}/functions/v1/embed-credentials${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...options.headers,
+      },
+    });
+  };
+
   const loadEmbedCreds = async () => {
-    if (!user?.sub) return;
     setEmbedLoading(true);
     try {
-      const { data } = await supabase
-        .from('embed_credentials')
-        .select('id, username, label, is_active, last_used_at, created_at')
-        .eq('user_id', user.sub)
-        .order('created_at', { ascending: false });
-      setEmbedCreds(data || []);
+      const res = await embedFetch('');
+      const data = await res.json();
+      setEmbedCreds(Array.isArray(data) ? data : []);
     } finally {
       setEmbedLoading(false);
     }
   };
 
   const saveEmbedCred = async () => {
-    if (!user?.sub) return;
     if (!newEmbed.username.trim() || !newEmbed.password) {
       setNewEmbedError('Usuario y contraseña son requeridos.');
       return;
@@ -242,15 +250,18 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     setNewEmbedError('');
     try {
       const hash = await sha256(newEmbed.password);
-      const { error } = await supabase.from('embed_credentials').insert({
-        user_id: user.sub,
-        username: newEmbed.username.trim(),
-        password_hash: hash,
-        label: newEmbed.label.trim() || newEmbed.username.trim(),
+      const res = await embedFetch('', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: newEmbed.username.trim(),
+          password_hash: hash,
+          label: newEmbed.label.trim() || newEmbed.username.trim(),
+        }),
       });
-      if (error) {
-        if (error.code === '23505') setNewEmbedError('Ese nombre de usuario ya existe.');
-        else throw error;
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.error === 'username_taken') setNewEmbedError('Ese nombre de usuario ya existe.');
+        else setNewEmbedError('Error al guardar. Intentá de nuevo.');
         return;
       }
       setShowEmbedModal(false);
@@ -266,13 +277,16 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
   };
 
   const deleteEmbedCred = async (id: string) => {
-    await supabase.from('embed_credentials').delete().eq('id', id);
+    await embedFetch(`/${id}`, { method: 'DELETE' });
     setEmbedCreds(prev => prev.filter(c => c.id !== id));
     toast.success('Credencial eliminada');
   };
 
   const toggleEmbedCred = async (id: string, current: boolean) => {
-    await supabase.from('embed_credentials').update({ is_active: !current }).eq('id', id);
+    await embedFetch(`/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: !current }),
+    });
     setEmbedCreds(prev => prev.map(c => c.id === id ? { ...c, is_active: !current } : c));
   };
 
