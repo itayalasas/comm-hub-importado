@@ -5,7 +5,6 @@ import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
-import { usePlans } from '../hooks/usePlans';
 import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link } from 'lucide-react';
 
 interface Application {
@@ -52,9 +51,8 @@ export const Settings = () => {
   const canUseSmtp = hasFeature('configuracion_smtp');
   const canUseResend = hasFeature('acceso_api_resend');
   const [copiedReturnUrl, setCopiedReturnUrl] = useState(false);
-  const { plans } = usePlans();
-  // back_url is set by the subscription service on the plan — grab it from the first paid plan
-  const subscriptionReturnUrl = plans.find(p => p.mercadopago?.back_url)?.mercadopago?.back_url ?? '';
+  // Build the return URL dynamically from the current app origin so it works on any domain/environment
+  const subscriptionReturnUrl = `${window.location.origin}/dashboard`;
   const [formData, setFormData] = useState<EmailCredentials>({
     provider_type: 'smtp',
     smtp_host: '',
