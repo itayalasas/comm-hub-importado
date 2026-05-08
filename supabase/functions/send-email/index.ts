@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { resendFetchWithRetry } from './_shared/resend-client.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -325,7 +326,7 @@ Deno.serve(async (req: Request) => {
           }];
         }
 
-        const resendResponse = await fetch('https://api.resend.com/emails', {
+        const resendResponse = await resendFetchWithRetry('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${resendApiKey}`,
@@ -334,12 +335,11 @@ Deno.serve(async (req: Request) => {
           body: JSON.stringify(resendPayload),
         });
 
-        if (!resendResponse.ok) {
-          const errorData = await resendResponse.json();
-          throw new Error(`Resend API error: ${errorData.message || resendResponse.statusText}`);
-        }
-
         const resendData = await resendResponse.json();
+
+        if (!resendResponse.ok) {
+          throw new Error(`Resend API error: ${resendData.message || resendResponse.statusText}`);
+        }
 
         await supabase.from('email_logs').update({
           status: 'sent',

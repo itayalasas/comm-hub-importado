@@ -33,6 +33,9 @@ interface NotifyRequest {
   options?: {
     concurrency?: number;
     stop_on_error?: boolean;
+    batch_delay_ms?: number;
+    max_retries?: number;
+    retry_delay_ms?: number;
   };
 }
 
@@ -44,6 +47,14 @@ interface RecipientResult {
   error?: string;
 }
 
+const DEFAULT_NOTIFY_OPTIONS = {
+  concurrency: 1,
+  stop_on_error: false,
+  batch_delay_ms: 5000,
+  max_retries: 5,
+  retry_delay_ms: 5000,
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function mergeData(
@@ -51,6 +62,32 @@ function mergeData(
   recipient: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
   return { ...shared, ...(recipient ?? {}) };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(error?: string) {
+  return !!error && /rate limit|429/i.test(error);
+}
+
+async function dispatchWithRetry(
+  dispatchFn: () => Promise<RecipientResult>,
+  maxRetries: number,
+  retryDelayMs: number,
+): Promise<RecipientResult> {
+  let attempt = 0;
+  let result = await dispatchFn();
+
+  while (attempt < maxRetries && result.status === 'failed' && isRateLimitError(result.error)) {
+    attempt += 1;
+    const backoffMs = retryDelayMs * Math.pow(2, attempt - 1);
+    await sleep(backoffMs + Math.floor(Math.random() * 500));
+    result = await dispatchFn();
+  }
+
+  return result;
 }
 
 async function processBatch(
@@ -185,8 +222,12 @@ async function processJob(
   supabaseUrl: string,
 ) {
   const sharedData = payload.shared_data ?? {};
-  const concurrency = Math.min(payload.options?.concurrency ?? 5, 20);
-  const stopOnError = payload.options?.stop_on_error ?? false;
+  const options = { ...DEFAULT_NOTIFY_OPTIONS, ...(payload.options ?? {}) };
+  const concurrency = Math.min(options.concurrency, 20);
+  const stopOnError = options.stop_on_error;
+  const batchDelayMs = options.batch_delay_ms;
+  const maxRetries = options.max_retries;
+  const retryDelayMs = options.retry_delay_ms;
 
   await supabase
     .from("campaign_jobs")
@@ -204,25 +245,37 @@ async function processJob(
     const batchResults = await Promise.all(
       batch.map((recipient) => {
         if (payload.type === "email") {
-          return dispatchEmail(supabaseUrl, apiKey, recipient, payload.template_name!, sharedData);
+          return dispatchWithRetry(
+            () => dispatchEmail(supabaseUrl, apiKey, recipient, payload.template_name!, sharedData),
+            maxRetries,
+            retryDelayMs,
+          );
         } else if (payload.type === "email_pdf") {
-          return dispatchEmailWithPdf(
-            supabaseUrl,
-            apiKey,
-            recipient,
-            payload.template_name!,
-            payload.attachment!.pdf_template_name,
-            payload.attachment?.filename,
-            sharedData,
+          return dispatchWithRetry(
+            () => dispatchEmailWithPdf(
+              supabaseUrl,
+              apiKey,
+              recipient,
+              payload.template_name!,
+              payload.attachment!.pdf_template_name,
+              payload.attachment?.filename,
+              sharedData,
+            ),
+            maxRetries,
+            retryDelayMs,
           );
         } else {
-          return dispatchPdf(
-            supabaseUrl,
-            apiKey,
-            recipient,
-            payload.attachment!.pdf_template_name,
-            payload.attachment?.filename,
-            sharedData,
+          return dispatchWithRetry(
+            () => dispatchPdf(
+              supabaseUrl,
+              apiKey,
+              recipient,
+              payload.attachment!.pdf_template_name,
+              payload.attachment?.filename,
+              sharedData,
+            ),
+            maxRetries,
+            retryDelayMs,
           );
         }
       }),
@@ -249,6 +302,10 @@ async function processJob(
         updated_at: new Date().toISOString(),
       })
       .eq("id", jobId);
+
+    if (i + concurrency < payload.recipients.length) {
+      await sleep(batchDelayMs);
+    }
   }
 
   await supabase
@@ -343,6 +400,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Create job record ───────────────────────────────────────────────────
+    const options = { ...DEFAULT_NOTIFY_OPTIONS, ...(payload.options ?? {}) };
     const { data: job, error: insertErr } = await supabase
       .from("campaign_jobs")
       .insert({
@@ -354,7 +412,7 @@ Deno.serve(async (req: Request) => {
         shared_data: payload.shared_data ?? {},
         recipients: payload.recipients,
         total: payload.recipients.length,
-        options: payload.options ?? {},
+        options,
         status: "pending",
       })
       .select("id")

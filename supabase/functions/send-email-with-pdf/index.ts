@@ -3,6 +3,7 @@ import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 import { renderTemplate } from './_shared/template-engine.ts';
 import { renderHtmlToPdfBase64 } from './_shared/pdf-renderer.ts';
+import { resendFetchWithRetry } from './_shared/resend-client.ts';
 
 /*
   send-email-with-pdf
@@ -366,7 +367,7 @@ Deno.serve(async (req: Request) => {
         resendPayload.attachments = [{ filename: pdfFilename, content: pdfBase64 }];
       }
 
-      const resendResponse = await fetch('https://api.resend.com/emails', {
+      const resendResponse = await resendFetchWithRetry('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${resendApiKey}`,
