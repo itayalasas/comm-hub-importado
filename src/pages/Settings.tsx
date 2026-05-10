@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/db';
+import { configManager } from '../lib/config';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
@@ -100,8 +101,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     try {
       const token = localStorage.getItem('access_token') || '';
       if (!token) return;
-      const supabaseUrl = 'https://ffihaeatoundrjzgtpzk.supabase.co';
-      await fetch(`${supabaseUrl}/functions/v1/provision-default-email`, {
+      await fetch(`${configManager.supabaseFunctionsUrl}/provision-default-email`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -218,8 +218,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
 
   const embedFetch = (path: string, options: RequestInit = {}) => {
     const token = localStorage.getItem('access_token') || '';
-    const base = 'https://ffihaeatoundrjzgtpzk.supabase.co';
-    return fetch(`${base}/functions/v1/embed-credentials${path}`, {
+    return fetch(`${configManager.supabaseFunctionsUrl}/embed-credentials${path}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',

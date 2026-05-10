@@ -48,7 +48,7 @@ async function executeQuery<T = unknown>(payload: QueryPayload): Promise<DbRespo
     return { data: null, error: { message: 'API_URL not configured', code: 'CONFIG_ERROR', hint: null }, count: 0 };
   }
 
-  const response = await fetch(`${apiUrl}/api/query`, {
+  const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

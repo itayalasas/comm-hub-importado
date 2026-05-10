@@ -103,6 +103,10 @@ class ConfigManager {
     try { return this.getVariable('API_KEY') || ''; } catch { return ''; }
   }
 
+  get supabaseFunctionsUrl(): string {
+    try { return `${this.getVariable('VITE_SUPABASE_URL')}/functions/v1`; } catch { return ''; }
+  }
+
   isLoaded(): boolean {
     return this.config !== null;
   }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { db } from '../lib/db';
+import { configManager } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Mail, FileText, CheckCircle2, XCircle, TrendingUp,
@@ -321,7 +322,7 @@ export const Dashboard = () => {
 
     try {
       const t = Date.now();
-      const res = await fetch('https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/health-check-email', { method: 'GET' });
+      const res = await fetch(`${configManager.supabaseFunctionsUrl}/health-check-email`, { method: 'GET' });
       const rt = Date.now() - t;
       if (!res.ok) throw new Error();
       const d = parse(await res.json());
@@ -332,7 +333,7 @@ export const Dashboard = () => {
 
     try {
       const t = Date.now();
-      const res = await fetch('https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/health-check-pdf', { method: 'GET' });
+      const res = await fetch(`${configManager.supabaseFunctionsUrl}/health-check-pdf`, { method: 'GET' });
       const rt = Date.now() - t;
       if (!res.ok) throw new Error();
       const d = parse(await res.json());
