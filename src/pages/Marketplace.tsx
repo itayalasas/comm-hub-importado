@@ -624,6 +624,7 @@ const ConnectorModal = ({
 }) => {
   const [copied, setCopied] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState(0);
+  const baseUrl = getBaseUrl();
 
   const copy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -783,10 +784,10 @@ const ConnectorModal = ({
               </div>
               <div className="flex items-center gap-2 bg-slate-950/50 border border-slate-700/50 rounded-lg px-3 py-2">
                 <code className="flex-1 text-[11px] text-cyan-300 break-all">
-                  {`https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors/${connector.id}`}
+                  {`${baseUrl}/connectors/${connector.id}`}
                 </code>
                 <button
-                  onClick={() => copy(`https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors/${connector.id}`, 'url')}
+                  onClick={() => copy(`${baseUrl}/connectors/${connector.id}`, 'url')}
                   className="flex-shrink-0 text-slate-500 hover:text-slate-300 transition-colors"
                 >
                   {copied === 'url' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
