@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { db } from '../lib/db';
 import { functionsFetch } from '../lib/functions';
+import { configManager } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Mail, FileText, CheckCircle2, XCircle, TrendingUp,
@@ -308,17 +309,25 @@ export const Dashboard = () => {
     };
 
     try {
+      const apiUrl = configManager.urlHealthCheckApi;
+      if (apiUrl) {
+        const t = Date.now();
+        const res = await fetch(apiUrl, { method: 'GET' });
+        const rt = Date.now() - t;
+        healthChecks[0].status = res.ok ? 'operational' : 'degraded';
+        healthChecks[0].responseTime = rt;
+      } else {
+        healthChecks[0].status = 'degraded';
+      }
+    } catch { healthChecks[0].status = 'down'; }
+
+    try {
       const t = Date.now();
       const { error } = await db.from('applications').select('id').limit(1);
       const rt = Date.now() - t;
-      if (error) {
-        healthChecks[0].status = 'degraded'; healthChecks[0].responseTime = rt;
-        healthChecks[1].status = 'degraded'; healthChecks[1].responseTime = rt;
-      } else {
-        healthChecks[0].status = 'operational'; healthChecks[0].responseTime = rt;
-        healthChecks[1].status = 'operational'; healthChecks[1].responseTime = Math.floor(rt / 3);
-      }
-    } catch { }
+      healthChecks[1].status = error ? 'degraded' : 'operational';
+      healthChecks[1].responseTime = rt;
+    } catch { healthChecks[1].status = 'down'; }
 
     try {
       const t = Date.now();
