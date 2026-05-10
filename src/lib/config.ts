@@ -96,11 +96,11 @@ class ConfigManager {
   }
 
   get apiUrl(): string {
-    return this.getVariable('API_URL');
+    try { return this.getVariable('API_URL') || ''; } catch { return ''; }
   }
 
   get apiKey(): string {
-    return this.getVariable('API_KEY');
+    try { return this.getVariable('API_KEY') || ''; } catch { return ''; }
   }
 
   isLoaded(): boolean {

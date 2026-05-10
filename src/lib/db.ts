@@ -34,8 +34,19 @@ interface DbResponse<T = any> {
 }
 
 async function executeQuery<T = unknown>(payload: QueryPayload): Promise<DbResponse<T>> {
-  const apiUrl = configManager.apiUrl;
-  const apiKey = configManager.apiKey;
+  let apiUrl: string;
+  let apiKey: string;
+
+  try {
+    apiUrl = configManager.apiUrl;
+    apiKey = configManager.apiKey;
+  } catch {
+    return { data: null, error: { message: 'API config not loaded', code: 'CONFIG_ERROR', hint: null }, count: 0 };
+  }
+
+  if (!apiUrl) {
+    return { data: null, error: { message: 'API_URL not configured', code: 'CONFIG_ERROR', hint: null }, count: 0 };
+  }
 
   const response = await fetch(`${apiUrl}/api/query`, {
     method: 'POST',
