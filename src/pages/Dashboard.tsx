@@ -335,8 +335,11 @@ export const Dashboard = () => {
     } catch { healthChecks[1].status = 'down'; }
 
     try {
+      const emailUrl = configManager.urlHealthCheckEmail;
       const t = Date.now();
-      const res = await functionsFetch('health-check-email', { method: 'GET' });
+      const res = emailUrl
+        ? await fetch(emailUrl, { method: 'GET' })
+        : await functionsFetch('health-check-email', { method: 'GET' });
       const rt = Date.now() - t;
       if (!res.ok) throw new Error();
       const d = parse(await res.json());
@@ -346,8 +349,11 @@ export const Dashboard = () => {
     } catch { healthChecks[2].status = 'down'; }
 
     try {
+      const pdfUrl = configManager.urlHealthCheckPdf;
       const t = Date.now();
-      const res = await functionsFetch('health-check-pdf', { method: 'GET' });
+      const res = pdfUrl
+        ? await fetch(pdfUrl, { method: 'GET' })
+        : await functionsFetch('health-check-pdf', { method: 'GET' });
       const rt = Date.now() - t;
       if (!res.ok) throw new Error();
       const d = parse(await res.json());
