@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { UpgradeModal } from './UpgradeModal';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { useState } from 'react';
+import { configManager } from '../lib/config';
 
 interface SubscriptionModalProps {
   onClose: () => void;
@@ -87,7 +88,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
     setCancelError(null);
     try {
       const res = await fetch(
-        'https://veymthufmfqhxxxzfmfi.supabase.co/functions/v1/cancel-subscription',
+        configManager.cancelSubscriptionUrl,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

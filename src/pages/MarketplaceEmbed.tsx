@@ -2,10 +2,11 @@ import { useState } from 'react';
 import {
   Mail, FileText, Zap, X, CheckCircle2, Eye, EyeOff, Loader2, ShieldCheck, Lock,
 } from 'lucide-react';
+import { configManager } from '../lib/config';
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
-const BASE_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1';
+const getBaseUrl = () => configManager.supabaseFunctionsUrl || '';
 
 /* ── SHA-256 helper (Web Crypto API — available in browsers) ────────── */
 
@@ -30,7 +31,7 @@ interface ConnectorDef {
   features: string[];
 }
 
-const CONNECTORS: ConnectorDef[] = [
+const buildConnectors = (BASE_URL: string): ConnectorDef[] => [
   {
     id: 'sendcraft-email',
     name: 'SendCraft Email',
@@ -191,7 +192,7 @@ const LoginScreen = ({ onLogin }: LoginProps) => {
     setError('');
     try {
       const hash = await sha256(password);
-      const res = await fetch(`${BASE_URL}/verify-embed-credentials`, {
+      const res = await fetch(`${getBaseUrl()}/verify-embed-credentials`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), password_hash: hash }),
@@ -284,7 +285,7 @@ const LoginScreen = ({ onLogin }: LoginProps) => {
 
 const validateApiKey = async (apiKey: string): Promise<{ valid: boolean; appName?: string }> => {
   try {
-    const res = await fetch(`${BASE_URL}/health-check-email`, { method: 'GET', headers: { 'x-api-key': apiKey } });
+    const res = await fetch(`${getBaseUrl()}/health-check-email`, { method: 'GET', headers: { 'x-api-key': apiKey } });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));
       return { valid: true, appName: data?.app_name || data?.name };
@@ -323,8 +324,8 @@ const ConnectModal = ({ connector, onClose, onSuccess }: { connector: ConnectorD
       description: connector.description,
       category: connector.category,
       auth: { type: 'api_key', header: connector.auth.header, value: apiKey.trim() },
-      base_url: BASE_URL,
-      registry_url: `${BASE_URL}/connectors/${connector.id}`,
+      base_url: getBaseUrl(),
+      registry_url: `${getBaseUrl()}/connectors/${connector.id}`,
       actions: connector.actions.map(a => ({ id: a.id, method: a.method, endpoint: a.endpoint, params: a.params })),
     };
     const payload = {
@@ -480,6 +481,7 @@ export const MarketplaceEmbed = () => {
   const [installed, setInstalled] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<FilterType>('all');
 
+  const CONNECTORS = buildConnectors(getBaseUrl());
   const filtered = filter === 'all' ? CONNECTORS : CONNECTORS.filter(c => c.category === filter);
 
   if (!authed) {

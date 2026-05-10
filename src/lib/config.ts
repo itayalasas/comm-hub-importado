@@ -16,6 +16,10 @@ interface EnvConfig {
     API_KEY: string;
     URL_HEALTH_CHECK: string;
     API_KEY_HEALTH_CHECK: string;
+    AUTH_FUNCTIONS_BASE_URL?: string;
+    VALIDATION_API_BASE_URL?: string;
+    PLANS_API_URL?: string;
+    CANCEL_SUBSCRIPTION_URL?: string;
   };
   updated_at: string;
 }
@@ -66,7 +70,7 @@ class ConfigManager {
       return import.meta.env.AUTH_VALIDA_TOKEN || 'https://sfqtmnncgiqkveaoqckt.supabase.co/functions/v1/auth-exchange-code';
     }
 
-    return value;
+    return value ?? '';
   }
 
   get supabaseUrl(): string {
@@ -107,6 +111,43 @@ class ConfigManager {
 
   get supabaseFunctionsUrl(): string {
     try { return `${this.getVariable('VITE_SUPABASE_URL')}/functions/v1`; } catch { return ''; }
+  }
+
+  get authFunctionsBaseUrl(): string {
+    try {
+      const explicit = this.config?.variables?.AUTH_FUNCTIONS_BASE_URL;
+      if (explicit) return explicit;
+      // Derive from AUTH_VALIDA_TOKEN by stripping the function path
+      const tokenUrl = this.getVariable('AUTH_VALIDA_TOKEN');
+      const match = tokenUrl.match(/^(https:\/\/.+\/functions\/v1)/);
+      return match ? match[1] : '';
+    } catch { return ''; }
+  }
+
+  get validationApiBaseUrl(): string {
+    try {
+      const explicit = this.config?.variables?.VALIDATION_API_BASE_URL;
+      if (explicit) return explicit;
+      return '';
+    } catch { return ''; }
+  }
+
+  get plansApiUrl(): string {
+    try {
+      const explicit = this.config?.variables?.PLANS_API_URL;
+      if (explicit) return explicit;
+      const base = this.validationApiBaseUrl;
+      return base ? `${base}/validation-api/plans` : '';
+    } catch { return ''; }
+  }
+
+  get cancelSubscriptionUrl(): string {
+    try {
+      const explicit = this.config?.variables?.CANCEL_SUBSCRIPTION_URL;
+      if (explicit) return explicit;
+      const base = this.validationApiBaseUrl;
+      return base ? `${base}/cancel-subscription` : '';
+    } catch { return ''; }
   }
 
   get urlHealthCheck(): string {

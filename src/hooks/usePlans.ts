@@ -36,8 +36,6 @@ interface PlansResult {
   error: string | null;
 }
 
-const PLANS_API = 'https://veymthufmfqhxxxzfmfi.supabase.co/functions/v1/validation-api/plans';
-
 // Simple module-level cache so the fetch only happens once per page load
 let cachedPlans: Plan[] | null = null;
 
@@ -55,7 +53,8 @@ export const usePlans = (): PlansResult => {
       try {
         await configManager.loadConfig();
         const appId = configManager.authAppId;
-        const url = `${PLANS_API}?external_app_id=${encodeURIComponent(appId)}`;
+        const plansApi = configManager.plansApiUrl;
+        const url = `${plansApi}?external_app_id=${encodeURIComponent(appId)}`;
 
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

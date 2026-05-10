@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Layout } from '../components/Layout';
+import { configManager } from '../lib/config';
 import {
   Package, CheckCircle2, Copy, X, ChevronRight,
   Mail, FileText, Zap, Globe, ShieldCheck, ExternalLink,
@@ -55,9 +56,9 @@ interface ConnectorManifest {
 
 /* ── Connector definitions ─────────────────────────────────────────── */
 
-const BASE_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1';
+const getBaseUrl = () => configManager.supabaseFunctionsUrl || '';
 
-const CONNECTORS: ConnectorManifest[] = [
+const buildConnectors = (BASE_URL: string): ConnectorManifest[] => [
   {
     id: 'sendcraft-email',
     name: 'SendCraft Email',
@@ -1153,12 +1154,14 @@ const EmbedSection = () => {
 
 /* ── Main page ─────────────────────────────────────────────────────── */
 
-const REGISTRY_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors';
-
 export const Marketplace = () => {
   const [filter, setFilter] = useState<'all' | 'email' | 'pdf' | 'automation'>('all');
   const [selected, setSelected] = useState<ConnectorManifest | null>(null);
   const [copiedRegistry, setCopiedRegistry] = useState(false);
+
+  const baseUrl = getBaseUrl();
+  const REGISTRY_URL = `${baseUrl}/connectors`;
+  const CONNECTORS = buildConnectors(baseUrl);
 
   const copyRegistry = () => {
     navigator.clipboard.writeText(REGISTRY_URL);
