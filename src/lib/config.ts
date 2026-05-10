@@ -18,6 +18,7 @@ interface EnvConfig {
     URL_HEALTH_CHECK_EMAIL?: string;
     URL_HEALTH_CHECK_PDF?: string;
     URL_HEALTH_CHECK_DB?: string;
+    URL_HEALTH_CHECK_API?: string;
     AUTH_FUNCTIONS_BASE_URL?: string;
     VALIDATION_API_BASE_URL?: string;
     PLANS_API_URL?: string;
@@ -159,6 +160,10 @@ class ConfigManager {
 
   get urlHealthCheckDb(): string {
     try { return this.config?.variables?.URL_HEALTH_CHECK_DB ?? ''; } catch { return ''; }
+  }
+
+  get urlHealthCheckApi(): string {
+    try { return this.config?.variables?.URL_HEALTH_CHECK_API ?? ''; } catch { return ''; }
   }
 
   isLoaded(): boolean {
