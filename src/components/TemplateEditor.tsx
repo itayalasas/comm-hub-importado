@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Eye, Code, FileText, Image, QrCode, Plus, Trash2, Maximize2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { useToast } from './Toast';
 import { HTMLEditor } from './HTMLEditor';
 
@@ -84,7 +84,7 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
   const loadPdfTemplates = async () => {
     if (!applicationId) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('communication_templates')
       .select('id, name, description')
       .eq('application_id', applicationId)
@@ -93,7 +93,7 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
       .order('name');
 
     if (!error && data) {
-      setPdfTemplates(data);
+      setPdfTemplates(data as any[]);
     }
   };
 
@@ -101,14 +101,14 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
     if (!applicationId) return;
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('predefined_variables')
         .select('*')
         .eq('application_id', applicationId)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setCustomVariables(data || []);
+      setCustomVariables((data as PredefinedVariable[]) || []);
     } catch {
       // ignore
     }
@@ -121,7 +121,7 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
     }
 
     try {
-      const { error } = await supabase.from('predefined_variables').insert({
+      const { error } = await db.from('predefined_variables').insert({
         application_id: applicationId,
         name: newVariable.name,
         description: newVariable.description,
@@ -147,7 +147,7 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
     if (!deleteConfirm) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('predefined_variables')
         .delete()
         .eq('id', deleteConfirm);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
@@ -98,13 +98,13 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
 
   const provisionDefaultEmail = async (appId: string) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const token = localStorage.getItem('access_token') || '';
+      if (!token) return;
+      const supabaseUrl = 'https://ffihaeatoundrjzgtpzk.supabase.co';
       await fetch(`${supabaseUrl}/functions/v1/provision-default-email`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ application_id: appId }),
@@ -135,8 +135,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     try {
       if (!user?.sub) return;
 
-      // Filter by tenant when available so all users in the same tenant share apps
-      const appsQuery = supabase
+      const appsQuery = db
         .from('applications')
         .select('id, name, api_key')
         .order('created_at', { ascending: false });
@@ -149,19 +148,19 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
 
       if (error) throw error;
 
-      setApplications(data || []);
+      setApplications((data as Application[]) || []);
 
-      const { data: prefs } = await supabase
+      const { data: prefs } = await db
         .from('user_preferences')
         .select('default_application_id')
         .eq('user_id', user.sub)
         .maybeSingle();
 
-      if (prefs?.default_application_id) {
-        setDefaultApp(prefs.default_application_id);
-        setSelectedApp(prefs.default_application_id);
-      } else if (data && data.length > 0) {
-        setSelectedApp(data[0].id);
+      if ((prefs as any)?.default_application_id) {
+        setDefaultApp((prefs as any).default_application_id);
+        setSelectedApp((prefs as any).default_application_id);
+      } else if (data && (data as any[]).length > 0) {
+        setSelectedApp((data as any[])[0].id);
       }
     } catch {
       // ignore
@@ -172,16 +171,16 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
 
   const loadCredentials = async (appId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('email_credentials')
         .select('*')
         .eq('application_id', appId)
         .eq('is_active', true)
         .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error) throw error;
 
-      setCredentials(data);
+      setCredentials(data as any);
       if (data) {
         setFormData({
           id: data.id,
@@ -219,7 +218,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
 
   const embedFetch = (path: string, options: RequestInit = {}) => {
     const token = localStorage.getItem('access_token') || '';
-    const base = import.meta.env.VITE_SUPABASE_URL;
+    const base = 'https://ffihaeatoundrjzgtpzk.supabase.co';
     return fetch(`${base}/functions/v1/embed-credentials${path}`, {
       ...options,
       headers: {
@@ -316,7 +315,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
       }
 
       if (credentials?.id) {
-        const { error } = await supabase
+        const { error } = await db
           .from('email_credentials')
           .update(updateData)
           .eq('id', credentials.id);
@@ -324,7 +323,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
         if (error) throw error;
         toast.success('Credenciales actualizadas exitosamente');
       } else {
-        const { error } = await supabase.from('email_credentials').insert({
+        const { error } = await db.from('email_credentials').insert({
           application_id: selectedApp,
           ...updateData,
           is_active: true,
@@ -385,7 +384,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     try {
       if (!user?.sub) return;
 
-      const { error } = await supabase
+      const { error } = await db
         .from('user_preferences')
         .upsert(
           {
@@ -444,7 +443,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
       const appId = crypto.randomUUID();
       const apiKey = `sk_${generateSecureKey()}`;
 
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('applications')
         .insert({
           user_id: user.sub,
@@ -453,13 +452,12 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
           domain: newAppData.domain || null,
           api_key: apiKey,
           ...(user.tenant_id ? { tenant_id: user.tenant_id } : {}),
-        })
-        .select()
-        .single();
+        });
 
       if (error) throw error;
 
-      await setAsDefault(data.id);
+      const created = Array.isArray(data) ? (data as any[])[0] : data as any;
+      await setAsDefault(created.id);
       await refreshCounts();
 
       toast.success('Aplicación creada y marcada como favorita');

@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { db } from './db';
 
 /**
  * Returns true when the user owns the application directly OR belongs to
@@ -10,7 +10,7 @@ export async function verifyApplicationOwnership(
   tenantId?: string | null
 ): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('applications')
       .select('id, user_id, tenant_id')
       .eq('id', applicationId)
@@ -18,11 +18,9 @@ export async function verifyApplicationOwnership(
 
     if (error || !data) return false;
 
-    // Direct owner
-    if (data.user_id === userId) return true;
-
-    // Same tenant — all tenant members have access
-    if (tenantId && data.tenant_id && data.tenant_id === tenantId) return true;
+    const record = data as any;
+    if (record.user_id === userId) return true;
+    if (tenantId && record.tenant_id && record.tenant_id === tenantId) return true;
 
     return false;
   } catch {

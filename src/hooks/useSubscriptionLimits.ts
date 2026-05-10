@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 
 interface LimitCheck {
   canAdd: boolean;
@@ -38,13 +38,13 @@ export const useSubscriptionLimits = () => {
   };
 
   const getAppIds = async (): Promise<string[]> => {
-    const appsQuery = supabase.from('applications').select('id');
+    const appsQuery = db.from('applications').select('id');
     const { data: apps } = await (
       user?.tenant_id
         ? appsQuery.eq('tenant_id', user.tenant_id)
         : appsQuery.eq('user_id', user?.sub)
     );
-    return apps?.map((a: { id: string }) => a.id) ?? [];
+    return (apps as any[])?.map((a: { id: string }) => a.id) ?? [];
   };
 
   // Period window: use subscription period if available, otherwise current calendar month
@@ -60,7 +60,7 @@ export const useSubscriptionLimits = () => {
 
   const loadApplicationCount = async () => {
     try {
-      const query = supabase
+      const query = db
         .from('applications')
         .select('*', { count: 'exact', head: true });
 
@@ -85,7 +85,7 @@ export const useSubscriptionLimits = () => {
         return;
       }
 
-      const { count, error } = await supabase
+      const { count, error } = await db
         .from('communication_templates')
         .select('*', { count: 'exact', head: true })
         .in('application_id', appIds);
@@ -107,7 +107,7 @@ export const useSubscriptionLimits = () => {
 
       const { start, end } = getPeriodWindow();
 
-      const { count, error } = await supabase
+      const { count, error } = await db
         .from('email_logs')
         .select('*', { count: 'exact', head: true })
         .in('application_id', appIds)
@@ -133,7 +133,7 @@ export const useSubscriptionLimits = () => {
       const { start, end } = getPeriodWindow();
 
       // Count from email_logs (pdf_generation_logs has service-role-only RLS)
-      const { count, error } = await supabase
+      const { count, error } = await db
         .from('email_logs')
         .select('*', { count: 'exact', head: true })
         .in('application_id', appIds)

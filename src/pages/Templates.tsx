@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { TemplateEditor } from '../components/TemplateEditor';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { useAuth } from '../contexts/AuthContext';
 import { verifyApplicationOwnership } from '../lib/security';
 import { useToast } from '../components/Toast';
@@ -97,13 +97,13 @@ export const Templates = () => {
     try {
       if (!user?.sub) return;
 
-      const { data: prefs } = await supabase
+      const { data: prefs } = await db
         .from('user_preferences')
         .select('default_application_id')
         .eq('user_id', user.sub)
         .maybeSingle();
 
-      const appsQuery = supabase
+      const appsQuery = db
         .from('applications')
         .select('id, name')
         .order('created_at', { ascending: false });
@@ -116,12 +116,12 @@ export const Templates = () => {
 
       if (error) throw error;
 
-      setApplications(data || []);
+      setApplications((data as Application[]) || []);
 
-      if (prefs?.default_application_id) {
-        setSelectedApp(prefs.default_application_id);
-      } else if (data && data.length > 0) {
-        setSelectedApp(data[0].id);
+      if ((prefs as any)?.default_application_id) {
+        setSelectedApp((prefs as any).default_application_id);
+      } else if (data && (data as any[]).length > 0) {
+        setSelectedApp((data as any[])[0].id);
       }
     } catch {
       // ignore
@@ -139,7 +139,7 @@ export const Templates = () => {
         return;
       }
 
-      let countQuery = supabase
+      let countQuery = db
         .from('communication_templates')
         .select('*', { count: 'exact', head: true })
         .eq('application_id', appId);
@@ -149,12 +149,12 @@ export const Templates = () => {
       }
 
       const { count } = await countQuery;
-      setTotalTemplates(count || 0);
+      setTotalTemplates((count as unknown as number) || 0);
 
       const from = (currentPage - 1) * templatesPerPage;
       const to = from + templatesPerPage - 1;
 
-      let dataQuery = supabase
+      let dataQuery = db
         .from('communication_templates')
         .select('*')
         .eq('application_id', appId)
@@ -168,7 +168,7 @@ export const Templates = () => {
       const { data, error } = await dataQuery;
 
       if (error) throw error;
-      setTemplates(data || []);
+      setTemplates((data as Template[]) || []);
     } catch {
       // ignore
     }
@@ -243,7 +243,7 @@ export const Templates = () => {
       const variables = extractVariables(formData.html_content);
 
       if (editingTemplate) {
-        const { error } = await supabase
+        const { error } = await db
           .from('communication_templates')
           .update({
             name: formData.name,
@@ -267,7 +267,7 @@ export const Templates = () => {
 
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('communication_templates').insert({
+        const { error } = await db.from('communication_templates').insert({
           application_id: selectedApp,
           name: formData.name,
           description: formData.description || null,
@@ -300,7 +300,7 @@ export const Templates = () => {
     if (!deleteConfirm) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('communication_templates')
         .delete()
         .eq('id', deleteConfirm);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Layout } from '../components/Layout';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Mail, FileText, CheckCircle2, XCircle, TrendingUp,
@@ -223,36 +223,36 @@ export const Dashboard = () => {
   const loadApplications = async () => {
     try {
       if (!user?.sub) return;
-      const { data: prefs } = await supabase
+      const { data: prefs } = await db
         .from('user_preferences').select('default_application_id')
         .eq('user_id', user.sub).maybeSingle();
-      const appsQuery = supabase.from('applications').select('id, name').order('created_at', { ascending: false });
+      const appsQuery = db.from('applications').select('id, name').order('created_at', { ascending: false });
       const { data, error } = await (user.tenant_id ? appsQuery.eq('tenant_id', user.tenant_id) : appsQuery.eq('user_id', user.sub));
       if (error) throw error;
-      setApplications(data || []);
-      if (prefs?.default_application_id) setSelectedApp(prefs.default_application_id);
-      else if (data && data.length > 0) setSelectedApp(data[0].id);
+      setApplications((data as Application[]) || []);
+      if (prefs?.default_application_id) setSelectedApp((prefs as any).default_application_id);
+      else if (data && (data as any[]).length > 0) setSelectedApp((data as any[])[0].id);
     } catch { } finally { setLoading(false); }
   };
 
   const loadStats = async () => {
     if (!selectedApp) return;
     try {
-      const { data: logs, error } = await supabase
+      const { data: logs, error } = await db
         .from('email_logs')
         .select('status, communication_type, opened_at, clicked_at, delivery_status, bounce_type')
         .eq('application_id', selectedApp);
       if (error) throw error;
-      const all = logs || [];
+      const all: any[] = logs || [];
       const totalEmails = all.length;
-      const sentEmails = all.filter(l => l.status === 'sent').length;
-      const failedEmails = all.filter(l => l.status === 'failed').length;
-      const pendingEmails = all.filter(l => l.status === 'pending').length;
-      const totalPdfs = all.filter(l => l.communication_type === 'pdf_generation').length;
-      const openedEmails = all.filter(l => l.opened_at).length;
-      const clickedEmails = all.filter(l => l.clicked_at).length;
-      const deliveredEmails = all.filter(l => l.delivery_status === 'delivered').length;
-      const bouncedEmails = all.filter(l => l.bounce_type).length;
+      const sentEmails = all.filter((l: any) => l.status === 'sent').length;
+      const failedEmails = all.filter((l: any) => l.status === 'failed').length;
+      const pendingEmails = all.filter((l: any) => l.status === 'pending').length;
+      const totalPdfs = all.filter((l: any) => l.communication_type === 'pdf_generation').length;
+      const openedEmails = all.filter((l: any) => l.opened_at).length;
+      const clickedEmails = all.filter((l: any) => l.clicked_at).length;
+      const deliveredEmails = all.filter((l: any) => l.delivery_status === 'delivered').length;
+      const bouncedEmails = all.filter((l: any) => l.bounce_type).length;
       setStats({ totalEmails, sentEmails, failedEmails, pendingEmails, totalPdfs, openedEmails, clickedEmails, deliveredEmails, bouncedEmails });
     } catch { }
   };
@@ -262,7 +262,7 @@ export const Dashboard = () => {
     try {
       const since = new Date();
       since.setDate(since.getDate() - 29);
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('email_logs')
         .select('status, created_at')
         .eq('application_id', selectedApp)
@@ -277,7 +277,7 @@ export const Dashboard = () => {
         const key = d.toISOString().slice(0, 10);
         buckets[key] = { date: key, sent: 0, failed: 0 };
       }
-      (data || []).forEach(row => {
+      ((data as any[]) || []).forEach((row: any) => {
         const key = new Date(row.created_at).toISOString().slice(0, 10);
         if (buckets[key]) {
           if (row.status === 'sent') buckets[key].sent++;
@@ -308,7 +308,7 @@ export const Dashboard = () => {
 
     try {
       const t = Date.now();
-      const { error } = await supabase.from('applications').select('id').limit(1);
+      const { error } = await db.from('applications').select('id').limit(1);
       const rt = Date.now() - t;
       if (error) {
         healthChecks[0].status = 'degraded'; healthChecks[0].responseTime = rt;
@@ -321,10 +321,10 @@ export const Dashboard = () => {
 
     try {
       const t = Date.now();
-      const { data, error } = await supabase.functions.invoke('health-check-email', { method: 'GET' });
+      const res = await fetch('https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/health-check-email', { method: 'GET' });
       const rt = Date.now() - t;
-      if (error) throw error;
-      const d = parse(data);
+      if (!res.ok) throw new Error();
+      const d = parse(await res.json());
       healthChecks[2].status = d.status === 'operational' ? (d.configured ? 'operational' : 'unconfigured') : d.status === 'down' ? 'down' : 'degraded';
       healthChecks[2].message = d.configured ? `${d.provider?.toUpperCase() || 'Email'} configurado` : 'No configurado';
       healthChecks[2].responseTime = d.responseTime || rt;
@@ -332,10 +332,10 @@ export const Dashboard = () => {
 
     try {
       const t = Date.now();
-      const { data, error } = await supabase.functions.invoke('health-check-pdf', { method: 'GET' });
+      const res = await fetch('https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/health-check-pdf', { method: 'GET' });
       const rt = Date.now() - t;
-      if (error) throw error;
-      const d = parse(data);
+      if (!res.ok) throw new Error();
+      const d = parse(await res.json());
       healthChecks[3].status = d.status === 'operational' || d.status === 'healthy' ? 'operational' : d.status === 'down' ? 'down' : 'degraded';
       healthChecks[3].responseTime = d.responseTime || rt;
     } catch { healthChecks[3].status = 'down'; }
