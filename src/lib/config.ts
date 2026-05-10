@@ -14,6 +14,8 @@ interface EnvConfig {
     AUTH_VALIDA_TOKEN: string;
     API_URL: string;
     API_KEY: string;
+    URL_HEALTH_CHECK: string;
+    API_KEY_HEALTH_CHECK: string;
   };
   updated_at: string;
 }
@@ -105,6 +107,14 @@ class ConfigManager {
 
   get supabaseFunctionsUrl(): string {
     try { return `${this.getVariable('VITE_SUPABASE_URL')}/functions/v1`; } catch { return ''; }
+  }
+
+  get urlHealthCheck(): string {
+    try { return this.getVariable('URL_HEALTH_CHECK') || ''; } catch { return ''; }
+  }
+
+  get apiKeyHealthCheck(): string {
+    try { return this.getVariable('API_KEY_HEALTH_CHECK') || ''; } catch { return ''; }
   }
 
   isLoaded(): boolean {

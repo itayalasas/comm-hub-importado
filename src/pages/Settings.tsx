@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/db';
-import { configManager } from '../lib/config';
+import { functionsFetch } from '../lib/functions';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
@@ -99,14 +99,8 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
 
   const provisionDefaultEmail = async (appId: string) => {
     try {
-      const token = localStorage.getItem('access_token') || '';
-      if (!token) return;
-      await fetch(`${configManager.supabaseFunctionsUrl}/provision-default-email`, {
+      await functionsFetch('provision-default-email', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ application_id: appId }),
       });
     } catch {
@@ -216,17 +210,8 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     setGeneratedPass(pass);
   };
 
-  const embedFetch = (path: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem('access_token') || '';
-    return fetch(`${configManager.supabaseFunctionsUrl}/embed-credentials${path}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    });
-  };
+  const embedFetch = (path: string, options: RequestInit = {}) =>
+    functionsFetch(`embed-credentials${path}`, options);
 
   const loadEmbedCreds = async () => {
     setEmbedLoading(true);

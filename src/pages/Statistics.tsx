@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { db } from '../lib/db';
 import { configManager } from '../lib/config';
+import { functionsFetch } from '../lib/functions';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send, Check, Search } from 'lucide-react';
@@ -409,7 +410,6 @@ export const Statistics = () => {
     setResending(true);
     try {
       const log = resendConfirmLog;
-      const supabaseAnonKey = configManager.supabaseAnonKey;
 
       const currentApp = applications.find(app => app.id === selectedApp);
       if (!currentApp) {
@@ -520,14 +520,10 @@ export const Statistics = () => {
         };
       }
 
-      const response = await fetch(`${configManager.supabaseFunctionsUrl}/${endpoint}`, {
+      const response = await functionsFetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${supabaseAnonKey}`,
-          'Content-Type': 'application/json',
-          'x-api-key': currentApp.api_key
-        },
-        body: JSON.stringify(payload)
+        headers: { 'x-api-key': currentApp.api_key },
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -580,7 +576,7 @@ export const Statistics = () => {
     const directToken = metadata.pdf_access_token || metadata?.pdf_info?.pdf_access_token;
     if (directToken) {
       return {
-        url: `${configManager.supabaseFunctionsUrl}/view-pdf?token=${directToken}`,
+        url: `${configManager.urlHealthCheck}view-pdf?token=${directToken}`,
         filename,
       };
     }
@@ -598,7 +594,7 @@ export const Statistics = () => {
 
       if ((linkByPdfLog as any)?.access_token) {
         return {
-          url: `${configManager.supabaseFunctionsUrl}/view-pdf?token=${(linkByPdfLog as any).access_token}`,
+          url: `${configManager.urlHealthCheck}view-pdf?token=${(linkByPdfLog as any).access_token}`,
           filename: (linkByPdfLog as any).filename || metadata.pdf_filename || filename,
         };
       }
@@ -623,7 +619,7 @@ export const Statistics = () => {
     }
 
     return {
-      url: `${configManager.supabaseFunctionsUrl}/view-pdf?token=${(linkData as any).access_token}`,
+      url: `${configManager.urlHealthCheck}view-pdf?token=${(linkData as any).access_token}`,
       filename: (linkData as any).filename || filename,
     };
   };
