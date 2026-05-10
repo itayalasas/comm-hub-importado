@@ -14,6 +14,7 @@ interface EnvConfig {
     API_KEY_USER_EMBED: string;
     FUNCTIONS_BASE_URL: string;
     URL_HEALTH_CHECK_API?: string;
+    URL_HEALTH_CHECK_DB?: string;
     VALIDATION_API_BASE_URL?: string;
     PLANS_API_URL?: string;
     CANCEL_SUBSCRIPTION_URL?: string;
@@ -118,8 +119,12 @@ class ConfigManager {
   }
 
   get urlHealthCheckDb(): string {
-    const base = this.functionsBaseUrl;
-    return base ? `${base}/health-check-db` : '';
+    try {
+      const explicit = this.config?.variables?.URL_HEALTH_CHECK_DB;
+      if (explicit) return explicit;
+      const base = this.functionsBaseUrl;
+      return base ? `${base}/health-check-db` : '';
+    } catch { return ''; }
   }
 
   // Kept as independent variable — path varies per environment

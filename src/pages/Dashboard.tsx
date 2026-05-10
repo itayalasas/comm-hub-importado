@@ -328,8 +328,10 @@ export const Dashboard = () => {
         const t = Date.now();
         const res = await fetch(dbUrl, { method: 'GET' });
         const rt = Date.now() - t;
-        healthChecks[1].status = res.ok ? 'operational' : 'degraded';
-        healthChecks[1].responseTime = rt;
+        if (!res.ok) throw new Error();
+        const d = parse(await res.json());
+        healthChecks[1].status = d.status === 'operational' ? 'operational' : d.status === 'down' ? 'down' : 'degraded';
+        healthChecks[1].responseTime = d.responseTime || rt;
       } else {
         healthChecks[1].status = 'degraded';
       }
