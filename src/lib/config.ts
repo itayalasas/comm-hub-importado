@@ -10,7 +10,6 @@ interface EnvConfig {
     VITE_AUTH_URL: string;
     VITE_REDIRECT_URI: string;
     AUTH_VALIDA_TOKEN: string;
-    API_URL: string;
     API_KEY: string;
     FUNCTIONS_BASE_URL: string;
     URL_HEALTH_CHECK_API?: string;
@@ -85,7 +84,8 @@ class ConfigManager {
   }
 
   get apiUrl(): string {
-    try { return this.getVariable('API_URL') || ''; } catch { return ''; }
+    const base = this.functionsBaseUrl;
+    return base ? `${base}/query` : '';
   }
 
   get apiKey(): string {
