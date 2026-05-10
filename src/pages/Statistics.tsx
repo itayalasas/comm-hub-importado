@@ -576,7 +576,7 @@ export const Statistics = () => {
     const directToken = metadata.pdf_access_token || metadata?.pdf_info?.pdf_access_token;
     if (directToken) {
       return {
-        url: `${configManager.urlHealthCheck}view-pdf?token=${directToken}`,
+        url: `${configManager.functionsBaseUrl}/view-pdf?token=${directToken}`,
         filename,
       };
     }
@@ -594,7 +594,7 @@ export const Statistics = () => {
 
       if ((linkByPdfLog as any)?.access_token) {
         return {
-          url: `${configManager.urlHealthCheck}view-pdf?token=${(linkByPdfLog as any).access_token}`,
+          url: `${configManager.functionsBaseUrl}/view-pdf?token=${(linkByPdfLog as any).access_token}`,
           filename: (linkByPdfLog as any).filename || metadata.pdf_filename || filename,
         };
       }
@@ -619,7 +619,7 @@ export const Statistics = () => {
     }
 
     return {
-      url: `${configManager.urlHealthCheck}view-pdf?token=${(linkData as any).access_token}`,
+      url: `${configManager.functionsBaseUrl}/view-pdf?token=${(linkData as any).access_token}`,
       filename: (linkData as any).filename || filename,
     };
   };

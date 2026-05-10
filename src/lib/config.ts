@@ -12,14 +12,8 @@ interface EnvConfig {
     AUTH_VALIDA_TOKEN: string;
     API_URL: string;
     API_KEY: string;
-    URL_HEALTH_CHECK: string;
-    API_KEY_HEALTH_CHECK: string;
-    FUNCTIONS_BASE_URL?: string;
-    URL_HEALTH_CHECK_EMAIL?: string;
-    URL_HEALTH_CHECK_PDF?: string;
-    URL_HEALTH_CHECK_DB?: string;
+    FUNCTIONS_BASE_URL: string;
     URL_HEALTH_CHECK_API?: string;
-    AUTH_FUNCTIONS_BASE_URL?: string;
     VALIDATION_API_BASE_URL?: string;
     PLANS_API_URL?: string;
     CANCEL_SUBSCRIPTION_URL?: string;
@@ -67,13 +61,7 @@ class ConfigManager {
       throw new Error('Configuration not loaded. Call loadConfig() first.');
     }
 
-    const value = this.config.variables[key];
-
-    if (!value && key === 'AUTH_VALIDA_TOKEN') {
-      return import.meta.env.AUTH_VALIDA_TOKEN || 'https://sfqtmnncgiqkveaoqckt.supabase.co/functions/v1/auth-exchange-code';
-    }
-
-    return value ?? '';
+    return this.config.variables[key] ?? '';
   }
 
   get authApiKey(): string {
@@ -104,14 +92,34 @@ class ConfigManager {
     try { return this.getVariable('API_KEY') || ''; } catch { return ''; }
   }
 
+  get functionsBaseUrl(): string {
+    try { return this.config?.variables?.FUNCTIONS_BASE_URL ?? ''; } catch { return ''; }
+  }
+
+  // Auth functions share the same base URL
   get authFunctionsBaseUrl(): string {
-    try {
-      const explicit = this.config?.variables?.AUTH_FUNCTIONS_BASE_URL;
-      if (explicit) return explicit;
-      const tokenUrl = this.getVariable('AUTH_VALIDA_TOKEN');
-      const match = tokenUrl.match(/^(https:\/\/.+\/functions\/v1)/);
-      return match ? match[1] : '';
-    } catch { return ''; }
+    return this.functionsBaseUrl;
+  }
+
+  // Health checks derived from FUNCTIONS_BASE_URL
+  get urlHealthCheckEmail(): string {
+    const base = this.functionsBaseUrl;
+    return base ? `${base}/health-check-email` : '';
+  }
+
+  get urlHealthCheckPdf(): string {
+    const base = this.functionsBaseUrl;
+    return base ? `${base}/health-check-pdf` : '';
+  }
+
+  get urlHealthCheckDb(): string {
+    const base = this.functionsBaseUrl;
+    return base ? `${base}/health-check-db` : '';
+  }
+
+  // Kept as independent variable — path varies per environment
+  get urlHealthCheckApi(): string {
+    try { return this.config?.variables?.URL_HEALTH_CHECK_API ?? ''; } catch { return ''; }
   }
 
   get validationApiBaseUrl(): string {
@@ -136,34 +144,6 @@ class ConfigManager {
       const base = this.validationApiBaseUrl;
       return base ? `${base}/cancel-subscription` : '';
     } catch { return ''; }
-  }
-
-  get urlHealthCheck(): string {
-    try { return this.getVariable('URL_HEALTH_CHECK') || ''; } catch { return ''; }
-  }
-
-  get apiKeyHealthCheck(): string {
-    try { return this.getVariable('API_KEY_HEALTH_CHECK') || ''; } catch { return ''; }
-  }
-
-  get functionsBaseUrl(): string {
-    try { return this.config?.variables?.FUNCTIONS_BASE_URL ?? ''; } catch { return ''; }
-  }
-
-  get urlHealthCheckEmail(): string {
-    try { return this.config?.variables?.URL_HEALTH_CHECK_EMAIL ?? ''; } catch { return ''; }
-  }
-
-  get urlHealthCheckPdf(): string {
-    try { return this.config?.variables?.URL_HEALTH_CHECK_PDF ?? ''; } catch { return ''; }
-  }
-
-  get urlHealthCheckDb(): string {
-    try { return this.config?.variables?.URL_HEALTH_CHECK_DB ?? ''; } catch { return ''; }
-  }
-
-  get urlHealthCheckApi(): string {
-    try { return this.config?.variables?.URL_HEALTH_CHECK_API ?? ''; } catch { return ''; }
   }
 
   isLoaded(): boolean {

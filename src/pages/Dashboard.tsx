@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { db } from '../lib/db';
-import { functionsFetch } from '../lib/functions';
 import { configManager } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -337,10 +336,9 @@ export const Dashboard = () => {
 
     try {
       const emailUrl = configManager.urlHealthCheckEmail;
+      if (!emailUrl) throw new Error('not configured');
       const t = Date.now();
-      const res = emailUrl
-        ? await fetch(emailUrl, { method: 'GET' })
-        : await functionsFetch('health-check-email', { method: 'GET' });
+      const res = await fetch(emailUrl, { method: 'GET' });
       const rt = Date.now() - t;
       if (!res.ok) throw new Error();
       const d = parse(await res.json());
@@ -351,10 +349,9 @@ export const Dashboard = () => {
 
     try {
       const pdfUrl = configManager.urlHealthCheckPdf;
+      if (!pdfUrl) throw new Error('not configured');
       const t = Date.now();
-      const res = pdfUrl
-        ? await fetch(pdfUrl, { method: 'GET' })
-        : await functionsFetch('health-check-pdf', { method: 'GET' });
+      const res = await fetch(pdfUrl, { method: 'GET' });
       const rt = Date.now() - t;
       if (!res.ok) throw new Error();
       const d = parse(await res.json());
