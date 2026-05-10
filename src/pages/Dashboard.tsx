@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Layout } from '../components/Layout';
+import { PageLoader } from '../components/PageLoader';
 import { db } from '../lib/db';
 import { configManager } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -372,7 +373,7 @@ export const Dashboard = () => {
   if (loading) {
     return (
       <Layout currentPage="dashboard">
-        <div className="text-center py-12"><div className="text-slate-400">Cargando...</div></div>
+        <PageLoader />
       </Layout>
     );
   }

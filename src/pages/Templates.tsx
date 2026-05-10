@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
+import { PageLoader } from '../components/PageLoader';
 import { TemplateEditor } from '../components/TemplateEditor';
 import { db } from '../lib/db';
 import { useAuth } from '../contexts/AuthContext';
@@ -405,9 +406,7 @@ export const Templates = () => {
   if (loading) {
     return (
       <Layout currentPage="templates">
-        <div className="text-center py-12">
-          <div className="text-slate-400">Cargando...</div>
-        </div>
+        <PageLoader />
       </Layout>
     );
   }

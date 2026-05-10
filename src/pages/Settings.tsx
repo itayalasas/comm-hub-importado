@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
+import { PageLoader } from '../components/PageLoader';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/db';
 import { functionsFetch } from '../lib/functions';
@@ -476,9 +477,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
   if (loading) {
     return (
       <Layout currentPage={currentPageSlug}>
-        <div className="text-center py-12">
-          <div className="text-slate-400">Cargando...</div>
-        </div>
+        <PageLoader />
       </Layout>
     );
   }

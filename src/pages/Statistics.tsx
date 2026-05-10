@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
+import { PageLoader } from '../components/PageLoader';
 import { db } from '../lib/db';
 import { configManager } from '../lib/config';
 import { functionsFetch } from '../lib/functions';
@@ -689,9 +690,7 @@ export const Statistics = () => {
   if (loading) {
     return (
       <Layout currentPage="statistics">
-        <div className="text-center py-12">
-          <div className="text-slate-400">Cargando...</div>
-        </div>
+        <PageLoader />
       </Layout>
     );
   }
