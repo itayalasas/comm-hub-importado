@@ -322,11 +322,16 @@ export const Dashboard = () => {
     } catch { healthChecks[0].status = 'down'; }
 
     try {
-      const t = Date.now();
-      const { error } = await db.from('applications').select('id').limit(1);
-      const rt = Date.now() - t;
-      healthChecks[1].status = error ? 'degraded' : 'operational';
-      healthChecks[1].responseTime = rt;
+      const dbUrl = configManager.urlHealthCheckDb;
+      if (dbUrl) {
+        const t = Date.now();
+        const res = await fetch(dbUrl, { method: 'GET' });
+        const rt = Date.now() - t;
+        healthChecks[1].status = res.ok ? 'operational' : 'degraded';
+        healthChecks[1].responseTime = rt;
+      } else {
+        healthChecks[1].status = 'degraded';
+      }
     } catch { healthChecks[1].status = 'down'; }
 
     try {
