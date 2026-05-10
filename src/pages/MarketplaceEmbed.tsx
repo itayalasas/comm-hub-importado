@@ -6,7 +6,7 @@ import { configManager } from '../lib/config';
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
-const getBaseUrl = () => configManager.supabaseFunctionsUrl || '';
+const getBaseUrl = () => configManager.functionsBaseUrl || '';
 
 /* ── SHA-256 helper (Web Crypto API — available in browsers) ────────── */
 

@@ -5,8 +5,6 @@ interface EnvConfig {
   project_name: string;
   description: string;
   variables: {
-    VITE_SUPABASE_URL: string;
-    VITE_SUPABASE_ANON_KEY: string;
     VITE_AUTH_API_KEY: string;
     VITE_AUTH_APP_ID: string;
     VITE_AUTH_URL: string;
@@ -16,6 +14,10 @@ interface EnvConfig {
     API_KEY: string;
     URL_HEALTH_CHECK: string;
     API_KEY_HEALTH_CHECK: string;
+    FUNCTIONS_BASE_URL?: string;
+    URL_HEALTH_CHECK_EMAIL?: string;
+    URL_HEALTH_CHECK_PDF?: string;
+    URL_HEALTH_CHECK_DB?: string;
     AUTH_FUNCTIONS_BASE_URL?: string;
     VALIDATION_API_BASE_URL?: string;
     PLANS_API_URL?: string;
@@ -73,14 +75,6 @@ class ConfigManager {
     return value ?? '';
   }
 
-  get supabaseUrl(): string {
-    return this.getVariable('VITE_SUPABASE_URL');
-  }
-
-  get supabaseAnonKey(): string {
-    return this.getVariable('VITE_SUPABASE_ANON_KEY');
-  }
-
   get authApiKey(): string {
     return this.getVariable('VITE_AUTH_API_KEY');
   }
@@ -109,15 +103,10 @@ class ConfigManager {
     try { return this.getVariable('API_KEY') || ''; } catch { return ''; }
   }
 
-  get supabaseFunctionsUrl(): string {
-    try { return `${this.getVariable('VITE_SUPABASE_URL')}/functions/v1`; } catch { return ''; }
-  }
-
   get authFunctionsBaseUrl(): string {
     try {
       const explicit = this.config?.variables?.AUTH_FUNCTIONS_BASE_URL;
       if (explicit) return explicit;
-      // Derive from AUTH_VALIDA_TOKEN by stripping the function path
       const tokenUrl = this.getVariable('AUTH_VALIDA_TOKEN');
       const match = tokenUrl.match(/^(https:\/\/.+\/functions\/v1)/);
       return match ? match[1] : '';
@@ -126,9 +115,7 @@ class ConfigManager {
 
   get validationApiBaseUrl(): string {
     try {
-      const explicit = this.config?.variables?.VALIDATION_API_BASE_URL;
-      if (explicit) return explicit;
-      return '';
+      return this.config?.variables?.VALIDATION_API_BASE_URL ?? '';
     } catch { return ''; }
   }
 
@@ -156,6 +143,22 @@ class ConfigManager {
 
   get apiKeyHealthCheck(): string {
     try { return this.getVariable('API_KEY_HEALTH_CHECK') || ''; } catch { return ''; }
+  }
+
+  get functionsBaseUrl(): string {
+    try { return this.config?.variables?.FUNCTIONS_BASE_URL ?? ''; } catch { return ''; }
+  }
+
+  get urlHealthCheckEmail(): string {
+    try { return this.config?.variables?.URL_HEALTH_CHECK_EMAIL ?? ''; } catch { return ''; }
+  }
+
+  get urlHealthCheckPdf(): string {
+    try { return this.config?.variables?.URL_HEALTH_CHECK_PDF ?? ''; } catch { return ''; }
+  }
+
+  get urlHealthCheckDb(): string {
+    try { return this.config?.variables?.URL_HEALTH_CHECK_DB ?? ''; } catch { return ''; }
   }
 
   isLoaded(): boolean {

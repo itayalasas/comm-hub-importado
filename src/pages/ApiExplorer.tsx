@@ -631,12 +631,7 @@ export default function ApiExplorer() {
   const [filterGroup, setFilterGroup] = useState<string>('all');
   useAuth();
 
-  const baseUrl = (() => {
-    try {
-      if (configManager.isLoaded()) return configManager.supabaseUrl;
-    } catch {}
-    return import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
-  })();
+  const baseUrl = configManager.isLoaded() ? configManager.functionsBaseUrl : 'https://your-project.supabase.co';
 
   const copyToClipboard = useCallback((text: string, id: string) => {
     navigator.clipboard.writeText(text);

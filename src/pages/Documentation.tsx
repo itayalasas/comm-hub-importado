@@ -29,17 +29,7 @@ export default function Documentation() {
   const [expandedEndpoints, setExpandedEndpoints] = useState<string[]>(['send-email']);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  const supabaseUrl = (() => {
-    try {
-      if (configManager.isLoaded()) {
-        return configManager.supabaseUrl;
-      }
-    } catch {
-      // ignore
-    }
-
-    return import.meta.env.VITE_SUPABASE_URL || '';
-  })();
+  const supabaseUrl = configManager.isLoaded() ? configManager.functionsBaseUrl : '';
   const apiBaseUrl = supabaseUrl || 'https://your-project.supabase.co';
 
   const copyToClipboard = (text: string, id: string) => {

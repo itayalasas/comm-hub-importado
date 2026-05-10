@@ -56,7 +56,7 @@ interface ConnectorManifest {
 
 /* ── Connector definitions ─────────────────────────────────────────── */
 
-const getBaseUrl = () => configManager.supabaseFunctionsUrl || '';
+const getBaseUrl = () => configManager.functionsBaseUrl || '';
 
 const buildConnectors = (BASE_URL: string): ConnectorManifest[] => [
   {
