@@ -219,6 +219,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': embedApiKey,
+        'x-user-id': user?.sub ?? '',
         ...options.headers,
       },
     });
