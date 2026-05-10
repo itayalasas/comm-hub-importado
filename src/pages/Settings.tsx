@@ -3,6 +3,7 @@ import { Layout } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/db';
 import { functionsFetch } from '../lib/functions';
+import { configManager } from '../lib/config';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
@@ -210,8 +211,18 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     setGeneratedPass(pass);
   };
 
-  const embedFetch = (path: string, options: RequestInit = {}) =>
-    functionsFetch(`embed-credentials${path}`, options);
+  const embedFetch = (path: string, options: RequestInit = {}) => {
+    const base = configManager.functionsBaseUrl;
+    const embedApiKey = configManager.apiKeyUserEmbed;
+    return fetch(`${base}/embed-credentials${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': embedApiKey,
+        ...options.headers,
+      },
+    });
+  };
 
   const loadEmbedCreds = async () => {
     setEmbedLoading(true);

@@ -11,6 +11,7 @@ interface EnvConfig {
     VITE_REDIRECT_URI: string;
     AUTH_VALIDA_TOKEN: string;
     API_KEY: string;
+    API_KEY_USER_EMBED: string;
     FUNCTIONS_BASE_URL: string;
     URL_HEALTH_CHECK_API?: string;
     VALIDATION_API_BASE_URL?: string;
@@ -90,6 +91,10 @@ class ConfigManager {
 
   get apiKey(): string {
     try { return this.getVariable('API_KEY') || ''; } catch { return ''; }
+  }
+
+  get apiKeyUserEmbed(): string {
+    try { return this.getVariable('API_KEY_USER_EMBED') || ''; } catch { return ''; }
   }
 
   get functionsBaseUrl(): string {
