@@ -48,21 +48,35 @@ async function executeQuery<T = unknown>(payload: QueryPayload): Promise<DbRespo
     return { data: null, error: { message: 'API_URL not configured', code: 'CONFIG_ERROR', hint: null }, count: 0 };
   }
 
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-    },
-    body: JSON.stringify(payload),
-  });
+  const requestBody = JSON.stringify(payload);
+  console.log('[db] POST', apiUrl, JSON.parse(requestBody));
+
+  let response: Response;
+  try {
+    response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: requestBody,
+    });
+  } catch (networkError: any) {
+    console.error('[db] Network error (likely CORS or server unreachable):', networkError?.message || networkError);
+    return { data: null, error: { message: networkError?.message || 'Network error', code: 'NETWORK_ERROR', hint: null }, count: 0 };
+  }
+
+  console.log('[db] Response status:', response.status, response.statusText);
 
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText);
+    console.error('[db] Error response body:', text);
     return { data: null, error: { message: text, code: String(response.status), hint: null }, count: 0 };
   }
 
-  return response.json();
+  const result = await response.json();
+  console.log('[db] Result:', result);
+  return result;
 }
 
 class QueryBuilder<T = any> {
