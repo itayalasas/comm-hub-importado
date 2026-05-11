@@ -122,11 +122,16 @@ export const Statistics = () => {
         .eq('user_id', user.sub)
         .maybeSingle();
 
-      const { data, error } = await db
+      // If the user belongs to a tenant, show all tenant applications;
+      // otherwise show only the user's own applications.
+      const query = db
         .from('applications')
         .select('id, name, api_key')
-        .eq('user_id', user.sub)
         .order('created_at', { ascending: false });
+
+      const { data, error } = user.tenant_id
+        ? await query.eq('tenant_id', user.tenant_id)
+        : await query.eq('user_id', user.sub);
 
       if (error) throw error;
 
