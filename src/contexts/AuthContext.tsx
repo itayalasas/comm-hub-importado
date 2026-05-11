@@ -7,6 +7,15 @@ type MenuPermissions = {
   [menuSlug: string]: MenuPermission[];
 };
 
+interface PermissionsHierarchyEntry {
+  actions: MenuPermission[];
+  submenus?: { [submenuSlug: string]: MenuPermission[] };
+}
+
+type PermissionsHierarchy = {
+  [menuSlug: string]: PermissionsHierarchyEntry;
+};
+
 interface Feature {
   code: string;
   name: string;
@@ -64,6 +73,7 @@ interface User {
   picture?: string;
   role?: string;
   permissions?: MenuPermissions;
+  permissions_hierarchy?: PermissionsHierarchy;
   subscription?: Subscription;
   tenant_id?: string;
   tenant_name?: string;
@@ -82,6 +92,7 @@ interface AuthContextType {
   handleCallback: (tokenOrCode: string) => Promise<void>;
   hasPermission: (menu: string, permission: MenuPermission) => boolean;
   hasMenuAccess: (menu: string) => boolean;
+  hasSubmenuAccess: (submenuKey: string) => boolean;
   refreshSubscription: () => Promise<void>;
 }
 
@@ -373,6 +384,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           picture: userData.picture || userData.avatar,
           role: userData.role,
           permissions: userData.permissions || {},
+          permissions_hierarchy: userData.permissions_hierarchy || undefined,
           tenant_id: userData.tenant_id || undefined,
           tenant_name: userData.tenant_name || undefined,
           active_users_count: userData.active_users_count !== undefined ? Number(userData.active_users_count) : undefined,
@@ -422,6 +434,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           picture: tokenUser.picture || tokenUser.avatar,
           role: tokenUser.role,
           permissions: tokenUser.permissions || decodedToken.permissions || {},
+          permissions_hierarchy: tokenUser.permissions_hierarchy || decodedToken.permissions_hierarchy || undefined,
           tenant_id: tokenUser.tenant_id || decodedToken.tenant_id || tenantObj?.id || undefined,
           tenant_name: tokenUser.tenant_name || decodedToken.tenant_name || tenantObj?.name || tenantObj?.organization_name || undefined,
           active_users_count: tenantObj?.active_users_count !== undefined
@@ -445,24 +458,45 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const hasPermission = (menu: string, permission: MenuPermission): boolean => {
     if (!user || !user.permissions) return false;
+    // Support submenu keys like "templates.correos" directly from flat permissions map
     const menuPermissions = user.permissions[menu];
-    return menuPermissions ? menuPermissions.includes(permission) : false;
+    if (menuPermissions) return menuPermissions.includes(permission);
+
+    // Fallback: check permissions_hierarchy submenus
+    if (user.permissions_hierarchy && menu.includes('.')) {
+      const [parentKey, submenuKey] = menu.split('.', 2);
+      const parentEntry = user.permissions_hierarchy[parentKey];
+      if (parentEntry?.submenus) {
+        const submenuPerms = parentEntry.submenus[menu] ?? parentEntry.submenus[submenuKey];
+        if (submenuPerms) return submenuPerms.includes(permission);
+      }
+    }
+
+    return false;
   };
 
   const hasMenuAccess = (menu: string): boolean => {
+    if (!user) return false;
     // Marketplace is always accessible to authenticated users
-    if (menu === 'marketplace') return !!user;
+    if (menu === 'marketplace') return true;
 
     const menuAliases: Record<string, string[]> = {
-      'dashboard': ['dashboard', 'analytics', 'inicio'],
-      'templates': ['templates', 'plantillas'],
-      'statistics': ['statistics', 'estadisticas', 'stats'],
-      'documentation': ['documentation', 'documentacion', 'docs'],
-      'settings': ['settings', 'configuracion', 'config'],
+      'dashboard':      ['dashboard', 'analytics', 'inicio'],
+      'templates':      ['templates', 'plantillas'],
+      'statistics':     ['statistics', 'estadisticas', 'stats'],
+      'tareas':         ['tareas'],
+      'documentation':  ['documentation', 'documentacion', 'docs'],
+      'settings':       ['settings', 'configuracion', 'config'],
+      'api_explorer':   ['api_explorer'],
     };
 
     const possibleKeys = menuAliases[menu] || [menu];
     return possibleKeys.some(key => hasPermission(key, 'read'));
+  };
+
+  const hasSubmenuAccess = (submenuKey: string): boolean => {
+    if (!user) return false;
+    return hasPermission(submenuKey, 'read');
   };
 
   // Re-exchange the stored refresh_token to get a fresh subscription state
@@ -521,6 +555,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         handleCallback,
         hasPermission,
         hasMenuAccess,
+        hasSubmenuAccess,
         refreshSubscription,
       }}
     >

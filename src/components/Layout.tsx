@@ -256,6 +256,7 @@ interface SubItem {
   icon: any;
   route: string;
   page: string;
+  permissionKey: string;
 }
 
 interface NavItem {
@@ -288,7 +289,7 @@ const NavItemRow = ({
   const [open, setOpen] = useState(isActive || !!isChildActive);
   const Icon = item.icon;
 
-  if (!item.children) {
+  if (!item.children || item.children.length === 0) {
     return (
       <Link
         to={`/${item.route}`}
@@ -353,12 +354,12 @@ const NavItemRow = ({
 /* ── Main Layout ────────────────────────────────────────────────── */
 
 export const Layout = ({ children, currentPage }: LayoutProps) => {
-  const { hasMenuAccess, subscription, user } = useAuth();
+  const { hasMenuAccess, hasSubmenuAccess, subscription, user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const closeMobile = () => setIsMobileMenuOpen(false);
 
-  const allNavItems: NavItem[] = [
+  const allNavItems: NavItem[] = ([
     {
       name: 'Dashboard',
       icon: LayoutDashboard,
@@ -373,7 +374,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'templates',
       permissionKey: 'templates',
       children: [
-        { name: 'Correos', icon: Mail, route: 'templates', page: 'templates' },
+        { name: 'Correos', icon: Mail, route: 'templates', page: 'templates', permissionKey: 'templates.correos' },
       ],
     },
     {
@@ -381,10 +382,17 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       icon: Briefcase,
       page: 'statistics',
       route: 'statistics',
-      permissionKey: 'statistics',
+      permissionKey: 'tareas',
       children: [
-        { name: 'Jobs — Email', icon: Mail, route: 'statistics', page: 'statistics' },
+        { name: 'Jobs — Email', icon: Mail, route: 'statistics', page: 'statistics', permissionKey: 'tareas.jobs_email' },
       ],
+    },
+    {
+      name: 'Estadísticas',
+      icon: Zap,
+      page: 'statistics',
+      route: 'statistics',
+      permissionKey: 'statistics',
     },
     {
       name: 'Documentación',
@@ -398,7 +406,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       icon: Zap,
       page: 'api-explorer',
       route: 'api-explorer',
-      permissionKey: 'documentation',
+      permissionKey: 'api_explorer',
     },
     {
       name: 'Marketplace',
@@ -414,12 +422,17 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'settings',
       permissionKey: 'settings',
       children: [
-        { name: 'Aplicaciones', icon: AppWindow, route: 'settings/apps', page: 'settings-apps' },
-        { name: 'Correo Electrónico', icon: Mail, route: 'settings/email', page: 'settings-email' },
-        { name: 'Acceso al Embed', icon: Package, route: 'settings/embed', page: 'settings-embed' },
+        { name: 'Aplicaciones', icon: AppWindow, route: 'settings/apps', page: 'settings-apps', permissionKey: 'settings' },
+        { name: 'Correo Electrónico', icon: Mail, route: 'settings/email', page: 'settings-email', permissionKey: 'settings' },
+        { name: 'Acceso al Embed', icon: Package, route: 'settings/embed', page: 'settings-embed', permissionKey: 'settings' },
       ],
     },
-  ].filter(item => hasMenuAccess(item.permissionKey));
+  ] as NavItem[])
+    .filter(item => hasMenuAccess(item.permissionKey))
+    .map(item => ({
+      ...item,
+      children: item.children?.filter(child => hasSubmenuAccess(child.permissionKey)),
+    }));
 
   const isTrialing = subscription?.status === 'trialing';
   const trialEndDate = subscription?.trial_end ? new Date(subscription.trial_end) : null;
