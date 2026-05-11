@@ -384,7 +384,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'statistics',
       permissionKey: 'statistics',
       children: [
-        { name: 'Jobs — Email', icon: Mail, route: 'statistics', page: 'statistics', permissionKey: 'tareas.jobs_email' },
+        { name: 'Jobs — Email', icon: Mail, route: 'statistics', page: 'statistics', permissionKey: 'statistics.jobs_email' },
       ],
     },
     {
