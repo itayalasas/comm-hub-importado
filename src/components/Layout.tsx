@@ -359,12 +359,6 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
 
   const closeMobile = () => setIsMobileMenuOpen(false);
 
-  // hasMenuAccess uses the exact permission key from the server.
-  // For parent menus that don't exist as standalone keys (e.g. "templates"),
-  // we check if any of their submenus are accessible instead.
-  const hasAnySubmenuAccess = (submenuKeys: string[]) =>
-    submenuKeys.some(k => hasSubmenuAccess(k));
-
   const allNavItems: NavItem[] = ([
     {
       name: 'Dashboard',
@@ -373,33 +367,25 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'dashboard',
       permissionKey: 'dashboard',
     },
-    // "templates" may not be a top-level permission key — show if any submenu is accessible
-    ...(hasAnySubmenuAccess(['templates.correos']) ? [{
+    {
       name: 'Templates',
       icon: FileText,
       page: 'templates',
       route: 'templates',
-      permissionKey: 'templates.correos',
+      permissionKey: 'templates',
       children: [
         { name: 'Correos', icon: Mail, route: 'templates', page: 'templates', permissionKey: 'templates.correos' },
       ],
-    }] : []),
+    },
     {
       name: 'Tareas',
       icon: Briefcase,
       page: 'statistics',
       route: 'statistics',
-      permissionKey: 'tareas',
+      permissionKey: 'statistics',
       children: [
         { name: 'Jobs — Email', icon: Mail, route: 'statistics', page: 'statistics', permissionKey: 'tareas.jobs_email' },
       ],
-    },
-    {
-      name: 'Estadísticas',
-      icon: Zap,
-      page: 'statistics',
-      route: 'statistics',
-      permissionKey: 'statistics',
     },
     {
       name: 'Documentación',
