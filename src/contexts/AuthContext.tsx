@@ -480,18 +480,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // Marketplace is always accessible to authenticated users
     if (menu === 'marketplace') return true;
 
+    // Check direct permission key first
+    if (hasPermission(menu, 'read')) return true;
+
+    // Legacy aliases for backward compatibility
     const menuAliases: Record<string, string[]> = {
-      'dashboard':      ['dashboard', 'analytics', 'inicio'],
-      'templates':      ['templates', 'plantillas'],
-      'statistics':     ['statistics', 'estadisticas', 'stats'],
-      'tareas':         ['tareas'],
-      'documentation':  ['documentation', 'documentacion', 'docs'],
-      'settings':       ['settings', 'configuracion', 'config'],
-      'api_explorer':   ['api_explorer'],
+      'dashboard':     ['dashboard', 'analytics', 'inicio'],
+      'templates':     ['templates', 'plantillas'],
+      'statistics':    ['statistics', 'estadisticas', 'stats'],
+      'tareas':        ['tareas'],
+      'documentation': ['documentation', 'documentacion', 'docs'],
+      'settings':      ['settings', 'configuracion', 'config'],
+      'api_explorer':  ['api_explorer'],
     };
 
-    const possibleKeys = menuAliases[menu] || [menu];
-    return possibleKeys.some(key => hasPermission(key, 'read'));
+    const aliases = menuAliases[menu];
+    if (aliases) return aliases.some(key => hasPermission(key, 'read'));
+
+    return false;
   };
 
   const hasSubmenuAccess = (submenuKey: string): boolean => {

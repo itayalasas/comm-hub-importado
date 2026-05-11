@@ -359,6 +359,12 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
 
   const closeMobile = () => setIsMobileMenuOpen(false);
 
+  // hasMenuAccess uses the exact permission key from the server.
+  // For parent menus that don't exist as standalone keys (e.g. "templates"),
+  // we check if any of their submenus are accessible instead.
+  const hasAnySubmenuAccess = (submenuKeys: string[]) =>
+    submenuKeys.some(k => hasSubmenuAccess(k));
+
   const allNavItems: NavItem[] = ([
     {
       name: 'Dashboard',
@@ -367,16 +373,17 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'dashboard',
       permissionKey: 'dashboard',
     },
-    {
+    // "templates" may not be a top-level permission key — show if any submenu is accessible
+    ...(hasAnySubmenuAccess(['templates.correos']) ? [{
       name: 'Templates',
       icon: FileText,
       page: 'templates',
       route: 'templates',
-      permissionKey: 'templates',
+      permissionKey: 'templates.correos',
       children: [
         { name: 'Correos', icon: Mail, route: 'templates', page: 'templates', permissionKey: 'templates.correos' },
       ],
-    },
+    }] : []),
     {
       name: 'Tareas',
       icon: Briefcase,
@@ -422,9 +429,9 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'settings',
       permissionKey: 'settings',
       children: [
-        { name: 'Aplicaciones', icon: AppWindow, route: 'settings/apps', page: 'settings-apps', permissionKey: 'settings' },
-        { name: 'Correo Electrónico', icon: Mail, route: 'settings/email', page: 'settings-email', permissionKey: 'settings' },
-        { name: 'Acceso al Embed', icon: Package, route: 'settings/embed', page: 'settings-embed', permissionKey: 'settings' },
+        { name: 'Aplicaciones',       icon: AppWindow, route: 'settings/apps',  page: 'settings-apps',  permissionKey: 'settings.aplicaciones' },
+        { name: 'Correo Electrónico', icon: Mail,      route: 'settings/email', page: 'settings-email', permissionKey: 'settings.correo_electronico' },
+        { name: 'Acceso al Embed',    icon: Package,   route: 'settings/embed', page: 'settings-embed', permissionKey: 'settings.acceso_embed' },
       ],
     },
   ] as NavItem[])
