@@ -7,21 +7,30 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   Mail, FileText, CheckCircle2, XCircle, TrendingUp,
   Activity, Server, Zap, RefreshCw, Eye, AlertTriangle,
-  MousePointerClick,
+  MousePointerClick, MessageSquare, Send, Smartphone,
 } from 'lucide-react';
 
 /* ── Types ───────────────────────────────────────────────────────── */
 
-interface Stats {
-  totalEmails: number;
-  sentEmails: number;
-  failedEmails: number;
-  pendingEmails: number;
-  totalPdfs: number;
-  openedEmails: number;
-  clickedEmails: number;
-  deliveredEmails: number;
-  bouncedEmails: number;
+interface EmailStats {
+  total: number;
+  sent: number;
+  failed: number;
+  pending: number;
+  pdfs: number;
+  opened: number;
+  clicked: number;
+  delivered: number;
+  bounced: number;
+}
+
+interface WhatsAppStats {
+  total: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  queued: number;
 }
 
 interface Application { id: string; name: string; }
@@ -35,26 +44,18 @@ interface ServiceStatus {
 
 interface DailyCount { date: string; sent: number; failed: number; }
 
-/* ── Sparkline (simple SVG area chart) ──────────────────────────── */
+type Channel = 'all' | 'email' | 'whatsapp';
+
+/* ── Sparkline ───────────────────────────────────────────────────── */
 
 const Sparkline = ({
-  data,
-  color = '#22d3ee',
-  height = 60,
-  fill = true,
-}: {
-  data: number[];
-  color?: string;
-  height?: number;
-  fill?: boolean;
-}) => {
+  data, color = '#22d3ee', height = 60, fill = true,
+}: { data: number[]; color?: string; height?: number; fill?: boolean }) => {
   if (!data.length) return null;
-  const w = 300;
-  const h = height;
-  const pad = 4;
+  const w = 300; const h = height; const pad = 4;
   const max = Math.max(...data, 1);
   const pts = data.map((v, i) => {
-    const x = pad + (i / (data.length - 1)) * (w - pad * 2);
+    const x = pad + (i / Math.max(data.length - 1, 1)) * (w - pad * 2);
     const y = h - pad - (v / max) * (h - pad * 2);
     return `${x},${y}`;
   });
@@ -62,7 +63,6 @@ const Sparkline = ({
   const lastPt = pts[pts.length - 1];
   const firstPt = pts[0];
   const fillPath = `M${firstPt} L${polyline.split(' ').slice(1).join(' ')} L${lastPt.split(',')[0]},${h - pad} L${pad},${h - pad} Z`;
-
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height }}>
       {fill && (
@@ -74,27 +74,18 @@ const Sparkline = ({
         </defs>
       )}
       {fill && <path d={fillPath} fill={`url(#sg-${color.replace('#', '')})`} />}
-      <polyline
-        points={polyline}
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       {data.map((_, i) => {
         const [x, y] = pts[i].split(',');
-        return (
-          <circle key={i} cx={x} cy={y} r="3" fill={color} opacity={i === data.length - 1 ? 1 : 0.4} />
-        );
+        return <circle key={i} cx={x} cy={y} r="3" fill={color} opacity={i === data.length - 1 ? 1 : 0.4} />;
       })}
     </svg>
   );
 };
 
-/* ── Bar chart (daily volumes) ───────────────────────────────────── */
+/* ── Bar chart ───────────────────────────────────────────────────── */
 
-const BarChart = ({ data }: { data: DailyCount[] }) => {
+const BarChart = ({ data, sentColor = '#22d3ee' }: { data: DailyCount[]; sentColor?: string }) => {
   const maxVal = Math.max(...data.map(d => d.sent + d.failed), 1);
   return (
     <div className="flex items-end gap-px h-28 w-full">
@@ -103,23 +94,10 @@ const BarChart = ({ data }: { data: DailyCount[] }) => {
         const sentH = (d.sent / maxVal) * 100;
         const failH = (d.failed / maxVal) * 100;
         return (
-          <div
-            key={i}
-            className="group relative flex flex-col justify-end flex-1"
-            style={{ height: '100%' }}
-            title={`${d.date}: ${d.sent} enviados, ${d.failed} fallidos`}
-          >
+          <div key={i} className="group relative flex flex-col justify-end flex-1" style={{ height: '100%' }} title={`${d.date}: ${d.sent} enviados, ${d.failed} fallidos`}>
             <div className="flex flex-col justify-end h-full gap-px">
-              {failH > 0 && (
-                <div
-                  className="w-full rounded-t-[2px] bg-red-500/60 group-hover:bg-red-400/80 transition-colors"
-                  style={{ height: `${failH}%` }}
-                />
-              )}
-              <div
-                className="w-full rounded-t-[2px] bg-cyan-500/70 group-hover:bg-cyan-400 transition-colors"
-                style={{ height: `${sentH}%`, minHeight: total > 0 ? 2 : 0 }}
-              />
+              {failH > 0 && <div className="w-full rounded-t-[2px] bg-red-500/60 group-hover:bg-red-400/80 transition-colors" style={{ height: `${failH}%` }} />}
+              <div className="w-full rounded-t-[2px] transition-colors" style={{ height: `${sentH}%`, minHeight: total > 0 ? 2 : 0, backgroundColor: sentColor + 'b3' }} />
             </div>
           </div>
         );
@@ -128,7 +106,7 @@ const BarChart = ({ data }: { data: DailyCount[] }) => {
   );
 };
 
-/* ── Donut ring ─────────────────────────────────────────────────── */
+/* ── Donut ring ──────────────────────────────────────────────────── */
 
 const DonutRing = ({ pct, color, size = 72 }: { pct: number; color: string; size?: number }) => {
   const r = (size - 10) / 2;
@@ -137,23 +115,16 @@ const DonutRing = ({ pct, color, size = 72 }: { pct: number; color: string; size
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
-      <circle
-        cx={size / 2} cy={size / 2} r={r}
-        fill="none" stroke={color} strokeWidth="8"
-        strokeDasharray={`${dash} ${circ - dash}`}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        style={{ transition: 'stroke-dasharray 0.6s ease' }}
-      />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="8"
+        strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: 'stroke-dasharray 0.6s ease' }} />
     </svg>
   );
 };
 
 /* ── Stat card ───────────────────────────────────────────────────── */
 
-const StatCard = ({
-  icon: Icon, label, value, sub, color, trend,
-}: {
+const StatCard = ({ icon: Icon, label, value, sub, color, trend }: {
   icon: any; label: string; value: string | number; sub?: string; color: string; trend?: string;
 }) => (
   <div className={`bg-slate-800/50 backdrop-blur-sm rounded-xl border p-5 flex flex-col gap-3 ${color}`}>
@@ -161,8 +132,7 @@ const StatCard = ({
       <Icon className="w-5 h-5 opacity-80" />
       {trend && (
         <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400">
-          <TrendingUp className="w-3 h-3" />
-          {trend}
+          <TrendingUp className="w-3 h-3" />{trend}
         </span>
       )}
     </div>
@@ -180,11 +150,19 @@ export const Dashboard = () => {
   const { user, refreshSubscription } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
-  const [stats, setStats] = useState<Stats>({
-    totalEmails: 0, sentEmails: 0, failedEmails: 0, pendingEmails: 0,
-    totalPdfs: 0, openedEmails: 0, clickedEmails: 0, deliveredEmails: 0, bouncedEmails: 0,
+  const [channel, setChannel] = useState<Channel>('all');
+
+  const [emailStats, setEmailStats] = useState<EmailStats>({
+    total: 0, sent: 0, failed: 0, pending: 0, pdfs: 0,
+    opened: 0, clicked: 0, delivered: 0, bounced: 0,
   });
-  const [dailyData, setDailyData] = useState<DailyCount[]>([]);
+  const [waStats, setWaStats] = useState<WhatsAppStats>({
+    total: 0, sent: 0, delivered: 0, read: 0, failed: 0, queued: 0,
+  });
+  const [hasWhatsApp, setHasWhatsApp] = useState(false);
+
+  const [emailDailyData, setEmailDailyData] = useState<DailyCount[]>([]);
+  const [waDailyData, setWaDailyData] = useState<DailyCount[]>([]);
   const [weeklyActivity, setWeeklyActivity] = useState<number[]>([]);
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -202,95 +180,113 @@ export const Dashboard = () => {
     setMpPlanName(planName);
     setMpActivating(true);
     window.history.replaceState({}, '', window.location.pathname);
-    const timer = setTimeout(async () => {
-      await refreshSubscription();
-      setMpActivating(false);
-    }, 2500);
+    const timer = setTimeout(async () => { await refreshSubscription(); setMpActivating(false); }, 2500);
     return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => { if (user) loadApplications(); }, [user]);
   useEffect(() => {
-    if (selectedApp) {
-      loadStats();
-      loadChartData();
-    }
+    if (selectedApp) { loadEmailStats(); loadWhatsAppStats(); loadChartData(); }
   }, [selectedApp]);
-  useEffect(() => {
-    checkServiceHealth();
-    const interval = setInterval(checkServiceHealth, 60000);
-    return () => clearInterval(interval);
-  }, []);
+  useEffect(() => { checkServiceHealth(); const iv = setInterval(checkServiceHealth, 60000); return () => clearInterval(iv); }, []);
 
   const loadApplications = async () => {
     try {
       if (!user?.sub) return;
-      const { data: prefs } = await db
-        .from('user_preferences').select('default_application_id')
-        .eq('user_id', user.sub).maybeSingle();
-      const appsQuery = db.from('applications').select('id, name').order('created_at', { ascending: false });
-      const { data, error } = await (user.tenant_id ? appsQuery.eq('tenant_id', user.tenant_id) : appsQuery.eq('user_id', user.sub));
+      const { data: prefs } = await db.from('user_preferences').select('default_application_id').eq('user_id', user.sub).maybeSingle();
+      const q = db.from('applications').select('id, name').order('created_at', { ascending: false });
+      const { data, error } = await (user.tenant_id ? q.eq('tenant_id', user.tenant_id) : q.eq('user_id', user.sub));
       if (error) throw error;
       setApplications((data as Application[]) || []);
-      if (prefs?.default_application_id) setSelectedApp((prefs as any).default_application_id);
+      if ((prefs as any)?.default_application_id) setSelectedApp((prefs as any).default_application_id);
       else if (data && (data as any[]).length > 0) setSelectedApp((data as any[])[0].id);
     } catch { } finally { setLoading(false); }
   };
 
-  const loadStats = async () => {
+  const loadEmailStats = async () => {
     if (!selectedApp) return;
     try {
-      const { data: logs, error } = await db
-        .from('email_logs')
+      const { data: logs } = await db.from('email_logs')
         .select('status, communication_type, opened_at, clicked_at, delivery_status, bounce_type')
         .eq('application_id', selectedApp);
-      if (error) throw error;
       const all: any[] = logs || [];
-      const totalEmails = all.length;
-      const sentEmails = all.filter((l: any) => l.status === 'sent').length;
-      const failedEmails = all.filter((l: any) => l.status === 'failed').length;
-      const pendingEmails = all.filter((l: any) => l.status === 'pending').length;
-      const totalPdfs = all.filter((l: any) => l.communication_type === 'pdf_generation').length;
-      const openedEmails = all.filter((l: any) => l.opened_at).length;
-      const clickedEmails = all.filter((l: any) => l.clicked_at).length;
-      const deliveredEmails = all.filter((l: any) => l.delivery_status === 'delivered').length;
-      const bouncedEmails = all.filter((l: any) => l.bounce_type).length;
-      setStats({ totalEmails, sentEmails, failedEmails, pendingEmails, totalPdfs, openedEmails, clickedEmails, deliveredEmails, bouncedEmails });
+      setEmailStats({
+        total: all.length,
+        sent: all.filter(l => l.status === 'sent').length,
+        failed: all.filter(l => l.status === 'failed').length,
+        pending: all.filter(l => l.status === 'pending').length,
+        pdfs: all.filter(l => l.communication_type === 'pdf_generation').length,
+        opened: all.filter(l => l.opened_at).length,
+        clicked: all.filter(l => l.clicked_at).length,
+        delivered: all.filter(l => l.delivery_status === 'delivered').length,
+        bounced: all.filter(l => l.bounce_type).length,
+      });
+    } catch { }
+  };
+
+  const loadWhatsAppStats = async () => {
+    if (!selectedApp) return;
+    try {
+      const { data: logs } = await db.from('whatsapp_logs')
+        .select('status')
+        .eq('application_id', selectedApp);
+      const all: any[] = logs || [];
+      setHasWhatsApp(all.length > 0);
+      setWaStats({
+        total: all.length,
+        sent: all.filter(l => l.status === 'sent').length,
+        delivered: all.filter(l => l.status === 'delivered').length,
+        read: all.filter(l => l.status === 'read').length,
+        failed: all.filter(l => l.status === 'failed').length,
+        queued: all.filter(l => l.status === 'queued').length,
+      });
     } catch { }
   };
 
   const loadChartData = async () => {
     if (!selectedApp) return;
-    try {
-      const since = new Date();
-      since.setDate(since.getDate() - 29);
-      const { data, error } = await db
-        .from('email_logs')
-        .select('status, created_at')
-        .eq('application_id', selectedApp)
-        .gte('created_at', since.toISOString())
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-
-      // Build 30-day buckets
-      const buckets: Record<string, DailyCount> = {};
+    const buildBuckets = () => {
+      const b: Record<string, DailyCount> = {};
       for (let i = 29; i >= 0; i--) {
         const d = new Date(); d.setDate(d.getDate() - i);
         const key = d.toISOString().slice(0, 10);
-        buckets[key] = { date: key, sent: 0, failed: 0 };
+        b[key] = { date: key, sent: 0, failed: 0 };
       }
-      ((data as any[]) || []).forEach((row: any) => {
+      return b;
+    };
+
+    try {
+      const since = new Date(); since.setDate(since.getDate() - 29);
+
+      const [{ data: emailData }, { data: waData }] = await Promise.all([
+        db.from('email_logs').select('status, created_at').eq('application_id', selectedApp).gte('created_at', since.toISOString()),
+        db.from('whatsapp_logs').select('status, created_at').eq('application_id', selectedApp).gte('created_at', since.toISOString()),
+      ]);
+
+      const emailBuckets = buildBuckets();
+      ((emailData as any[]) || []).forEach((row: any) => {
         const key = new Date(row.created_at).toISOString().slice(0, 10);
-        if (buckets[key]) {
-          if (row.status === 'sent') buckets[key].sent++;
-          else if (row.status === 'failed') buckets[key].failed++;
+        if (emailBuckets[key]) {
+          if (row.status === 'sent') emailBuckets[key].sent++;
+          else if (row.status === 'failed') emailBuckets[key].failed++;
         }
       });
-      setDailyData(Object.values(buckets));
+      setEmailDailyData(Object.values(emailBuckets));
 
-      // Weekly activity (last 7 days)
-      const weekly = Object.values(buckets).slice(-7).map(d => d.sent + d.failed);
-      setWeeklyActivity(weekly);
+      const waBuckets = buildBuckets();
+      ((waData as any[]) || []).forEach((row: any) => {
+        const key = new Date(row.created_at).toISOString().slice(0, 10);
+        if (waBuckets[key]) {
+          if (['sent', 'delivered', 'read'].includes(row.status)) waBuckets[key].sent++;
+          else if (row.status === 'failed') waBuckets[key].failed++;
+        }
+      });
+      setWaDailyData(Object.values(waBuckets));
+
+      // Weekly activity combined
+      const emailWeekly = Object.values(emailBuckets).slice(-7).map(d => d.sent + d.failed);
+      const waWeekly = Object.values(waBuckets).slice(-7).map(d => d.sent + d.failed);
+      setWeeklyActivity(emailWeekly.map((v, i) => v + waWeekly[i]));
     } catch { }
   };
 
@@ -301,83 +297,56 @@ export const Dashboard = () => {
       { name: 'Email Service', status: 'down', responseTime: 0 },
       { name: 'PDF Generator', status: 'down', responseTime: 0 },
     ];
-
     const parse = (raw: unknown) => {
       if (raw && typeof raw === 'object') return raw as Record<string, any>;
       if (typeof raw === 'string') return JSON.parse(raw) as Record<string, any>;
-      throw new Error('Empty response');
+      throw new Error('Empty');
     };
-
     try {
-      const apiUrl = configManager.urlHealthCheckApi;
-      if (apiUrl) {
-        const t = Date.now();
-        await fetch(apiUrl, { method: 'GET', mode: 'no-cors' });
-        const rt = Date.now() - t;
-        // mode: no-cors returns opaque response — treat reaching the server as operational
-        healthChecks[0].status = 'operational';
-        healthChecks[0].responseTime = rt;
-      } else {
-        healthChecks[0].status = 'degraded';
-      }
+      const url = configManager.urlHealthCheckApi;
+      if (url) { const t = Date.now(); await fetch(url, { method: 'GET', mode: 'no-cors' }); healthChecks[0].status = 'operational'; healthChecks[0].responseTime = Date.now() - t; }
+      else healthChecks[0].status = 'degraded';
     } catch { healthChecks[0].status = 'down'; }
-
     try {
-      const dbUrl = configManager.urlHealthCheckDb;
-      if (dbUrl) {
-        const t = Date.now();
-        const res = await fetch(dbUrl, { method: 'GET' });
-        const rt = Date.now() - t;
-        if (!res.ok) throw new Error();
-        const d = parse(await res.json());
-        healthChecks[1].status = d.status === 'operational' ? 'operational' : d.status === 'down' ? 'down' : 'degraded';
-        healthChecks[1].responseTime = d.responseTime || rt;
-      } else {
-        healthChecks[1].status = 'degraded';
-      }
+      const url = configManager.urlHealthCheckDb;
+      if (url) { const t = Date.now(); const res = await fetch(url); const rt = Date.now() - t; if (!res.ok) throw new Error(); const d = parse(await res.json()); healthChecks[1].status = d.status === 'operational' ? 'operational' : d.status === 'down' ? 'down' : 'degraded'; healthChecks[1].responseTime = d.responseTime || rt; }
+      else healthChecks[1].status = 'degraded';
     } catch { healthChecks[1].status = 'down'; }
-
     try {
-      const emailUrl = configManager.urlHealthCheckEmail;
-      if (!emailUrl) throw new Error('not configured');
-      const t = Date.now();
-      const res = await fetch(emailUrl, { method: 'GET' });
-      const rt = Date.now() - t;
-      if (!res.ok) throw new Error();
+      const url = configManager.urlHealthCheckEmail;
+      if (!url) throw new Error();
+      const t = Date.now(); const res = await fetch(url); const rt = Date.now() - t; if (!res.ok) throw new Error();
       const d = parse(await res.json());
       healthChecks[2].status = d.status === 'operational' ? (d.configured ? 'operational' : 'unconfigured') : d.status === 'down' ? 'down' : 'degraded';
       healthChecks[2].message = d.configured ? `${d.provider?.toUpperCase() || 'Email'} configurado` : 'No configurado';
       healthChecks[2].responseTime = d.responseTime || rt;
     } catch { healthChecks[2].status = 'down'; }
-
     try {
-      const pdfUrl = configManager.urlHealthCheckPdf;
-      if (!pdfUrl) throw new Error('not configured');
-      const t = Date.now();
-      const res = await fetch(pdfUrl, { method: 'GET' });
-      const rt = Date.now() - t;
-      if (!res.ok) throw new Error();
+      const url = configManager.urlHealthCheckPdf;
+      if (!url) throw new Error();
+      const t = Date.now(); const res = await fetch(url); const rt = Date.now() - t; if (!res.ok) throw new Error();
       const d = parse(await res.json());
       healthChecks[3].status = d.status === 'operational' || d.status === 'healthy' ? 'operational' : d.status === 'down' ? 'down' : 'degraded';
       healthChecks[3].responseTime = d.responseTime || rt;
     } catch { healthChecks[3].status = 'down'; }
-
     setServices(healthChecks);
   };
 
   const pct = (n: number, total: number) => total > 0 ? Math.round((n / total) * 100) : 0;
-  const openRate = pct(stats.openedEmails, stats.sentEmails);
-  const clickRate = pct(stats.clickedEmails, stats.sentEmails);
-  const deliveryRate = pct(stats.deliveredEmails || stats.sentEmails, stats.totalEmails);
-  const bounceRate = pct(stats.bouncedEmails, stats.totalEmails);
-  const successRate = pct(stats.sentEmails, stats.totalEmails);
+
+  // Derived combined / per-channel metrics
+  const totalMessages = emailStats.total + waStats.total;
+  const totalSent = emailStats.sent + waStats.sent + waStats.delivered + waStats.read;
+  const totalFailed = emailStats.failed + waStats.failed;
+
+  const activeDailyData = channel === 'whatsapp' ? waDailyData : channel === 'email' ? emailDailyData
+    : emailDailyData.map((d, i) => ({ date: d.date, sent: d.sent + (waDailyData[i]?.sent || 0), failed: d.failed + (waDailyData[i]?.failed || 0) }));
+  const chartColor = channel === 'whatsapp' ? '#34d399' : '#22d3ee';
+
+  const showChannelTabs = hasWhatsApp;
 
   if (loading) {
-    return (
-      <Layout currentPage="dashboard">
-        <PageLoader />
-      </Layout>
-    );
+    return (<Layout currentPage="dashboard"><PageLoader /></Layout>);
   }
 
   if (applications.length === 0) {
@@ -395,14 +364,13 @@ export const Dashboard = () => {
     );
   }
 
-  const dayLabels = dailyData.filter((_, i) => i % 5 === 0).map(d => {
+  const dayLabels = activeDailyData.filter((_, i) => i % 5 === 0).map(d => {
     const dt = new Date(d.date);
     return `${dt.getDate()}/${dt.getMonth() + 1}`;
   });
 
   return (
     <Layout currentPage="dashboard">
-      {/* MP activation overlay */}
       {mpActivating && (
         <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-6">
           <div className="relative">
@@ -427,121 +395,182 @@ export const Dashboard = () => {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Dashboard</h1>
           <div className="flex flex-wrap gap-2">
-            {applications.map((app) => (
-              <button
-                key={app.id}
-                onClick={() => setSelectedApp(app.id)}
-                className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors text-sm font-medium ${
-                  selectedApp === app.id ? 'bg-cyan-500 text-white' : 'bg-slate-800/60 text-slate-400 hover:bg-slate-700 hover:text-white'
-                }`}
-              >
+            {applications.map(app => (
+              <button key={app.id} onClick={() => setSelectedApp(app.id)}
+                className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors text-sm font-medium ${selectedApp === app.id ? 'bg-cyan-500 text-white' : 'bg-slate-800/60 text-slate-400 hover:bg-slate-700 hover:text-white'}`}>
                 {app.name}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Primary KPI row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard
-            icon={Mail} label="Emails Totales" value={stats.totalEmails}
-            sub={`${stats.pendingEmails} pendientes`} color="border-cyan-500/20 text-cyan-400"
-            trend={successRate > 0 ? `${successRate}%` : undefined}
-          />
-          <StatCard
-            icon={CheckCircle2} label="Enviados" value={stats.sentEmails}
-            color="border-emerald-500/20 text-emerald-400"
-            sub={`Tasa de envío ${successRate}%`}
-          />
-          <StatCard
-            icon={XCircle} label="Fallidos" value={stats.failedEmails}
-            color="border-red-500/20 text-red-400"
-            sub={`Rebote ${bounceRate}%`}
-          />
-          <StatCard
-            icon={FileText} label="PDFs Generados" value={stats.totalPdfs}
-            color="border-blue-500/20 text-blue-400"
-          />
-        </div>
+        {/* Channel tabs — only shown when WhatsApp has data */}
+        {showChannelTabs && (
+          <div className="flex items-center gap-1 bg-slate-800/60 rounded-xl p-1 w-fit border border-slate-700/60">
+            {([
+              { id: 'all',       label: 'Todos los canales', icon: Activity },
+              { id: 'email',     label: 'Email',             icon: Mail },
+              { id: 'whatsapp',  label: 'WhatsApp',          icon: MessageSquare },
+            ] as { id: Channel; label: string; icon: any }[]).map(({ id, label, icon: Icon }) => (
+              <button key={id} onClick={() => setChannel(id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  channel === id
+                    ? id === 'whatsapp' ? 'bg-emerald-500 text-white shadow' : 'bg-cyan-500 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}>
+                <Icon className="w-3.5 h-3.5" />{label}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Engagement metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Open rate */}
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5 flex items-center gap-4">
-            <div className="relative flex-shrink-0">
-              <DonutRing pct={openRate} color="#22d3ee" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-sm font-bold text-white">{openRate}%</span>
+        {/* ── EMAIL channel KPIs ── */}
+        {(channel === 'all' || channel === 'email') && (
+          <div className="space-y-3">
+            {channel === 'all' && (
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-cyan-400" />
+                <span className="text-sm font-semibold text-slate-300">Email</span>
+                <span className="h-px flex-1 bg-slate-700/60" />
               </div>
+            )}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <StatCard icon={Mail} label="Emails Totales" value={emailStats.total}
+                sub={`${emailStats.pending} pendientes`} color="border-cyan-500/20 text-cyan-400"
+                trend={emailStats.total > 0 ? `${pct(emailStats.sent, emailStats.total)}%` : undefined} />
+              <StatCard icon={CheckCircle2} label="Enviados" value={emailStats.sent}
+                color="border-emerald-500/20 text-emerald-400"
+                sub={`Tasa ${pct(emailStats.sent, emailStats.total)}%`} />
+              <StatCard icon={XCircle} label="Fallidos" value={emailStats.failed}
+                color="border-red-500/20 text-red-400"
+                sub={`Rebote ${pct(emailStats.bounced, emailStats.total)}%`} />
+              <StatCard icon={FileText} label="PDFs Generados" value={emailStats.pdfs}
+                color="border-blue-500/20 text-blue-400" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Eye className="w-4 h-4 text-cyan-400" />
-                <span className="text-sm font-semibold text-white">Tasa de Apertura</span>
-              </div>
-              <div className="text-2xl font-extrabold text-cyan-400">{stats.openedEmails}</div>
-              <div className="text-xs text-slate-500">de {stats.sentEmails} enviados</div>
+
+            {/* Email engagement donuts */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { pct: pct(emailStats.opened, emailStats.sent), color: '#22d3ee', icon: Eye, label: 'Tasa de Apertura', value: emailStats.opened, sub: `de ${emailStats.sent} enviados`, valueColor: 'text-cyan-400' },
+                { pct: pct(emailStats.clicked, emailStats.sent), color: '#34d399', icon: MousePointerClick, label: 'Tasa de Clics', value: emailStats.clicked, sub: `de ${emailStats.sent} enviados`, valueColor: 'text-emerald-400' },
+                { pct: pct(emailStats.delivered || emailStats.sent, emailStats.total), color: '#60a5fa', icon: AlertTriangle, label: 'Tasa de Entrega', value: `${pct(emailStats.delivered || emailStats.sent, emailStats.total)}%`, sub: `Rebote: ${pct(emailStats.bounced, emailStats.total)}%`, valueColor: 'text-blue-400' },
+              ].map(({ pct: p, color, icon: Icon, label, value, sub, valueColor }) => (
+                <div key={label} className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5 flex items-center gap-4">
+                  <div className="relative flex-shrink-0">
+                    <DonutRing pct={p} color={color} />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-sm font-bold text-white">{p}%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon className="w-4 h-4" style={{ color }} />
+                      <span className="text-sm font-semibold text-white">{label}</span>
+                    </div>
+                    <div className={`text-2xl font-extrabold ${valueColor}`}>{value}</div>
+                    <div className="text-xs text-slate-500">{sub}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
+        )}
 
-          {/* Click rate */}
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5 flex items-center gap-4">
-            <div className="relative flex-shrink-0">
-              <DonutRing pct={clickRate} color="#34d399" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-sm font-bold text-white">{clickRate}%</span>
+        {/* ── WHATSAPP channel KPIs ── */}
+        {(channel === 'all' || channel === 'whatsapp') && hasWhatsApp && (
+          <div className="space-y-3">
+            {channel === 'all' && (
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm font-semibold text-slate-300">WhatsApp</span>
+                <span className="h-px flex-1 bg-slate-700/60" />
               </div>
+            )}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              <StatCard icon={MessageSquare} label="Total Mensajes" value={waStats.total}
+                color="border-emerald-500/20 text-emerald-400"
+                sub={`${waStats.queued} en cola`} />
+              <StatCard icon={Send} label="Enviados" value={waStats.sent}
+                color="border-cyan-500/20 text-cyan-400"
+                sub={`${pct(waStats.sent, waStats.total)}%`} />
+              <StatCard icon={CheckCircle2} label="Entregados" value={waStats.delivered}
+                color="border-teal-500/20 text-teal-400"
+                sub={`${pct(waStats.delivered, waStats.total)}%`} />
+              <StatCard icon={Eye} label="Leídos" value={waStats.read}
+                color="border-blue-500/20 text-blue-400"
+                sub={`${pct(waStats.read, waStats.total)}%`} />
+              <StatCard icon={XCircle} label="Fallidos" value={waStats.failed}
+                color="border-red-500/20 text-red-400"
+                sub={`${pct(waStats.failed, waStats.total)}%`} />
             </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <MousePointerClick className="w-4 h-4 text-emerald-400" />
-                <span className="text-sm font-semibold text-white">Tasa de Clics</span>
-              </div>
-              <div className="text-2xl font-extrabold text-emerald-400">{stats.clickedEmails}</div>
-              <div className="text-xs text-slate-500">de {stats.sentEmails} enviados</div>
+
+            {/* WA delivery donut row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { pct: pct(waStats.delivered + waStats.read, waStats.total), color: '#34d399', icon: Smartphone, label: 'Tasa de Entrega', value: `${pct(waStats.delivered + waStats.read, waStats.total)}%`, sub: 'Entregados + leídos', valueColor: 'text-emerald-400' },
+                { pct: pct(waStats.read, waStats.total), color: '#22d3ee', icon: Eye, label: 'Tasa de Lectura', value: `${pct(waStats.read, waStats.total)}%`, sub: `${waStats.read} mensajes leídos`, valueColor: 'text-cyan-400' },
+                { pct: pct(waStats.failed, waStats.total), color: '#f87171', icon: XCircle, label: 'Tasa de Error', value: `${pct(waStats.failed, waStats.total)}%`, sub: `${waStats.failed} fallidos`, valueColor: 'text-red-400' },
+              ].map(({ pct: p, color, icon: Icon, label, value, sub, valueColor }) => (
+                <div key={label} className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5 flex items-center gap-4">
+                  <div className="relative flex-shrink-0">
+                    <DonutRing pct={p} color={color} />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-sm font-bold text-white">{p}%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon className="w-4 h-4" style={{ color }} />
+                      <span className="text-sm font-semibold text-white">{label}</span>
+                    </div>
+                    <div className={`text-2xl font-extrabold ${valueColor}`}>{value}</div>
+                    <div className="text-xs text-slate-500">{sub}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
+        )}
 
-          {/* Bounce / delivery */}
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5 flex items-center gap-4">
-            <div className="relative flex-shrink-0">
-              <DonutRing pct={deliveryRate} color="#60a5fa" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-sm font-bold text-white">{deliveryRate}%</span>
+        {/* Combined totals row (only on "all" tab when WA has data) */}
+        {channel === 'all' && hasWhatsApp && (
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Total mensajes', value: totalMessages, color: 'border-slate-600 text-slate-300', icon: Activity },
+              { label: 'Total enviados', value: totalSent, color: 'border-emerald-500/20 text-emerald-400', icon: CheckCircle2 },
+              { label: 'Total fallidos', value: totalFailed, color: 'border-red-500/20 text-red-400', icon: XCircle },
+            ].map(({ label, value, color, icon: Icon }) => (
+              <div key={label} className={`bg-slate-800/50 backdrop-blur-sm rounded-xl border ${color} px-5 py-4 flex items-center gap-3`}>
+                <Icon className="w-5 h-5 opacity-70" />
+                <div>
+                  <div className="text-xl font-extrabold text-white">{value}</div>
+                  <div className="text-xs text-slate-500">{label}</div>
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <AlertTriangle className="w-4 h-4 text-blue-400" />
-                <span className="text-sm font-semibold text-white">Tasa de Entrega</span>
-              </div>
-              <div className="text-2xl font-extrabold text-blue-400">{deliveryRate}%</div>
-              <div className="text-xs text-slate-500">Rebote: {bounceRate}%</div>
-            </div>
+            ))}
           </div>
-        </div>
+        )}
 
         {/* Charts row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Bar chart — 30-day volume */}
           <div className="lg:col-span-2 bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-base font-semibold text-white">Volumen de Envíos</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Últimos 30 días</p>
+                <p className="text-xs text-slate-500 mt-0.5">Últimos 30 días · {channel === 'all' ? 'Todos los canales' : channel === 'whatsapp' ? 'WhatsApp' : 'Email'}</p>
               </div>
               <div className="flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-cyan-500/70 inline-block" />Enviados</span>
+                <span className="flex items-center gap-1.5 text-slate-300">
+                  <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: chartColor }} />Enviados
+                </span>
                 <span className="flex items-center gap-1.5 text-slate-400"><span className="w-2.5 h-2.5 rounded-sm bg-red-500/60 inline-block" />Fallidos</span>
               </div>
             </div>
-            {dailyData.length > 0 ? (
+            {activeDailyData.length > 0 ? (
               <>
-                <BarChart data={dailyData} />
+                <BarChart data={activeDailyData} sentColor={chartColor} />
                 <div className="flex justify-between mt-1.5">
-                  {dayLabels.map((l, i) => (
-                    <span key={i} className="text-[10px] text-slate-600">{l}</span>
-                  ))}
+                  {dayLabels.map((l, i) => <span key={i} className="text-[10px] text-slate-600">{l}</span>)}
                 </div>
               </>
             ) : (
@@ -549,24 +578,19 @@ export const Dashboard = () => {
             )}
           </div>
 
-          {/* Weekly sparkline */}
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
             <div className="mb-4">
               <h2 className="text-base font-semibold text-white">Actividad Semanal</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Últimos 7 días</p>
+              <p className="text-xs text-slate-500 mt-0.5">Últimos 7 días · Todos los canales</p>
             </div>
             {weeklyActivity.some(v => v > 0) ? (
               <>
                 <Sparkline data={weeklyActivity} color="#22d3ee" height={80} />
                 <div className="flex justify-between mt-1.5">
-                  {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d, i) => (
-                    <span key={i} className="text-[10px] text-slate-600">{d}</span>
-                  ))}
+                  {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d, i) => <span key={i} className="text-[10px] text-slate-600">{d}</span>)}
                 </div>
                 <div className="mt-3 pt-3 border-t border-slate-700/50">
-                  <div className="text-xl font-extrabold text-cyan-400">
-                    {weeklyActivity.reduce((a, b) => a + b, 0)}
-                  </div>
+                  <div className="text-xl font-extrabold text-cyan-400">{weeklyActivity.reduce((a, b) => a + b, 0)}</div>
                   <div className="text-xs text-slate-500">total esta semana</div>
                 </div>
               </>
@@ -576,7 +600,7 @@ export const Dashboard = () => {
           </div>
         </div>
 
-        {/* Services — horizontal grid cards */}
+        {/* Services */}
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -608,9 +632,7 @@ export const Dashboard = () => {
                     <div className="text-xs font-semibold text-white truncate">{svc.name}</div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className={`text-[10px] font-medium ${textColor}`}>{svc.message || label}</span>
-                      {svc.responseTime > 0 && (
-                        <span className="text-[10px] text-slate-600">{svc.responseTime}ms</span>
-                      )}
+                      {svc.responseTime > 0 && <span className="text-[10px] text-slate-600">{svc.responseTime}ms</span>}
                     </div>
                   </div>
                 </div>
