@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
-import { PageLoader } from '../components/PageLoader';
 import { db } from '../lib/db';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
@@ -102,7 +101,6 @@ export const WhatsApp = () => {
   const [config, setConfig] = useState<WhatsAppConfig | null>(null);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [logs, setLogs] = useState<WhatsAppLog[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'templates' | 'logs' | 'config'>('templates');
 
   // Template modal
@@ -161,8 +159,8 @@ export const WhatsApp = () => {
       const defaultId = (prefs as any)?.default_application_id;
       if (defaultId) setSelectedApp(defaultId);
       else if (data && (data as any[]).length > 0) setSelectedApp((data as any[])[0].id);
-    } finally {
-      setLoading(false);
+    } catch {
+      // ignore
     }
   };
 
@@ -359,8 +357,6 @@ export const WhatsApp = () => {
   };
 
   /* ── Render ── */
-  if (loading) return <PageLoader />;
-
   return (
     <Layout currentPage="whatsapp">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
