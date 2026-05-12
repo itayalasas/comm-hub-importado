@@ -15,6 +15,7 @@ import Documentation from './pages/Documentation';
 import ApiExplorer from './pages/ApiExplorer';
 import { Marketplace } from './pages/Marketplace';
 import { MarketplaceEmbed } from './pages/MarketplaceEmbed';
+import { WhatsApp } from './pages/WhatsApp';
 
 
 const AppLoader = () => (
@@ -225,6 +226,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute requiredMenu="marketplace">
             <Marketplace />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/whatsapp"
+        element={
+          <ProtectedRoute requiredMenu="statistics">
+            <WhatsApp />
           </ProtectedRoute>
         }
       />

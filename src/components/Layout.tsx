@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
   AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
-  Mail, Briefcase, AppWindow, Package,
+  Mail, Briefcase, AppWindow, Package, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
@@ -385,6 +385,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       permissionKey: 'statistics',
       children: [
         { name: 'Jobs — Email', icon: Mail, route: 'statistics', page: 'statistics', permissionKey: 'statistics.jobs_email' },
+        { name: 'Jobs — WhatsApp', icon: MessageSquare, route: 'whatsapp', page: 'whatsapp', permissionKey: 'statistics.jobs_whatsapp' },
       ],
     },
     {
