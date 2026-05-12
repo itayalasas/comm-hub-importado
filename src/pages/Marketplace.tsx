@@ -934,7 +934,6 @@ const EMBED_CODE = `<!-- SendCraft Marketplace — con fallback popup si el ifra
   function onMessage(event) {
     if (event.data && event.data.type === 'SENDCRAFT_CONNECTOR_INSTALLED') {
       var data = event.data;
-      console.log('Conector instalado:', data.connector_id);
       // data.api_key      → API Key del usuario
       // data.auth_header  → 'x-api-key'
       // data.manifest     → manifiesto completo con URLs y params
