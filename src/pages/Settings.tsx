@@ -8,7 +8,7 @@ import { configManager } from '../lib/config';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
-import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink } from 'lucide-react';
+import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink, MessageSquare, CreditCard as Edit } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -38,7 +38,17 @@ interface EmbedCredential {
   created_at: string;
 }
 
-export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' }) => {
+interface WhatsAppConfig {
+  id: string;
+  application_id: string;
+  phone_number_id: string;
+  waba_id: string;
+  access_token: string;
+  display_name: string;
+  is_active: boolean;
+}
+
+export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 'whatsapp' }) => {
   const { user } = useAuth();
   const toast = useToast();
   const { checkApplicationLimit, refreshCounts, hasFeature } = useSubscriptionLimits();
@@ -69,6 +79,19 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
   const [showEmbedPass, setShowEmbedPass] = useState(false);
   const [generatedPass, setGeneratedPass] = useState('');
 
+  // ── WhatsApp config state ────────────────────────────────────────────
+  const [waConfig, setWaConfig] = useState<WhatsAppConfig | null>(null);
+  const [waConfigLoading, setWaConfigLoading] = useState(false);
+  const [waConfigSaving, setWaConfigSaving] = useState(false);
+  const [showWaModal, setShowWaModal] = useState(false);
+  const [waForm, setWaForm] = useState({
+    phone_number_id: '',
+    waba_id: '',
+    access_token: '',
+    display_name: '',
+  });
+  const [showWaToken, setShowWaToken] = useState(false);
+
   // Plan feature gates for email providers
   const canUseSmtp = hasFeature('configuracion_smtp');
   const canUseResend = hasFeature('acceso_api_resend');
@@ -98,6 +121,12 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
       loadEmbedCreds();
     }
   }, [user, tab]);
+
+  useEffect(() => {
+    if (selectedApp && tab === 'whatsapp') {
+      loadWaConfig(selectedApp);
+    }
+  }, [selectedApp, tab]);
 
   const provisionDefaultEmail = async (appId: string) => {
     try {
@@ -194,6 +223,72 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     } catch {
       // ignore
     }
+  };
+
+  // ── WhatsApp config helpers ──────────────────────────────────────────
+
+  const loadWaConfig = async (appId: string) => {
+    setWaConfigLoading(true);
+    try {
+      const { data } = await db
+        .from('whatsapp_configs')
+        .select('*')
+        .eq('application_id', appId)
+        .maybeSingle();
+      setWaConfig((data as WhatsAppConfig) || null);
+    } finally {
+      setWaConfigLoading(false);
+    }
+  };
+
+  const openWaModal = () => {
+    setWaForm({
+      phone_number_id: waConfig?.phone_number_id || '',
+      waba_id: waConfig?.waba_id || '',
+      access_token: waConfig?.access_token || '',
+      display_name: waConfig?.display_name || '',
+    });
+    setShowWaToken(false);
+    setShowWaModal(true);
+  };
+
+  const saveWaConfig = async () => {
+    if (!selectedApp) return;
+    if (!waForm.phone_number_id || !waForm.waba_id || !waForm.access_token) {
+      toast.error('Phone Number ID, WABA ID y Access Token son requeridos.');
+      return;
+    }
+    setWaConfigSaving(true);
+    try {
+      if (waConfig) {
+        await db
+          .from('whatsapp_configs')
+          .update({ ...waForm, updated_at: new Date().toISOString() })
+          .eq('id', waConfig.id);
+      } else {
+        await db.from('whatsapp_configs').insert({
+          ...waForm,
+          application_id: selectedApp,
+          is_active: true,
+        });
+      }
+      toast.success('Configuración de WhatsApp guardada');
+      setShowWaModal(false);
+      loadWaConfig(selectedApp);
+    } catch {
+      toast.error('Error al guardar la configuración.');
+    } finally {
+      setWaConfigSaving(false);
+    }
+  };
+
+  const toggleWaActive = async () => {
+    if (!waConfig || !selectedApp) return;
+    await db
+      .from('whatsapp_configs')
+      .update({ is_active: !waConfig.is_active, updated_at: new Date().toISOString() })
+      .eq('id', waConfig.id);
+    loadWaConfig(selectedApp);
   };
 
   // ── Embed credential helpers ─────────────────────────────────────────
@@ -466,12 +561,14 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     }
   };
 
-  const currentPageSlug = tab === 'email' ? 'settings-email' : tab === 'embed' ? 'settings-embed' : 'settings-apps';
-  const pageTitle = tab === 'email' ? 'Correo Electrónico' : tab === 'embed' ? 'Acceso al Embed' : 'Aplicaciones';
+  const currentPageSlug = tab === 'email' ? 'settings-email' : tab === 'embed' ? 'settings-embed' : tab === 'whatsapp' ? 'settings-whatsapp' : 'settings-apps';
+  const pageTitle = tab === 'email' ? 'Correo Electrónico' : tab === 'embed' ? 'Acceso al Embed' : tab === 'whatsapp' ? 'WhatsApp Business' : 'Aplicaciones';
   const pageDesc = tab === 'email'
     ? 'Configura el proveedor de email para cada aplicación'
     : tab === 'embed'
     ? 'Genera credenciales para proteger el acceso al Marketplace embebido'
+    : tab === 'whatsapp'
+    ? 'Configura las credenciales de Meta Cloud API por aplicación'
     : 'Gestiona tus aplicaciones y API keys';
 
   if (loading) {
@@ -712,6 +809,110 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                 >
                   Configurar Email
                 </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── WhatsApp Business tab ──────────────────────────────────── */}
+        {tab === 'whatsapp' && (
+          <div className="space-y-6">
+            {/* App selector */}
+            {applications.length > 0 && (
+              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <MessageSquare className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-base sm:text-lg font-semibold text-white">Credenciales Meta por aplicación</h3>
+                </div>
+
+                {/* Info */}
+                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-xs text-slate-400 space-y-1 mb-5">
+                  <p><strong className="text-slate-300">Phone Number ID:</strong> En Meta Business Manager → WhatsApp → Configuración</p>
+                  <p><strong className="text-slate-300">WABA ID:</strong> WhatsApp Business Account ID del mismo panel</p>
+                  <p><strong className="text-slate-300">Access Token:</strong> Token de sistema permanente (no expira). Generalo en Meta Business → Usuarios del sistema</p>
+                </div>
+
+                {/* Application selector */}
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {applications.map(app => (
+                    <button
+                      key={app.id}
+                      onClick={() => setSelectedApp(app.id)}
+                      className={`px-4 py-2 rounded-lg text-sm transition-colors ${selectedApp === app.id ? 'bg-emerald-500 text-white' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}
+                    >
+                      {app.name}
+                    </button>
+                  ))}
+                </div>
+
+                {waConfigLoading ? (
+                  <div className="py-8 text-center text-slate-500 text-sm">Cargando configuración…</div>
+                ) : !waConfig ? (
+                  <div className="text-center py-8">
+                    <MessageSquare className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                    <p className="text-slate-400 mb-4">No hay configuración de WhatsApp para esta aplicación</p>
+                    <button
+                      onClick={openWaModal}
+                      className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm transition-colors"
+                    >
+                      Configurar WhatsApp
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Status row */}
+                    <div className={`flex items-center justify-between rounded-lg p-3 border ${waConfig.is_active ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-800 border-slate-700'}`}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${waConfig.is_active ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                        <span className={`text-sm font-medium ${waConfig.is_active ? 'text-emerald-300' : 'text-slate-400'}`}>
+                          {waConfig.is_active ? 'WhatsApp Cloud API activo' : 'WhatsApp Cloud API desactivado'}
+                        </span>
+                      </div>
+                      <button onClick={toggleWaActive} className="text-xs text-slate-400 hover:text-white transition-colors">
+                        {waConfig.is_active ? 'Desactivar' : 'Activar'}
+                      </button>
+                    </div>
+
+                    {/* Fields */}
+                    <div className="grid md:grid-cols-2 gap-3">
+                      {waConfig.display_name && (
+                        <div className="bg-slate-900/50 rounded-lg p-3">
+                          <div className="text-xs text-slate-500 mb-1">Display Name</div>
+                          <div className="text-sm text-white font-mono">{waConfig.display_name}</div>
+                        </div>
+                      )}
+                      <div className="bg-slate-900/50 rounded-lg p-3">
+                        <div className="text-xs text-slate-500 mb-1">Phone Number ID</div>
+                        <div className="text-sm text-white font-mono">{waConfig.phone_number_id}</div>
+                      </div>
+                      <div className="bg-slate-900/50 rounded-lg p-3">
+                        <div className="text-xs text-slate-500 mb-1">WABA ID</div>
+                        <div className="text-sm text-white font-mono">{waConfig.waba_id}</div>
+                      </div>
+                      <div className="bg-slate-900/50 rounded-lg p-3">
+                        <div className="text-xs text-slate-500 mb-1">Access Token</div>
+                        <div className="text-sm text-white font-mono">••••••••{waConfig.access_token.slice(-6)}</div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={openWaModal}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors mt-1"
+                    >
+                      <Edit className="w-4 h-4" />
+                      Editar credenciales
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {applications.length === 0 && (
+              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-8 text-center">
+                <p className="text-slate-400 mb-4">Primero debes crear una aplicación en Configuración → Aplicaciones</p>
+                <a href="/settings/apps" className="inline-block px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm">
+                  Ir a Aplicaciones
+                </a>
               </div>
             )}
           </div>
@@ -1253,6 +1454,85 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
               >
                 Guardar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── WhatsApp config modal ── */}
+      {showWaModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-lg overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-slate-700">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                <h2 className="text-base font-bold text-white">
+                  {waConfig ? 'Editar' : 'Configurar'} WhatsApp Business
+                </h2>
+              </div>
+              <button onClick={() => setShowWaModal(false)} className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
+                <span className="text-lg leading-none">×</span>
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Display Name</label>
+                <input
+                  type="text"
+                  value={waForm.display_name}
+                  onChange={e => setWaForm(f => ({ ...f, display_name: e.target.value }))}
+                  placeholder="Mi negocio"
+                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Phone Number ID <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={waForm.phone_number_id}
+                  onChange={e => setWaForm(f => ({ ...f, phone_number_id: e.target.value }))}
+                  placeholder="123456789012345"
+                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">WABA ID <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={waForm.waba_id}
+                  onChange={e => setWaForm(f => ({ ...f, waba_id: e.target.value }))}
+                  placeholder="123456789012345"
+                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Access Token <span className="text-red-400">*</span></label>
+                <div className="relative">
+                  <input
+                    type={showWaToken ? 'text' : 'password'}
+                    value={waForm.access_token}
+                    onChange={e => setWaForm(f => ({ ...f, access_token: e.target.value }))}
+                    placeholder="EAA…"
+                    className="w-full px-4 py-2.5 pr-10 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                  />
+                  <button type="button" onClick={() => setShowWaToken(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                    {showWaToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-600">Token permanente de usuario de sistema. No expira.</p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setShowWaModal(false)} className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors">
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveWaConfig}
+                  disabled={waConfigSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-bold transition-colors"
+                >
+                  {waConfigSaving ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
 import { verifyApplicationOwnership } from '../lib/security';
-import { Plus, MessageSquare, CheckCircle, XCircle, Clock, Send, Settings, Trash2, RefreshCw, AlertCircle, CreditCard as Edit, Eye, X, Loader, Smartphone } from 'lucide-react';
+import { Plus, MessageSquare, CheckCircle, XCircle, Clock, Send, Trash2, RefreshCw, AlertCircle, CreditCard as Edit, Eye, X, Loader, Smartphone } from 'lucide-react';
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -101,7 +101,7 @@ export const WhatsApp = () => {
   const [config, setConfig] = useState<WhatsAppConfig | null>(null);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [logs, setLogs] = useState<WhatsAppLog[]>([]);
-  const [activeTab, setActiveTab] = useState<'templates' | 'logs' | 'config'>('templates');
+  const [activeTab, setActiveTab] = useState<'templates' | 'logs'>('templates');
 
   // Template modal
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -116,16 +116,6 @@ export const WhatsApp = () => {
   });
   const [templateSaving, setTemplateSaving] = useState(false);
   const [submitting, setSubmitting] = useState<string | null>(null);
-
-  // Config modal
-  const [showConfigModal, setShowConfigModal] = useState(false);
-  const [configForm, setConfigForm] = useState({
-    phone_number_id: '',
-    waba_id: '',
-    access_token: '',
-    display_name: '',
-  });
-  const [configSaving, setConfigSaving] = useState(false);
 
   // Delete confirm
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -195,40 +185,6 @@ export const WhatsApp = () => {
       .order('created_at', { ascending: false })
       .limit(50);
     setLogs((data as WhatsAppLog[]) || []);
-  };
-
-  /* ── Config save ── */
-  const saveConfig = async () => {
-    if (!selectedApp) return;
-    if (!configForm.phone_number_id || !configForm.waba_id || !configForm.access_token) {
-      toast.error('Phone Number ID, WABA ID y Access Token son requeridos.');
-      return;
-    }
-    setConfigSaving(true);
-    try {
-      if (config) {
-        await db.from('whatsapp_configs').update({ ...configForm, updated_at: new Date().toISOString() }).eq('id', config.id);
-      } else {
-        await db.from('whatsapp_configs').insert({ ...configForm, application_id: selectedApp });
-      }
-      toast.success('Configuración guardada');
-      setShowConfigModal(false);
-      loadConfig();
-    } catch {
-      toast.error('Error al guardar la configuración.');
-    } finally {
-      setConfigSaving(false);
-    }
-  };
-
-  const openConfigModal = () => {
-    setConfigForm({
-      phone_number_id: config?.phone_number_id || '',
-      waba_id: config?.waba_id || '',
-      access_token: config?.access_token || '',
-      display_name: config?.display_name || '',
-    });
-    setShowConfigModal(true);
   };
 
   /* ── Template helpers ── */
@@ -344,12 +300,6 @@ export const WhatsApp = () => {
     loadTemplates();
   };
 
-  const toggleConfigActive = async () => {
-    if (!config) return;
-    await db.from('whatsapp_configs').update({ is_active: !config.is_active }).eq('id', config.id);
-    loadConfig();
-  };
-
   /* ── Extract variable count from body ── */
   const countVars = (text: string) => {
     const matches = text.match(/\{\{\d+\}\}/g);
@@ -372,13 +322,6 @@ export const WhatsApp = () => {
               <p className="text-sm text-slate-400">Templates aprobados por Meta · Cloud API</p>
             </div>
           </div>
-          <button
-            onClick={openConfigModal}
-            className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-sm transition-colors border border-slate-700"
-          >
-            <Settings className="w-4 h-4" />
-            <span>Configurar API</span>
-          </button>
         </div>
 
         {/* Config status banner */}
@@ -388,11 +331,8 @@ export const WhatsApp = () => {
             <div>
               <p className="text-amber-300 font-medium">Credenciales de Meta no configuradas</p>
               <p className="text-amber-400/70 text-sm mt-0.5">
-                Necesitás Phone Number ID, WABA ID y un Access Token permanente de Meta Business.
+                Configura las credenciales en <a href="/settings/whatsapp" className="underline">Configuración → WhatsApp Business</a>.
               </p>
-              <button onClick={openConfigModal} className="mt-2 text-sm text-amber-400 underline underline-offset-2">
-                Configurar ahora
-              </button>
             </div>
           </div>
         ) : (
@@ -406,9 +346,9 @@ export const WhatsApp = () => {
                 {config.display_name && <p className="text-xs text-slate-500 mt-0.5">{config.display_name}</p>}
               </div>
             </div>
-            <button onClick={toggleConfigActive} className="text-xs text-slate-400 hover:text-white transition-colors">
-              {config.is_active ? 'Desactivar' : 'Activar'}
-            </button>
+            <a href="/settings/whatsapp" className="text-xs text-slate-400 hover:text-white transition-colors">
+              Editar configuración
+            </a>
           </div>
         )}
 
@@ -429,13 +369,13 @@ export const WhatsApp = () => {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-slate-800/50 rounded-xl p-1 w-fit">
-          {(['templates', 'logs', 'config'] as const).map(tab => (
+          {(['templates', 'logs'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${activeTab === tab ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
             >
-              {tab === 'templates' ? 'Templates' : tab === 'logs' ? 'Logs de envío' : 'Configuración'}
+              {tab === 'templates' ? 'Templates' : 'Logs de envío'}
             </button>
           ))}
         </div>
@@ -595,76 +535,6 @@ export const WhatsApp = () => {
           </div>
         )}
 
-        {/* ── Config tab ── */}
-        {activeTab === 'config' && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-white">Credenciales Meta / WhatsApp Business</h2>
-            {!config ? (
-              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-8 text-center">
-                <Settings className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                <p className="text-slate-400 mb-4">No hay configuración guardada</p>
-                <button onClick={openConfigModal} className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm transition-colors">
-                  Configurar WhatsApp
-                </button>
-              </div>
-            ) : (
-              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 space-y-4">
-                {[
-                  { label: 'Display Name', value: config.display_name || '—' },
-                  { label: 'Phone Number ID', value: config.phone_number_id },
-                  { label: 'WABA ID', value: config.waba_id },
-                  { label: 'Access Token', value: '••••••••••••••••' },
-                ].map(row => (
-                  <div key={row.label} className="flex items-center justify-between py-2 border-b border-slate-700/50 last:border-0">
-                    <span className="text-slate-400 text-sm">{row.label}</span>
-                    <span className="text-white text-sm font-mono">{row.value}</span>
-                  </div>
-                ))}
-                <div className="pt-2">
-                  <button onClick={openConfigModal} className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors">
-                    <Edit className="w-4 h-4" />
-                    Editar credenciales
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* API reference */}
-            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
-              <h3 className="text-white font-semibold mb-3">Referencia de API — Envío de mensajes</h3>
-              <p className="text-slate-400 text-sm mb-4">
-                Endpoint público para consumir desde sistemas de terceros:
-              </p>
-              <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto">
-                <p className="text-slate-500 mb-1">POST {'{supabase_url}'}/functions/v1/whatsapp-send</p>
-                <pre className="text-emerald-400">{JSON.stringify({
-                  api_key: '<tu_api_key>',
-                  application_id: '<uuid>',
-                  template_name: 'confirmacion_reserva',
-                  language_code: 'es',
-                  recipient_phone: '+5491123456789',
-                  variables: ['Juan', 'Corte de cabello', '15/05/2026', '10:00'],
-                  external_reference_id: 'reserva_123',
-                }, null, 2)}</pre>
-              </div>
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div className="bg-slate-900/50 rounded-lg p-3">
-                  <p className="text-slate-400 font-medium mb-2">Respuesta exitosa (200)</p>
-                  <pre className="text-emerald-400 text-xs">{JSON.stringify({ success: true, wamid: 'wamid.xxx', log_id: 'uuid' }, null, 2)}</pre>
-                </div>
-                <div className="bg-slate-900/50 rounded-lg p-3">
-                  <p className="text-slate-400 font-medium mb-2">Notas</p>
-                  <ul className="text-slate-500 text-xs space-y-1">
-                    <li>• El template debe estar en estado <span className="text-emerald-400">APPROVED</span></li>
-                    <li>• <code>variables</code> son posicionales: {'{{1}}'}, {'{{2}}'}, etc.</li>
-                    <li>• Teléfono en formato E.164</li>
-                    <li>• Autenticación via <code>api_key</code> de la aplicación</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ── Template Modal ── */}
@@ -776,56 +646,6 @@ export const WhatsApp = () => {
                 className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 {templateSaving ? 'Guardando…' : editingTemplate ? 'Guardar cambios' : 'Crear template'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Config Modal ── */}
-      {showConfigModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg">
-            <div className="flex items-center justify-between p-6 border-b border-slate-700">
-              <h2 className="text-xl font-bold text-white">Credenciales Meta / WhatsApp</h2>
-              <button onClick={() => setShowConfigModal(false)} className="p-2 text-slate-400 hover:text-white transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 text-xs text-slate-400 space-y-1">
-                <p><strong className="text-slate-300">Phone Number ID:</strong> En Meta Business Manager → WhatsApp → Configuración</p>
-                <p><strong className="text-slate-300">WABA ID:</strong> WhatsApp Business Account ID del mismo panel</p>
-                <p><strong className="text-slate-300">Access Token:</strong> Token de sistema permanente (no expira)</p>
-              </div>
-              {[
-                { key: 'display_name', label: 'Display Name', placeholder: 'Mi negocio', type: 'text' },
-                { key: 'phone_number_id', label: 'Phone Number ID', placeholder: '123456789012345', type: 'text' },
-                { key: 'waba_id', label: 'WABA ID', placeholder: '123456789012345', type: 'text' },
-                { key: 'access_token', label: 'Access Token', placeholder: 'EAA…', type: 'password' },
-              ].map(field => (
-                <div key={field.key}>
-                  <label className="block text-sm text-slate-400 mb-1.5">{field.label}</label>
-                  <input
-                    type={field.type}
-                    value={(configForm as any)[field.key]}
-                    onChange={e => setConfigForm(f => ({ ...f, [field.key]: e.target.value }))}
-                    placeholder={field.placeholder}
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono text-sm"
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-3 p-6 pt-0">
-              <button onClick={() => setShowConfigModal(false)} className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm transition-colors">
-                Cancelar
-              </button>
-              <button
-                onClick={saveConfig}
-                disabled={configSaving}
-                className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                {configSaving ? 'Guardando…' : 'Guardar'}
               </button>
             </div>
           </div>
