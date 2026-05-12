@@ -374,7 +374,8 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'templates',
       permissionKey: 'templates',
       children: [
-        { name: 'Correos', icon: Mail, route: 'templates', page: 'templates', permissionKey: 'templates.correos' },
+        { name: 'Correos',   icon: Mail,           route: 'templates',          page: 'templates',           permissionKey: 'templates.correos' },
+        { name: 'WhatsApp',  icon: MessageSquare,  route: 'templates/whatsapp', page: 'templates-whatsapp',  permissionKey: 'templates.whatsapp' },
       ],
     },
     {

@@ -4,10 +4,12 @@ import { db } from '../lib/db';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
-import { verifyApplicationOwnership } from '../lib/security';
-import { Plus, MessageSquare, CheckCircle, XCircle, Clock, Send, Trash2, RefreshCw, AlertCircle, CreditCard as Edit, Eye, X, Loader, Smartphone } from 'lucide-react';
+import {
+  MessageSquare, CheckCircle, XCircle, Clock, Send, Trash2,
+  RefreshCw, AlertCircle, Eye, Search, Smartphone,
+} from 'lucide-react';
 
-/* ── Types ──────────────────────────────────────────────────────────────── */
+/* ── Types ─────────────────────────────────────────────────────── */
 
 interface Application {
   id: string;
@@ -25,34 +27,12 @@ interface WhatsAppConfig {
   is_active: boolean;
 }
 
-interface WhatsAppTemplate {
-  id: string;
-  application_id: string;
-  template_id: string | null;
-  meta_template_name: string;
-  meta_template_id: string | null;
-  language_code: string;
-  category: string;
-  status: string;
-  components: MetaComponent[];
-  rejection_reason: string | null;
-  submitted_at: string | null;
-  approved_at: string | null;
-  created_at: string;
-}
-
-interface MetaComponent {
-  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
-  format?: 'TEXT' | 'IMAGE' | 'DOCUMENT' | 'VIDEO';
-  text?: string;
-  buttons?: MetaButton[];
-}
-
-interface MetaButton {
-  type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
-  text: string;
-  url?: string;
-  phone_number?: string;
+interface WhatsAppStats {
+  totalSent: number;
+  totalDelivered: number;
+  totalRead: number;
+  totalFailed: number;
+  totalQueued: number;
 }
 
 interface WhatsAppLog {
@@ -60,65 +40,57 @@ interface WhatsAppLog {
   wamid: string | null;
   recipient_phone: string;
   status: string;
+  error_code: string | null;
   error_message: string | null;
   template_variables: Record<string, string>;
   external_reference_id: string | null;
+  whatsapp_template_id: string | null;
   created_at: string;
+  updated_at: string;
 }
 
-/* ── Helpers ────────────────────────────────────────────────────────────── */
+/* ── Helpers ────────────────────────────────────────────────────── */
 
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  DRAFT:    { label: 'Borrador',  cls: 'bg-slate-500/20 text-slate-400 border border-slate-500/30' },
-  PENDING:  { label: 'Pendiente', cls: 'bg-amber-500/20 text-amber-400 border border-amber-500/30' },
-  APPROVED: { label: 'Aprobado',  cls: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' },
-  REJECTED: { label: 'Rechazado', cls: 'bg-red-500/20 text-red-400 border border-red-500/30' },
-  PAUSED:   { label: 'Pausado',   cls: 'bg-orange-500/20 text-orange-400 border border-orange-500/30' },
-};
-
-const LOG_STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
-  queued:    { label: 'En cola',    cls: 'bg-slate-500/20 text-slate-400',   icon: Clock },
-  sent:      { label: 'Enviado',    cls: 'bg-blue-500/20 text-blue-400',     icon: Send },
-  delivered: { label: 'Entregado',  cls: 'bg-emerald-500/20 text-emerald-400', icon: CheckCircle },
-  read:      { label: 'Leído',      cls: 'bg-cyan-500/20 text-cyan-400',     icon: Eye },
-  failed:    { label: 'Fallido',    cls: 'bg-red-500/20 text-red-400',       icon: XCircle },
+const LOG_STATUS: Record<string, { label: string; cls: string; icon: any }> = {
+  queued:    { label: 'En cola',   cls: 'bg-slate-500/20 text-slate-400',     icon: Clock },
+  sent:      { label: 'Enviado',   cls: 'bg-blue-500/20 text-blue-400',       icon: Send },
+  delivered: { label: 'Entregado', cls: 'bg-emerald-500/20 text-emerald-400', icon: CheckCircle },
+  read:      { label: 'Leído',     cls: 'bg-cyan-500/20 text-cyan-400',       icon: Eye },
+  failed:    { label: 'Fallido',   cls: 'bg-red-500/20 text-red-400',         icon: XCircle },
 };
 
 const fmtDate = (d: string | null) =>
   d ? new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
-const SAMPLE_BODY = 'Hola {{1}},\n\nTu reserva para {{2}} quedó confirmada.\n\nFecha: {{3}}\nHora: {{4}}\n\nGracias.';
-
-/* ── Component ──────────────────────────────────────────────────────────── */
+/* ── Component ─────────────────────────────────────────────────── */
 
 export const WhatsApp = () => {
   const { user } = useAuth();
   const toast = useToast();
-  const { canCreate, canUpdate, canDelete } = usePermissions('statistics.jobs_whatsapp');
+  const { canDelete } = usePermissions('statistics.jobs_whatsapp');
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [config, setConfig] = useState<WhatsAppConfig | null>(null);
-  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
-  const [logs, setLogs] = useState<WhatsAppLog[]>([]);
-  const [activeTab, setActiveTab] = useState<'templates' | 'logs'>('templates');
-
-  // Template modal
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<WhatsAppTemplate | null>(null);
-  const [templateForm, setTemplateForm] = useState({
-    meta_template_name: '',
-    language_code: 'es',
-    category: 'UTILITY',
-    body_text: SAMPLE_BODY,
-    header_text: '',
-    footer_text: '',
+  const [stats, setStats] = useState<WhatsAppStats>({
+    totalSent: 0, totalDelivered: 0, totalRead: 0, totalFailed: 0, totalQueued: 0,
   });
-  const [templateSaving, setTemplateSaving] = useState(false);
-  const [submitting, setSubmitting] = useState<string | null>(null);
+  const [logs, setLogs] = useState<WhatsAppLog[]>([]);
+
+  // Filters
+  const [searchPhone, setSearchPhone] = useState('');
+  const [searchStatus, setSearchStatus] = useState('');
+  const [searchDateStart, setSearchDateStart] = useState('');
+  const [searchDateEnd, setSearchDateEnd] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Delete confirm
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Refresh
+  const [refreshing, setRefreshing] = useState(false);
 
   /* ── Load ── */
   useEffect(() => {
@@ -126,10 +98,15 @@ export const WhatsApp = () => {
   }, [user]);
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [searchPhone, searchStatus, searchDateStart, searchDateEnd]);
+
+  useEffect(() => {
     if (selectedApp) {
       loadConfig();
-      loadTemplates();
       loadLogs();
+      const interval = setInterval(() => { loadLogs(); }, 30000);
+      return () => clearInterval(interval);
     }
   }, [selectedApp]);
 
@@ -164,18 +141,6 @@ export const WhatsApp = () => {
     setConfig((data as WhatsAppConfig) || null);
   };
 
-  const loadTemplates = async () => {
-    if (!selectedApp || !user?.sub) return;
-    const isOwner = await verifyApplicationOwnership(selectedApp, user.sub, user.tenant_id);
-    if (!isOwner) return;
-    const { data } = await db
-      .from('whatsapp_templates')
-      .select('*')
-      .eq('application_id', selectedApp)
-      .order('created_at', { ascending: false });
-    setTemplates((data as WhatsAppTemplate[]) || []);
-  };
-
   const loadLogs = async () => {
     if (!selectedApp) return;
     const { data } = await db
@@ -183,484 +148,355 @@ export const WhatsApp = () => {
       .select('*')
       .eq('application_id', selectedApp)
       .order('created_at', { ascending: false })
-      .limit(50);
-    setLogs((data as WhatsAppLog[]) || []);
+      .limit(500);
+
+    const rows = (data as WhatsAppLog[]) || [];
+    setLogs(rows);
+    computeStats(rows);
   };
 
-  /* ── Template helpers ── */
-  const buildComponents = (): MetaComponent[] => {
-    const comps: MetaComponent[] = [];
-    if (templateForm.header_text.trim()) {
-      comps.push({ type: 'HEADER', format: 'TEXT', text: templateForm.header_text.trim() });
+  const computeStats = (rows: WhatsAppLog[]) => {
+    const s: WhatsAppStats = { totalSent: 0, totalDelivered: 0, totalRead: 0, totalFailed: 0, totalQueued: 0 };
+    for (const r of rows) {
+      if (r.status === 'sent')      s.totalSent++;
+      if (r.status === 'delivered') s.totalDelivered++;
+      if (r.status === 'read')      s.totalRead++;
+      if (r.status === 'failed')    s.totalFailed++;
+      if (r.status === 'queued')    s.totalQueued++;
     }
-    comps.push({ type: 'BODY', text: templateForm.body_text.trim() });
-    if (templateForm.footer_text.trim()) {
-      comps.push({ type: 'FOOTER', text: templateForm.footer_text.trim() });
-    }
-    return comps;
+    setStats(s);
   };
 
-  const openTemplateModal = (tpl?: WhatsAppTemplate) => {
-    if (tpl) {
-      setEditingTemplate(tpl);
-      const header = tpl.components.find(c => c.type === 'HEADER');
-      const body = tpl.components.find(c => c.type === 'BODY');
-      const footer = tpl.components.find(c => c.type === 'FOOTER');
-      setTemplateForm({
-        meta_template_name: tpl.meta_template_name,
-        language_code: tpl.language_code,
-        category: tpl.category,
-        body_text: body?.text || '',
-        header_text: header?.text || '',
-        footer_text: footer?.text || '',
-      });
-    } else {
-      setEditingTemplate(null);
-      setTemplateForm({
-        meta_template_name: '',
-        language_code: 'es',
-        category: 'UTILITY',
-        body_text: SAMPLE_BODY,
-        header_text: '',
-        footer_text: '',
-      });
-    }
-    setShowTemplateModal(true);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadLogs();
+    setRefreshing(false);
   };
 
-  const saveTemplate = async () => {
-    if (!selectedApp) return;
-    const name = templateForm.meta_template_name.trim().toLowerCase().replace(/\s+/g, '_');
-    if (!name || !templateForm.body_text.trim()) {
-      toast.error('Nombre y cuerpo del template son requeridos.');
-      return;
-    }
-    setTemplateSaving(true);
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
     try {
-      const payload = {
-        application_id: selectedApp,
-        meta_template_name: name,
-        language_code: templateForm.language_code,
-        category: templateForm.category,
-        components: buildComponents(),
-        status: 'DRAFT',
-        updated_at: new Date().toISOString(),
-      };
-      if (editingTemplate) {
-        await db.from('whatsapp_templates').update(payload).eq('id', editingTemplate.id);
-        toast.success('Template actualizado');
-      } else {
-        await db.from('whatsapp_templates').insert(payload);
-        toast.success('Template creado');
-      }
-      setShowTemplateModal(false);
-      loadTemplates();
+      const { error } = await db.from('whatsapp_logs').delete().eq('id', deleteConfirm);
+      if (error) throw error;
+      toast.success('Registro eliminado');
+      setDeleteConfirm(null);
+      loadLogs();
     } catch {
-      toast.error('Error al guardar el template.');
+      toast.error('Error al eliminar el registro');
     } finally {
-      setTemplateSaving(false);
+      setDeleting(false);
     }
   };
 
-  const submitToMeta = async (tpl: WhatsAppTemplate) => {
-    if (!config) {
-      toast.error('Primero configura las credenciales de WhatsApp.');
-      return;
-    }
-    setSubmitting(tpl.id);
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const res = await fetch(`${supabaseUrl}/functions/v1/whatsapp-template-submit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify({ application_id: selectedApp, template_id: tpl.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || data.detail || 'Error al enviar a Meta');
-      } else {
-        toast.success('Template enviado a Meta para aprobación');
-        loadTemplates();
+  /* ── Filtered logs ── */
+  const filteredLogs = logs.filter(log => {
+    const phoneMatch = !searchPhone || log.recipient_phone.toLowerCase().includes(searchPhone.toLowerCase());
+    const statusMatch = !searchStatus || log.status === searchStatus;
+    let dateMatch = true;
+    if (searchDateStart || searchDateEnd) {
+      const logDate = new Date(log.created_at);
+      if (searchDateStart) dateMatch = dateMatch && logDate >= new Date(searchDateStart);
+      if (searchDateEnd) {
+        const end = new Date(searchDateEnd);
+        end.setHours(23, 59, 59, 999);
+        dateMatch = dateMatch && logDate <= end;
       }
-    } catch {
-      toast.error('Error de conexión al enviar a Meta.');
-    } finally {
-      setSubmitting(null);
     }
-  };
+    return phoneMatch && statusMatch && dateMatch;
+  });
 
-  const deleteTemplate = async (id: string) => {
-    await db.from('whatsapp_templates').delete().eq('id', id);
-    toast.success('Template eliminado');
-    setDeleteConfirm(null);
-    loadTemplates();
-  };
-
-  /* ── Extract variable count from body ── */
-  const countVars = (text: string) => {
-    const matches = text.match(/\{\{\d+\}\}/g);
-    return matches ? new Set(matches).size : 0;
-  };
+  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
+  const paginatedLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   /* ── Render ── */
   return (
     <Layout currentPage="whatsapp">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-              <Smartphone className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white">WhatsApp</h1>
-              <p className="text-sm text-slate-400">Templates aprobados por Meta · Cloud API</p>
-            </div>
-          </div>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">Jobs — WhatsApp</h1>
+          <p className="text-sm text-slate-400 mt-1">Historial de mensajes y transacciones WhatsApp Business</p>
         </div>
 
-        {/* Config status banner */}
-        {!config ? (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-amber-300 font-medium">Credenciales de Meta no configuradas</p>
-              <p className="text-amber-400/70 text-sm mt-0.5">
-                Configura las credenciales en <a href="/settings/whatsapp" className="underline">Configuración → WhatsApp Business</a>.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className={`rounded-xl p-4 flex items-center justify-between border ${config.is_active ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-800/50 border-slate-700'}`}>
-            <div className="flex items-center gap-3">
-              <div className={`w-2 h-2 rounded-full ${config.is_active ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-              <div>
-                <p className={`text-sm font-medium ${config.is_active ? 'text-emerald-300' : 'text-slate-400'}`}>
-                  {config.is_active ? 'WhatsApp Cloud API activo' : 'WhatsApp Cloud API desactivado'}
-                </p>
-                {config.display_name && <p className="text-xs text-slate-500 mt-0.5">{config.display_name}</p>}
-              </div>
-            </div>
-            <a href="/settings/whatsapp" className="text-xs text-slate-400 hover:text-white transition-colors">
-              Editar configuración
+        {applications.length === 0 ? (
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-8 text-center">
+            <p className="text-slate-400 mb-4">Primero debes crear una aplicación</p>
+            <a href="/dashboard" className="inline-block px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors">
+              Ir al Dashboard
             </a>
           </div>
-        )}
-
-        {/* App selector */}
-        {applications.length > 1 && (
-          <div className="flex flex-wrap gap-2">
-            {applications.map(app => (
-              <button
-                key={app.id}
-                onClick={() => setSelectedApp(app.id)}
-                className={`px-4 py-2 rounded-lg text-sm transition-colors ${selectedApp === app.id ? 'bg-emerald-500 text-white' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}
-              >
-                {app.name}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Tabs */}
-        <div className="flex gap-1 bg-slate-800/50 rounded-xl p-1 w-fit">
-          {(['templates', 'logs'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
-            >
-              {tab === 'templates' ? 'Templates' : 'Logs de envío'}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Templates tab ── */}
-        {activeTab === 'templates' && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-white">Templates de WhatsApp</h2>
-              {canCreate && (
+        ) : (
+          <>
+            {/* App selector */}
+            <div className="flex space-x-2 overflow-x-auto pb-2">
+              {applications.map(app => (
                 <button
-                  onClick={() => openTemplateModal()}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm transition-colors"
+                  key={app.id}
+                  onClick={() => setSelectedApp(app.id)}
+                  className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
+                    selectedApp === app.id ? 'bg-emerald-500 text-white' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
+                  }`}
                 >
-                  <Plus className="w-4 h-4" />
-                  Nuevo Template
+                  {app.name}
                 </button>
-              )}
+              ))}
             </div>
 
-            {templates.length === 0 ? (
-              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-10 text-center">
-                <MessageSquare className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                <p className="text-slate-400 mb-2">No hay templates de WhatsApp</p>
-                <p className="text-slate-500 text-sm mb-4">Crea un Utility Template y envialo a Meta para aprobación</p>
-                {canCreate && (
-                  <button
-                    onClick={() => openTemplateModal()}
-                    className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm transition-colors"
-                  >
-                    Crear Template
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {templates.map(tpl => {
-                  const badge = STATUS_BADGE[tpl.status] || STATUS_BADGE.DRAFT;
-                  const body = tpl.components.find(c => c.type === 'BODY');
-                  const vars = countVars(body?.text || '');
-                  const canSubmit = ['DRAFT', 'REJECTED'].includes(tpl.status);
-                  return (
-                    <div key={tpl.id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-2 flex-wrap">
-                            <h3 className="text-white font-semibold font-mono text-sm">{tpl.meta_template_name}</h3>
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>{badge.label}</span>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">{tpl.category}</span>
-                            <span className="text-xs text-slate-500">{tpl.language_code}</span>
-                          </div>
-                          {body?.text && (
-                            <p className="text-slate-400 text-sm whitespace-pre-line line-clamp-3 font-mono bg-slate-900/50 rounded-lg p-3 mt-2">
-                              {body.text}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
-                            {vars > 0 && <span>{vars} variable{vars !== 1 ? 's' : ''}</span>}
-                            {tpl.submitted_at && <span>Enviado: {fmtDate(tpl.submitted_at)}</span>}
-                            {tpl.approved_at && <span>Aprobado: {fmtDate(tpl.approved_at)}</span>}
-                            {tpl.rejection_reason && (
-                              <span className="text-red-400">Motivo rechazo: {tpl.rejection_reason}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {canSubmit && config && (
-                            <button
-                              onClick={() => submitToMeta(tpl)}
-                              disabled={submitting === tpl.id}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-xs border border-emerald-500/20 transition-colors disabled:opacity-50"
-                            >
-                              {submitting === tpl.id ? <Loader className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                              Enviar a Meta
-                            </button>
-                          )}
-                          {canUpdate && ['DRAFT', 'REJECTED'].includes(tpl.status) && (
-                            <button
-                              onClick={() => openTemplateModal(tpl)}
-                              className="p-1.5 text-slate-400 hover:text-white transition-colors"
-                              title="Editar"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                          )}
-                          {canDelete && (
-                            <button
-                              onClick={() => setDeleteConfirm(tpl.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-400 transition-colors"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+            {/* Config warning */}
+            {!config && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-amber-300 font-medium text-sm">Credenciales de Meta no configuradas</p>
+                  <p className="text-amber-400/70 text-sm mt-0.5">
+                    Configura las credenciales en{' '}
+                    <a href="/settings/whatsapp" className="underline hover:text-amber-300 transition-colors">
+                      Configuración → WhatsApp Business
+                    </a>.
+                  </p>
+                </div>
               </div>
             )}
-          </div>
-        )}
 
-        {/* ── Logs tab ── */}
-        {activeTab === 'logs' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">Logs de envío</h2>
-              <button onClick={loadLogs} className="p-2 text-slate-400 hover:text-white transition-colors" title="Refrescar">
-                <RefreshCw className="w-4 h-4" />
-              </button>
-            </div>
-            {logs.length === 0 ? (
-              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-10 text-center">
-                <Send className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                <p className="text-slate-400">No hay mensajes enviados todavía</p>
+            {config && (
+              <div className={`rounded-xl p-3 flex items-center justify-between border ${config.is_active ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-800/50 border-slate-700'}`}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${config.is_active ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                  <span className={`text-sm ${config.is_active ? 'text-emerald-300' : 'text-slate-400'}`}>
+                    {config.is_active ? 'WhatsApp Cloud API activo' : 'WhatsApp Cloud API desactivado'}
+                    {config.display_name ? ` · ${config.display_name}` : ''}
+                  </span>
+                </div>
+                <a href="/settings/whatsapp" className="text-xs text-slate-500 hover:text-white transition-colors">
+                  Editar configuración
+                </a>
               </div>
-            ) : (
-              <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
+            )}
+
+            {/* Stats cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {[
+                { label: 'Enviados',   value: stats.totalSent,      icon: Send,         color: 'text-emerald-400' },
+                { label: 'Entregados', value: stats.totalDelivered,  icon: CheckCircle,  color: 'text-cyan-400' },
+                { label: 'Leídos',     value: stats.totalRead,       icon: Eye,          color: 'text-blue-400' },
+                { label: 'Fallidos',   value: stats.totalFailed,     icon: XCircle,      color: 'text-red-400' },
+                { label: 'En cola',    value: stats.totalQueued,     icon: Clock,        color: 'text-amber-400' },
+              ].map(({ label, value, icon: Icon, color }) => (
+                <div key={label} className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-slate-400">{label}</h3>
+                    <Icon className={`w-5 h-5 ${color}`} />
+                  </div>
+                  <p className="text-3xl font-bold text-white">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Additional stats */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="bg-emerald-500/10 backdrop-blur-sm rounded-xl border border-emerald-500/30 p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-emerald-300">Total mensajes</h3>
+                  <MessageSquare className="w-5 h-5 text-emerald-400" />
+                </div>
+                <p className="text-3xl font-bold text-white">{logs.length}</p>
+                <p className="text-xs text-emerald-300/70 mt-1">Total de mensajes registrados</p>
+              </div>
+              <div className="bg-cyan-500/10 backdrop-blur-sm rounded-xl border border-cyan-500/30 p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-cyan-300">Tasa de entrega</h3>
+                  <Smartphone className="w-5 h-5 text-cyan-400" />
+                </div>
+                <p className="text-3xl font-bold text-white">
+                  {logs.length > 0
+                    ? `${Math.round(((stats.totalDelivered + stats.totalRead) / logs.length) * 100)}%`
+                    : '—'}
+                </p>
+                <p className="text-xs text-cyan-300/70 mt-1">Entregados + leídos sobre total</p>
+              </div>
+            </div>
+
+            {/* Log history */}
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700">
+              <div className="p-4 sm:p-6 border-b border-slate-700">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-white">Historial de Mensajes</h2>
+                  <button
+                    onClick={handleRefresh}
+                    className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Filters */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      value={searchPhone}
+                      onChange={e => setSearchPhone(e.target.value)}
+                      placeholder="Buscar por teléfono..."
+                      className="w-full pl-9 pr-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                    />
+                  </div>
+                  <input
+                    type="date"
+                    value={searchDateStart}
+                    onChange={e => setSearchDateStart(e.target.value)}
+                    className="px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                  <select
+                    value={searchStatus}
+                    onChange={e => setSearchStatus(e.target.value)}
+                    className="px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-emerald-500 transition-colors"
+                  >
+                    <option value="">Todos los estados</option>
+                    <option value="queued">En cola</option>
+                    <option value="sent">Enviado</option>
+                    <option value="delivered">Entregado</option>
+                    <option value="read">Leído</option>
+                    <option value="failed">Fallido</option>
+                  </select>
+                  <input
+                    type="date"
+                    value={searchDateEnd}
+                    onChange={e => setSearchDateEnd(e.target.value)}
+                    className="px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full">
                   <thead>
                     <tr className="border-b border-slate-700">
-                      <th className="text-left px-4 py-3 text-slate-400 font-medium">Destinatario</th>
-                      <th className="text-left px-4 py-3 text-slate-400 font-medium">Estado</th>
-                      <th className="text-left px-4 py-3 text-slate-400 font-medium hidden md:table-cell">WAMID</th>
-                      <th className="text-left px-4 py-3 text-slate-400 font-medium hidden lg:table-cell">Fecha</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Destinatario</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">WAMID</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Referencia</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha</th>
+                      {canDelete && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Acciones</th>}
                     </tr>
                   </thead>
-                  <tbody>
-                    {logs.map((log, i) => {
-                      const s = LOG_STATUS_BADGE[log.status] || LOG_STATUS_BADGE.queued;
-                      const Icon = s.icon;
+                  <tbody className="divide-y divide-slate-700/50">
+                    {paginatedLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={canDelete ? 6 : 5} className="px-4 py-12 text-center">
+                          <MessageSquare className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                          <p className="text-slate-500 text-sm">No hay mensajes registrados</p>
+                        </td>
+                      </tr>
+                    ) : paginatedLogs.map(log => {
+                      const s = LOG_STATUS[log.status] || LOG_STATUS['queued'];
+                      const StatusIcon = s.icon;
                       return (
-                        <tr key={log.id} className={`border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors ${i % 2 === 0 ? '' : 'bg-slate-900/20'}`}>
-                          <td className="px-4 py-3 text-white font-mono">{log.recipient_phone}</td>
+                        <tr key={log.id} className="hover:bg-slate-700/20 transition-colors">
                           <td className="px-4 py-3">
-                            <span className={`flex items-center gap-1.5 w-fit px-2 py-0.5 rounded-full text-xs ${s.cls}`}>
-                              <Icon className="w-3 h-3" />
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${s.cls}`}>
+                              <StatusIcon className="w-3 h-3" />
                               {s.label}
                             </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-white font-mono">{log.recipient_phone}</span>
                             {log.error_message && (
-                              <p className="text-xs text-red-400 mt-1">{log.error_message}</p>
+                              <p className="text-xs text-red-400 mt-0.5 truncate max-w-[200px]">{log.error_message}</p>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-slate-500 font-mono text-xs hidden md:table-cell">
-                            {log.wamid ? log.wamid.slice(0, 20) + '…' : '—'}
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-xs text-slate-500 font-mono truncate max-w-[120px] block">
+                              {log.wamid ? log.wamid.slice(-16) : '—'}
+                            </span>
                           </td>
-                          <td className="px-4 py-3 text-slate-400 hidden lg:table-cell">{fmtDate(log.created_at)}</td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <span className="text-xs text-slate-400">{log.external_reference_id || '—'}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-slate-400">{fmtDate(log.created_at)}</span>
+                          </td>
+                          {canDelete && (
+                            <td className="px-4 py-3">
+                              <button
+                                onClick={() => setDeleteConfirm(log.id)}
+                                className="p-1.5 text-slate-500 hover:text-red-400 transition-colors rounded"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
-        )}
 
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="px-4 py-3 border-t border-slate-700 flex items-center justify-between">
+                  <p className="text-xs text-slate-500">
+                    Mostrando {((currentPage - 1) * itemsPerPage) + 1}–{Math.min(currentPage * itemsPerPage, filteredLogs.length)} de {filteredLogs.length}
+                  </p>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 text-xs bg-slate-800 text-slate-400 rounded-lg hover:bg-slate-700 disabled:opacity-40 transition-colors"
+                    >
+                      Anterior
+                    </button>
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      const page = currentPage <= 3 ? i + 1 : currentPage + i - 2;
+                      if (page < 1 || page > totalPages) return null;
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${currentPage === page ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                        >
+                          {page}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 text-xs bg-slate-800 text-slate-400 rounded-lg hover:bg-slate-700 disabled:opacity-40 transition-colors"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* ── Template Modal ── */}
-      {showTemplateModal && (
+      {/* Delete confirm modal */}
+      {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-slate-700">
-              <h2 className="text-xl font-bold text-white">
-                {editingTemplate ? 'Editar Template' : 'Nuevo Template WhatsApp'}
-              </h2>
-              <button onClick={() => setShowTemplateModal(false)} className="p-2 text-slate-400 hover:text-white transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-5">
-              {/* Info banner */}
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-sm text-blue-300">
-                <strong>Utility Template:</strong> Solo mensajes informativos relacionados con una acción del usuario (confirmaciones, recordatorios, facturas). Los templates deben ser aprobados por Meta antes de usarse.
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-sm text-slate-400 mb-1.5">Nombre del template <span className="text-red-400">*</span></label>
-                  <input
-                    type="text"
-                    value={templateForm.meta_template_name}
-                    onChange={e => setTemplateForm(f => ({ ...f, meta_template_name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') }))}
-                    placeholder="confirmacion_reserva"
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono text-sm"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Solo minúsculas, números y guiones bajos. Tal como aparece en Meta Business Manager.</p>
-                </div>
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1.5">Idioma</label>
-                  <select
-                    value={templateForm.language_code}
-                    onChange={e => setTemplateForm(f => ({ ...f, language_code: e.target.value }))}
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="es">es — Español</option>
-                    <option value="es_AR">es_AR — Español (Argentina)</option>
-                    <option value="es_MX">es_MX — Español (México)</option>
-                    <option value="en_US">en_US — English (US)</option>
-                    <option value="pt_BR">pt_BR — Português (Brasil)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1.5">Categoría</label>
-                  <select
-                    value={templateForm.category}
-                    onChange={e => setTemplateForm(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="UTILITY">UTILITY — Transaccional</option>
-                    <option value="MARKETING">MARKETING — Promocional</option>
-                    <option value="AUTHENTICATION">AUTHENTICATION — OTP / Código</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm text-slate-400 mb-1.5">Header (opcional)</label>
-                <input
-                  type="text"
-                  value={templateForm.header_text}
-                  onChange={e => setTemplateForm(f => ({ ...f, header_text: e.target.value }))}
-                  placeholder="Ej: Confirmación de reserva"
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-slate-400 mb-1.5">
-                  Cuerpo del mensaje <span className="text-red-400">*</span>
-                  <span className="ml-2 text-slate-500 font-normal">Usa {'{{1}}'}, {'{{2}}'}, etc. para variables posicionales</span>
-                </label>
-                <textarea
-                  value={templateForm.body_text}
-                  onChange={e => setTemplateForm(f => ({ ...f, body_text: e.target.value }))}
-                  rows={8}
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono text-sm resize-none"
-                />
-                {countVars(templateForm.body_text) > 0 && (
-                  <p className="text-xs text-emerald-400 mt-1">{countVars(templateForm.body_text)} variable{countVars(templateForm.body_text) !== 1 ? 's' : ''} detectada{countVars(templateForm.body_text) !== 1 ? 's' : ''}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm text-slate-400 mb-1.5">Footer (opcional)</label>
-                <input
-                  type="text"
-                  value={templateForm.footer_text}
-                  onChange={e => setTemplateForm(f => ({ ...f, footer_text: e.target.value }))}
-                  placeholder="Ej: Gracias por confiar en nosotros"
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 p-6 pt-0">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm">
+            <h3 className="text-lg font-bold text-white mb-2">Eliminar registro</h3>
+            <p className="text-slate-400 text-sm mb-6">Esta acción no se puede deshacer.</p>
+            <div className="flex gap-3">
               <button
-                onClick={() => setShowTemplateModal(false)}
+                onClick={() => setDeleteConfirm(null)}
                 className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm transition-colors"
               >
                 Cancelar
               </button>
               <button
-                onClick={saveTemplate}
-                disabled={templateSaving}
-                className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-lg text-sm transition-colors"
               >
-                {templateSaving ? 'Guardando…' : editingTemplate ? 'Guardar cambios' : 'Crear template'}
+                {deleting ? 'Eliminando…' : 'Eliminar'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Delete confirm ── */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm">
-            <h3 className="text-lg font-bold text-white mb-2">Eliminar template</h3>
-            <p className="text-slate-400 text-sm mb-6">Esta acción no se puede deshacer.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm transition-colors">Cancelar</button>
-              <button onClick={() => deleteTemplate(deleteConfirm)} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors">Eliminar</button>
             </div>
           </div>
         </div>
