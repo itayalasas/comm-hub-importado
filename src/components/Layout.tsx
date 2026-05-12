@@ -417,10 +417,9 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'settings',
       permissionKey: 'settings',
       children: [
-        { name: 'Aplicaciones',       icon: AppWindow,      route: 'settings/apps',      page: 'settings-apps',      permissionKey: 'settings.aplicaciones' },
-        { name: 'Correo Electrónico', icon: Mail,           route: 'settings/email',     page: 'settings-email',     permissionKey: 'settings.correo_electronico' },
-        { name: 'WhatsApp Business',  icon: MessageSquare,  route: 'settings/whatsapp',  page: 'settings-whatsapp',  permissionKey: 'settings.whatsapp' },
-        { name: 'Acceso al Embed',    icon: Package,        route: 'settings/embed',     page: 'settings-embed',     permissionKey: 'settings.acceso_embed' },
+        { name: 'Aplicaciones',       icon: AppWindow,  route: 'settings/apps',  page: 'settings-apps',  permissionKey: 'settings.aplicaciones' },
+        { name: 'Correo Electrónico', icon: Mail,       route: 'settings/email', page: 'settings-email', permissionKey: 'settings.correo_electronico' },
+        { name: 'Acceso al Embed',    icon: Package,    route: 'settings/embed', page: 'settings-embed', permissionKey: 'settings.acceso_embed' },
       ],
     },
   ] as NavItem[])

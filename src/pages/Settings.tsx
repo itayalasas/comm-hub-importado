@@ -8,7 +8,7 @@ import { configManager } from '../lib/config';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
-import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink, MessageSquare, CreditCard as Edit } from 'lucide-react';
+import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink, MessageSquare } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -61,7 +61,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
   const [showNewAppModal, setShowNewAppModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [copiedKey, setCopiedKey] = useState(false);
+  const [, setCopiedKey] = useState(false);
   const [newAppData, setNewAppData] = useState({
     name: '',
     domain: '',
@@ -81,9 +81,11 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
 
   // ── WhatsApp config state ────────────────────────────────────────────
   const [waConfig, setWaConfig] = useState<WhatsAppConfig | null>(null);
-  const [waConfigLoading, setWaConfigLoading] = useState(false);
+  const [waConfigsMap, setWaConfigsMap] = useState<Record<string, WhatsAppConfig | null>>({});
+  const [, setWaConfigLoading] = useState(false);
   const [waConfigSaving, setWaConfigSaving] = useState(false);
   const [showWaModal, setShowWaModal] = useState(false);
+  const [waTargetAppId, setWaTargetAppId] = useState<string | null>(null);
   const [waForm, setWaForm] = useState({
     phone_number_id: '',
     waba_id: '',
@@ -91,6 +93,9 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     display_name: '',
   });
   const [showWaToken, setShowWaToken] = useState(false);
+
+  // ── Per-app copied key tracking ──────────────────────────────────────
+  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
 
   // Plan feature gates for email providers
   const canUseSmtp = hasFeature('configuracion_smtp');
@@ -173,7 +178,8 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
 
       if (error) throw error;
 
-      setApplications((data as Application[]) || []);
+      const apps = (data as Application[]) || [];
+      setApplications(apps);
 
       const { data: prefs } = await db
         .from('user_preferences')
@@ -184,8 +190,12 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
       if ((prefs as any)?.default_application_id) {
         setDefaultApp((prefs as any).default_application_id);
         setSelectedApp((prefs as any).default_application_id);
-      } else if (data && (data as any[]).length > 0) {
-        setSelectedApp((data as any[])[0].id);
+      } else if (apps.length > 0) {
+        setSelectedApp(apps[0].id);
+      }
+
+      if (apps.length > 0) {
+        loadAllWaConfigs(apps.map(a => a.id));
       }
     } catch {
       // ignore
@@ -241,19 +251,37 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     }
   };
 
-  const openWaModal = () => {
+  const loadAllWaConfigs = async (appIds: string[]) => {
+    if (appIds.length === 0) return;
+    const { data } = await db
+      .from('whatsapp_configs')
+      .select('*')
+      .in('application_id', appIds);
+    const map: Record<string, WhatsAppConfig | null> = {};
+    for (const id of appIds) map[id] = null;
+    for (const row of (data as WhatsAppConfig[]) || []) {
+      map[row.application_id] = row;
+    }
+    setWaConfigsMap(map);
+  };
+
+  const openWaModal = (appId: string) => {
+    const existing = waConfigsMap[appId] || null;
+    setWaTargetAppId(appId);
+    setWaConfig(existing);
     setWaForm({
-      phone_number_id: waConfig?.phone_number_id || '',
-      waba_id: waConfig?.waba_id || '',
-      access_token: waConfig?.access_token || '',
-      display_name: waConfig?.display_name || '',
+      phone_number_id: existing?.phone_number_id || '',
+      waba_id: existing?.waba_id || '',
+      access_token: existing?.access_token || '',
+      display_name: existing?.display_name || '',
     });
     setShowWaToken(false);
     setShowWaModal(true);
   };
 
   const saveWaConfig = async () => {
-    if (!selectedApp) return;
+    const targetId = waTargetAppId || selectedApp;
+    if (!targetId) return;
     if (!waForm.phone_number_id || !waForm.waba_id || !waForm.access_token) {
       toast.error('Phone Number ID, WABA ID y Access Token son requeridos.');
       return;
@@ -268,13 +296,14 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
       } else {
         await db.from('whatsapp_configs').insert({
           ...waForm,
-          application_id: selectedApp,
+          application_id: targetId,
           is_active: true,
         });
       }
       toast.success('Configuración de WhatsApp guardada');
       setShowWaModal(false);
-      loadWaConfig(selectedApp);
+      await loadAllWaConfigs(applications.map(a => a.id));
+      if (selectedApp && (tab === 'whatsapp')) loadWaConfig(selectedApp);
     } catch {
       toast.error('Error al guardar la configuración.');
     } finally {
@@ -282,14 +311,6 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     }
   };
 
-  const toggleWaActive = async () => {
-    if (!waConfig || !selectedApp) return;
-    await db
-      .from('whatsapp_configs')
-      .update({ is_active: !waConfig.is_active, updated_at: new Date().toISOString() })
-      .eq('id', waConfig.id);
-    loadWaConfig(selectedApp);
-  };
 
   // ── Embed credential helpers ─────────────────────────────────────────
 
@@ -499,11 +520,12 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     }
   };
 
-  const copyApiKey = (apiKey: string) => {
+  const copyApiKey = (apiKey: string, appId?: string) => {
     navigator.clipboard.writeText(apiKey);
     setCopiedKey(true);
+    if (appId) setCopiedKeyId(appId);
     toast.success('API Key copiada al portapapeles');
-    setTimeout(() => setCopiedKey(false), 2000);
+    setTimeout(() => { setCopiedKey(false); setCopiedKeyId(null); }, 2000);
   };
 
   const generateSecureKey = () => {
@@ -561,15 +583,13 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     }
   };
 
-  const currentPageSlug = tab === 'email' ? 'settings-email' : tab === 'embed' ? 'settings-embed' : tab === 'whatsapp' ? 'settings-whatsapp' : 'settings-apps';
-  const pageTitle = tab === 'email' ? 'Correo Electrónico' : tab === 'embed' ? 'Acceso al Embed' : tab === 'whatsapp' ? 'WhatsApp Business' : 'Aplicaciones';
+  const currentPageSlug = tab === 'email' ? 'settings-email' : tab === 'embed' ? 'settings-embed' : 'settings-apps';
+  const pageTitle = tab === 'email' ? 'Correo Electrónico' : tab === 'embed' ? 'Acceso al Embed' : 'Aplicaciones';
   const pageDesc = tab === 'email'
     ? 'Configura el proveedor de email para cada aplicación'
     : tab === 'embed'
     ? 'Genera credenciales para proteger el acceso al Marketplace embebido'
-    : tab === 'whatsapp'
-    ? 'Configura las credenciales de Meta Cloud API por aplicación'
-    : 'Gestiona tus aplicaciones y API keys';
+    : 'Gestiona tus aplicaciones e integraciones';
 
   if (loading) {
     return (
@@ -588,94 +608,149 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
         </div>
 
         {tab === 'apps' && (
-        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
-            <div className="flex items-center space-x-2">
-              <Key className="w-5 h-5 text-cyan-400" />
-              <h3 className="text-base sm:text-lg font-semibold text-white">Aplicaciones y API Keys</h3>
-            </div>
-            <button
-              onClick={handleNewApplicationClick}
-              className="flex items-center justify-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Nueva Aplicación</span>
-            </button>
-          </div>
-
-          {applications.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-slate-400 mb-4">No tienes aplicaciones creadas</p>
+          <div className="space-y-4">
+            {/* Header row */}
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-400">{applications.length} aplicación{applications.length !== 1 ? 'es' : ''} registrada{applications.length !== 1 ? 's' : ''}</p>
               <button
                 onClick={handleNewApplicationClick}
-                className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg text-sm transition-colors font-medium"
               >
-                Crear Primera Aplicación
+                <Plus className="w-4 h-4" />
+                Nueva Aplicación
               </button>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {applications.map((app) => (
-                  <div
-                    key={app.id}
-                    className={`bg-slate-900/50 border rounded-lg p-4 transition-all ${
-                      defaultApp === app.id
-                        ? 'border-cyan-500 bg-cyan-500/5'
-                        : 'border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <h4 className="text-white font-semibold">{app.name}</h4>
-                        {defaultApp === app.id && (
-                          <span className="flex items-center space-x-1 px-2 py-1 bg-cyan-500/20 text-cyan-400 text-xs rounded-full">
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>Por defecto</span>
-                          </span>
+
+            {applications.length === 0 ? (
+              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-12 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-slate-700/50 flex items-center justify-center mx-auto mb-4">
+                  <Key className="w-7 h-7 text-slate-500" />
+                </div>
+                <p className="text-white font-semibold mb-1">Sin aplicaciones</p>
+                <p className="text-slate-400 text-sm mb-5">Crea tu primera aplicación para obtener una API Key</p>
+                <button
+                  onClick={handleNewApplicationClick}
+                  className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
+                >
+                  Crear Primera Aplicación
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {applications.map((app) => {
+                  const waConf = waConfigsMap[app.id];
+                  const isDefault = defaultApp === app.id;
+
+                  return (
+                    <div
+                      key={app.id}
+                      className={`rounded-xl border transition-all ${
+                        isDefault
+                          ? 'border-cyan-500/50 bg-cyan-500/5'
+                          : 'border-slate-700 bg-slate-800/50'
+                      }`}
+                    >
+                      {/* App header */}
+                      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold ${isDefault ? 'bg-cyan-500/20 text-cyan-400' : 'bg-slate-700/60 text-slate-400'}`}>
+                            {app.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-white font-semibold text-sm">{app.name}</h4>
+                              {isDefault && (
+                                <span className="flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 text-cyan-400 text-xs rounded-full">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Por defecto
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500 font-mono mt-0.5">{app.id}</p>
+                          </div>
+                        </div>
+                        {!isDefault && (
+                          <button
+                            onClick={() => setAsDefault(app.id)}
+                            className="text-xs px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
+                          >
+                            Marcar por defecto
+                          </button>
                         )}
                       </div>
-                      {defaultApp !== app.id && (
-                        <button
-                          onClick={() => setAsDefault(app.id)}
-                          className="text-xs px-3 py-1 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors"
-                        >
-                          Marcar como predeterminada
-                        </button>
-                      )}
-                    </div>
 
-                    <div className="space-y-2">
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">API Key</div>
-                        <div className="flex items-center space-x-2">
-                          <code className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-cyan-400 font-mono overflow-x-auto">
+                      {/* API Key row */}
+                      <div className="px-5 py-3 border-b border-slate-700/40">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 w-16 shrink-0">API Key</span>
+                          <code className="flex-1 text-xs text-cyan-400 font-mono bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-700/50 truncate">
                             {app.api_key}
                           </code>
                           <button
-                            onClick={() => copyApiKey(app.api_key)}
-                            className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition-colors"
+                            onClick={() => copyApiKey(app.api_key, app.id)}
+                            className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-700 rounded-lg transition-colors shrink-0"
                             title="Copiar API Key"
                           >
-                            {copiedKey ? (
-                              <CheckCircle2 className="w-4 h-4 text-green-400" />
+                            {copiedKeyId === app.id ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                             ) : (
                               <Copy className="w-4 h-4" />
                             )}
                           </button>
                         </div>
                       </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">ID de Aplicación</div>
-                        <code className="block px-3 py-2 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-mono overflow-x-auto">
-                          {app.id}
-                        </code>
+
+                      {/* Integrations row */}
+                      <div className="px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-slate-500">Integraciones</span>
+
+                          {/* Email status chip */}
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-slate-700/50 text-slate-400 border border-slate-700">
+                            <Server className="w-3 h-3" />
+                            Email
+                          </span>
+
+                          {/* WhatsApp status chip */}
+                          {waConf != null ? (
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${
+                              waConf.is_active
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : 'bg-slate-700/50 text-slate-400 border-slate-700'
+                            }`}>
+                              <MessageSquare className="w-3 h-3" />
+                              {waConf.is_active ? 'WhatsApp activo' : 'WhatsApp inactivo'}
+                              {waConf.display_name ? ` · ${waConf.display_name}` : ''}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-slate-700/30 text-slate-600 border border-slate-700/50">
+                              <MessageSquare className="w-3 h-3" />
+                              WhatsApp sin configurar
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openWaModal(app.id)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              waConf != null
+                                ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white'
+                                : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/20'
+                            }`}
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            {waConf != null ? 'Editar WhatsApp' : 'Conectar WhatsApp'}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {tab === 'email' && applications.length > 0 && (
@@ -809,110 +884,6 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
                 >
                   Configurar Email
                 </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── WhatsApp Business tab ──────────────────────────────────── */}
-        {tab === 'whatsapp' && (
-          <div className="space-y-6">
-            {/* App selector */}
-            {applications.length > 0 && (
-              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <MessageSquare className="w-5 h-5 text-emerald-400" />
-                  <h3 className="text-base sm:text-lg font-semibold text-white">Credenciales Meta por aplicación</h3>
-                </div>
-
-                {/* Info */}
-                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-xs text-slate-400 space-y-1 mb-5">
-                  <p><strong className="text-slate-300">Phone Number ID:</strong> En Meta Business Manager → WhatsApp → Configuración</p>
-                  <p><strong className="text-slate-300">WABA ID:</strong> WhatsApp Business Account ID del mismo panel</p>
-                  <p><strong className="text-slate-300">Access Token:</strong> Token de sistema permanente (no expira). Generalo en Meta Business → Usuarios del sistema</p>
-                </div>
-
-                {/* Application selector */}
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {applications.map(app => (
-                    <button
-                      key={app.id}
-                      onClick={() => setSelectedApp(app.id)}
-                      className={`px-4 py-2 rounded-lg text-sm transition-colors ${selectedApp === app.id ? 'bg-emerald-500 text-white' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}
-                    >
-                      {app.name}
-                    </button>
-                  ))}
-                </div>
-
-                {waConfigLoading ? (
-                  <div className="py-8 text-center text-slate-500 text-sm">Cargando configuración…</div>
-                ) : !waConfig ? (
-                  <div className="text-center py-8">
-                    <MessageSquare className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                    <p className="text-slate-400 mb-4">No hay configuración de WhatsApp para esta aplicación</p>
-                    <button
-                      onClick={openWaModal}
-                      className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm transition-colors"
-                    >
-                      Configurar WhatsApp
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* Status row */}
-                    <div className={`flex items-center justify-between rounded-lg p-3 border ${waConfig.is_active ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-800 border-slate-700'}`}>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${waConfig.is_active ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-                        <span className={`text-sm font-medium ${waConfig.is_active ? 'text-emerald-300' : 'text-slate-400'}`}>
-                          {waConfig.is_active ? 'WhatsApp Cloud API activo' : 'WhatsApp Cloud API desactivado'}
-                        </span>
-                      </div>
-                      <button onClick={toggleWaActive} className="text-xs text-slate-400 hover:text-white transition-colors">
-                        {waConfig.is_active ? 'Desactivar' : 'Activar'}
-                      </button>
-                    </div>
-
-                    {/* Fields */}
-                    <div className="grid md:grid-cols-2 gap-3">
-                      {waConfig.display_name && (
-                        <div className="bg-slate-900/50 rounded-lg p-3">
-                          <div className="text-xs text-slate-500 mb-1">Display Name</div>
-                          <div className="text-sm text-white font-mono">{waConfig.display_name}</div>
-                        </div>
-                      )}
-                      <div className="bg-slate-900/50 rounded-lg p-3">
-                        <div className="text-xs text-slate-500 mb-1">Phone Number ID</div>
-                        <div className="text-sm text-white font-mono">{waConfig.phone_number_id}</div>
-                      </div>
-                      <div className="bg-slate-900/50 rounded-lg p-3">
-                        <div className="text-xs text-slate-500 mb-1">WABA ID</div>
-                        <div className="text-sm text-white font-mono">{waConfig.waba_id}</div>
-                      </div>
-                      <div className="bg-slate-900/50 rounded-lg p-3">
-                        <div className="text-xs text-slate-500 mb-1">Access Token</div>
-                        <div className="text-sm text-white font-mono">••••••••{waConfig.access_token.slice(-6)}</div>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={openWaModal}
-                      className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors mt-1"
-                    >
-                      <Edit className="w-4 h-4" />
-                      Editar credenciales
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {applications.length === 0 && (
-              <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-8 text-center">
-                <p className="text-slate-400 mb-4">Primero debes crear una aplicación en Configuración → Aplicaciones</p>
-                <a href="/settings/apps" className="inline-block px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm">
-                  Ir a Aplicaciones
-                </a>
               </div>
             )}
           </div>

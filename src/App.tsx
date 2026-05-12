@@ -215,14 +215,6 @@ const AppRoutes = () => {
         }
       />
       <Route
-        path="/settings/whatsapp"
-        element={
-          <ProtectedRoute requiredMenu="settings">
-            <Settings tab="whatsapp" />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/api-explorer"
         element={
           <ProtectedRoute requiredMenu="documentation">
