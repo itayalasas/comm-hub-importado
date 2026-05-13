@@ -7,7 +7,7 @@ import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
 import {
   Plus, MessageSquare, CheckCircle, XCircle, Clock, Send,
-  Trash2, RefreshCw, AlertCircle, Eye, X,
+  Trash2, RefreshCw, AlertCircle, Eye, X, FileText, Paperclip,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -26,6 +26,13 @@ interface WhatsAppConfig {
   access_token: string;
   display_name: string;
   is_active: boolean;
+}
+
+interface PdfTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  pdf_filename_pattern: string | null;
 }
 
 interface MetaComponent {
@@ -56,6 +63,8 @@ interface WhatsAppTemplate {
   submitted_at: string | null;
   approved_at: string | null;
   created_at: string;
+  pdf_template_id: string | null;
+  pdf_filename_pattern: string | null;
 }
 
 /* ── Helpers ────────────────────────────────────────────────────── */
@@ -84,6 +93,7 @@ export const WhatsAppTemplates = () => {
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [config, setConfig] = useState<WhatsAppConfig | null>(null);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [pdfTemplates, setPdfTemplates] = useState<PdfTemplate[]>([]);
 
   // Template modal
   const [showModal, setShowModal] = useState(false);
@@ -95,6 +105,8 @@ export const WhatsAppTemplates = () => {
     body_text: SAMPLE_BODY,
     header_text: '',
     footer_text: '',
+    pdf_template_id: null as string | null,
+    pdf_filename_pattern: '',
   });
   const [templateSaving, setTemplateSaving] = useState(false);
 
@@ -116,6 +128,7 @@ export const WhatsAppTemplates = () => {
     if (selectedApp) {
       loadConfig();
       loadTemplates();
+      loadPdfTemplates();
     }
   }, [selectedApp]);
 
@@ -160,6 +173,17 @@ export const WhatsAppTemplates = () => {
     setTemplates((data as WhatsAppTemplate[]) || []);
   };
 
+  const loadPdfTemplates = async () => {
+    if (!selectedApp) return;
+    const { data } = await db
+      .from('communication_templates')
+      .select('id, name, description, pdf_filename_pattern')
+      .eq('application_id', selectedApp)
+      .eq('template_type', 'pdf')
+      .order('name', { ascending: true });
+    setPdfTemplates((data as PdfTemplate[]) || []);
+  };
+
   /* ── Template helpers ── */
   const buildComponents = (): MetaComponent[] => {
     const comps: MetaComponent[] = [];
@@ -186,10 +210,21 @@ export const WhatsAppTemplates = () => {
         body_text: body?.text || '',
         header_text: header?.text || '',
         footer_text: footer?.text || '',
+        pdf_template_id: tpl.pdf_template_id || null,
+        pdf_filename_pattern: tpl.pdf_filename_pattern || '',
       });
     } else {
       setEditingTemplate(null);
-      setTemplateForm({ meta_template_name: '', language_code: 'es', category: 'UTILITY', body_text: SAMPLE_BODY, header_text: '', footer_text: '' });
+      setTemplateForm({
+        meta_template_name: '',
+        language_code: 'es',
+        category: 'UTILITY',
+        body_text: SAMPLE_BODY,
+        header_text: '',
+        footer_text: '',
+        pdf_template_id: null,
+        pdf_filename_pattern: '',
+      });
     }
     setShowModal(true);
   };
@@ -207,6 +242,8 @@ export const WhatsAppTemplates = () => {
         language_code: templateForm.language_code,
         category: templateForm.category,
         components: buildComponents(),
+        pdf_template_id: templateForm.pdf_template_id || null,
+        pdf_filename_pattern: templateForm.pdf_template_id ? (templateForm.pdf_filename_pattern || null) : null,
         updated_at: new Date().toISOString(),
       };
 
@@ -265,6 +302,8 @@ export const WhatsAppTemplates = () => {
     return matches ? new Set(matches).size : 0;
   };
 
+  const selectedPdfTemplate = pdfTemplates.find(p => p.id === templateForm.pdf_template_id) || null;
+
   /* ── Render ── */
   return (
     <Layout currentPage="templates-whatsapp">
@@ -306,8 +345,8 @@ export const WhatsAppTemplates = () => {
                   <p className="text-amber-300 font-medium text-sm">Credenciales de Meta no configuradas</p>
                   <p className="text-amber-400/70 text-sm mt-0.5">
                     Configura las credenciales en{' '}
-                    <a href="/settings/whatsapp" className="underline hover:text-amber-300 transition-colors">
-                      Configuración → WhatsApp Business
+                    <a href="/settings" className="underline hover:text-amber-300 transition-colors">
+                      Configuración → Aplicaciones
                     </a>{' '}
                     para poder enviar templates a Meta.
                   </p>
@@ -351,6 +390,7 @@ export const WhatsAppTemplates = () => {
                     const StatusIcon = st.icon;
                     const body = tpl.components.find(c => c.type === 'BODY');
                     const varCount = body ? countVars(body.text || '') : 0;
+                    const linkedPdf = pdfTemplates.find(p => p.id === tpl.pdf_template_id);
 
                     return (
                       <div key={tpl.id} className="p-4 sm:p-5 hover:bg-slate-700/20 transition-colors">
@@ -371,6 +411,12 @@ export const WhatsAppTemplates = () => {
                               {varCount > 0 && (
                                 <span className="px-2 py-0.5 rounded-full text-xs bg-blue-500/20 text-blue-400">
                                   {varCount} var{varCount !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                              {linkedPdf && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                  <Paperclip className="w-3 h-3" />
+                                  {linkedPdf.name}
                                 </span>
                               )}
                             </div>
@@ -529,7 +575,69 @@ export const WhatsAppTemplates = () => {
                   className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                 />
               </div>
+
+              {/* PDF Attachment */}
+              <div className="border border-slate-700 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/60">
+                  <FileText className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm font-medium text-slate-300">PDF adjunto (opcional)</span>
+                </div>
+                <div className="p-4 space-y-3">
+                  <p className="text-xs text-slate-500">
+                    Selecciona un template PDF para generarlo y enviarlo como documento adjunto en el mensaje de WhatsApp.
+                  </p>
+                  {pdfTemplates.length === 0 ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-800/50 rounded-lg px-3 py-2.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      No hay templates PDF en esta aplicación. Crea uno en Templates → Correo para poder adjuntarlo.
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        value={templateForm.pdf_template_id || ''}
+                        onChange={e => {
+                          const id = e.target.value || null;
+                          const found = pdfTemplates.find(p => p.id === id);
+                          setTemplateForm(f => ({
+                            ...f,
+                            pdf_template_id: id,
+                            pdf_filename_pattern: found?.pdf_filename_pattern || f.pdf_filename_pattern,
+                          }));
+                        }}
+                        className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500 text-sm"
+                      >
+                        <option value="">— Sin adjunto PDF —</option>
+                        {pdfTemplates.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+
+                      {selectedPdfTemplate && (
+                        <>
+                          {selectedPdfTemplate.description && (
+                            <p className="text-xs text-slate-500">{selectedPdfTemplate.description}</p>
+                          )}
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1.5">
+                              Nombre del archivo PDF
+                              <span className="ml-1 text-slate-600">Usa {'{{variable}}'} para valores dinámicos</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={templateForm.pdf_filename_pattern}
+                              onChange={e => setTemplateForm(f => ({ ...f, pdf_filename_pattern: e.target.value }))}
+                              placeholder="documento_{{numero}}.pdf"
+                              className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono text-sm"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
+
             <div className="flex gap-3 p-6 pt-0 sticky bottom-0 bg-slate-900">
               <button
                 onClick={() => setShowModal(false)}
@@ -578,6 +686,14 @@ export const WhatsAppTemplates = () => {
                   }
                   return null;
                 })}
+                {previewTemplate.pdf_template_id && (
+                  <div className="flex items-center gap-2 bg-slate-700/50 rounded-lg px-3 py-2 mt-1">
+                    <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="text-xs text-slate-300 truncate">
+                      {pdfTemplates.find(p => p.id === previewTemplate.pdf_template_id)?.name || 'PDF adjunto'}
+                    </span>
+                  </div>
+                )}
                 <p className="text-slate-500 text-[10px] text-right">{fmtDate(previewTemplate.created_at)}</p>
               </div>
               {previewTemplate.rejection_reason && (
