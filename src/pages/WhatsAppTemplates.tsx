@@ -5,6 +5,7 @@ import { functionsFetch } from '../lib/functions';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
+import { PageLoader } from '../components/PageLoader';
 import {
   Plus, MessageSquare, CheckCircle, XCircle, Clock, Send,
   Trash2, RefreshCw, AlertCircle, Eye, X, FileText, Paperclip,
@@ -94,6 +95,7 @@ export const WhatsAppTemplates = () => {
   const [config, setConfig] = useState<WhatsAppConfig | null>(null);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [pdfTemplates, setPdfTemplates] = useState<PdfTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Template modal
   const [showModal, setShowModal] = useState(false);
@@ -150,6 +152,8 @@ export const WhatsAppTemplates = () => {
       else if (data && (data as any[]).length > 0) setSelectedApp((data as any[])[0].id);
     } catch {
       // ignore
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -305,6 +309,14 @@ export const WhatsAppTemplates = () => {
   const selectedPdfTemplate = pdfTemplates.find(p => p.id === templateForm.pdf_template_id) || null;
 
   /* ── Render ── */
+  if (loading) {
+    return (
+      <Layout currentPage="templates-whatsapp">
+        <PageLoader />
+      </Layout>
+    );
+  }
+
   return (
     <Layout currentPage="templates-whatsapp">
       <div className="space-y-6">
