@@ -1,75 +1,7 @@
-import { Shield, Check, ArrowRight, Mail, FileText, Zap, Star, Building2 } from 'lucide-react';
+import { Shield, Check, ArrowRight, Mail, FileText, Zap, Star, Building2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-
-const PLANS = [
-  {
-    key: 'starter',
-    name: 'Starter',
-    tagline: 'Para emprendedores o proyectos pequeños.',
-    price: 890,
-    priceLabel: 'UYU 890',
-    color: 'from-cyan-500/15 to-teal-500/10',
-    border: 'border-cyan-500/25',
-    accent: 'text-cyan-400',
-    badge: null,
-    features: [
-      { label: 'Emails / mes',          value: '1.000' },
-      { label: 'PDFs / mes',            value: '200' },
-      { label: 'Aplicaciones',          value: '1' },
-      { label: 'Templates',             value: '10' },
-      { label: 'Máximo de usuarios',    value: '5' },
-      { label: 'Acceso API',            value: true },
-      { label: '2FA',                   value: false },
-      { label: 'Soporte prioritario',   value: false },
-    ],
-  },
-  {
-    key: 'business',
-    name: 'Business',
-    tagline: 'Para empresas que ya envían comunicaciones frecuentes.',
-    price: 1890,
-    priceLabel: 'UYU 1.890',
-    color: 'from-blue-500/20 to-cyan-500/10',
-    border: 'border-blue-400/35',
-    accent: 'text-blue-400',
-    badge: 'Más popular',
-    features: [
-      { label: 'Emails / mes',          value: '10.000' },
-      { label: 'PDFs / mes',            value: '3.000' },
-      { label: 'Aplicaciones',          value: '5' },
-      { label: 'Templates',             value: '50' },
-      { label: 'Máximo de usuarios',    value: '20' },
-      { label: 'Acceso API',            value: true },
-      { label: '2FA',                   value: true },
-      { label: 'Reportes avanzados',    value: true },
-      { label: 'Soporte prioritario',   value: false },
-    ],
-  },
-  {
-    key: 'pro',
-    name: 'Pro',
-    tagline: 'Para SaaS, agencias o empresas con varios tenants/clientes.',
-    price: 3900,
-    priceLabel: 'UYU 3.900',
-    color: 'from-emerald-500/15 to-teal-500/10',
-    border: 'border-emerald-400/30',
-    accent: 'text-emerald-400',
-    badge: 'Máximo poder',
-    features: [
-      { label: 'Emails / mes',          value: '50.000' },
-      { label: 'PDFs / mes',            value: '20.000' },
-      { label: 'Aplicaciones',          value: '20' },
-      { label: 'Templates',             value: '200' },
-      { label: 'Máximo de usuarios',    value: '10 por tenant' },
-      { label: 'Acceso API',            value: true },
-      { label: '2FA',                   value: true },
-      { label: 'Reportes avanzados',    value: true },
-      { label: 'Dominio personalizado', value: true },
-      { label: 'Soporte prioritario',   value: true },
-    ],
-  },
-];
+import { usePlans, Plan, PlanFeature } from '../hooks/usePlans';
 
 const USE_CASES = [
   { icon: Mail,      title: 'Emails masivos',        desc: 'Campañas, notificaciones y alertas con alta entregabilidad.' },
@@ -78,9 +10,114 @@ const USE_CASES = [
   { icon: Building2, title: 'Multi-tenant',          desc: 'Varios equipos con aislamiento y roles por tenant.' },
 ];
 
+// Map entitlement codes to human-readable labels
+const FEATURE_LABELS: Record<string, string> = {
+  total_de_correos_mensuales: 'Emails / mes',
+  pdf_generations_monthly: 'PDFs / mes',
+  max_applications: 'Aplicaciones',
+  max_templates: 'Templates',
+  max_users: 'Máximo de usuarios',
+  two_factor_auth: '2FA',
+  advanced_reports: 'Reportes avanzados',
+  priority_support: 'Soporte prioritario',
+  custom_domain: 'Dominio personalizado',
+  api_access: 'Acceso API',
+  acceso_api_resend: 'Acceso API Resend',
+  configuracion_smtp: 'Configuración SMTP',
+};
+
+// Card color themes by index
+const CARD_THEMES = [
+  { color: 'from-cyan-500/15 to-teal-500/10',     border: 'border-cyan-500/25',    accent: 'text-cyan-400',    btn: 'bg-cyan-500 hover:bg-cyan-400 shadow-cyan-500/25' },
+  { color: 'from-blue-500/20 to-cyan-500/10',     border: 'border-blue-400/35',    accent: 'text-blue-400',    btn: 'bg-blue-500 hover:bg-blue-400 shadow-blue-500/25' },
+  { color: 'from-emerald-500/15 to-teal-500/10',  border: 'border-emerald-400/30', accent: 'text-emerald-400', btn: 'bg-emerald-500 hover:bg-emerald-400 shadow-emerald-500/25' },
+  { color: 'from-amber-500/15 to-orange-500/10',  border: 'border-amber-400/30',   accent: 'text-amber-400',   btn: 'bg-amber-500 hover:bg-amber-400 shadow-amber-500/25' },
+];
+
+const BADGE_LABELS = ['', 'Más popular', 'Máximo poder', ''];
+
+function formatFeatureValue(f: PlanFeature): string | boolean {
+  if (f.value_type === 'boolean') return f.value === 'true';
+  const n = Number(f.value);
+  if (!isNaN(n)) return n.toLocaleString('es-UY');
+  return f.value;
+}
+
+function PlanCard({ plan, index, onSubscribe }: { plan: Plan; index: number; onSubscribe: () => void }) {
+  const theme = CARD_THEMES[index % CARD_THEMES.length];
+  const badge = BADGE_LABELS[index] || '';
+  const features = plan.entitlements?.features ?? [];
+
+  const priceLabel = plan.price
+    ? `${plan.currency} ${plan.price.toLocaleString('es-UY')}`
+    : 'Gratis';
+
+  return (
+    <div className={`plan-card relative rounded-2xl border bg-gradient-to-b ${theme.color} ${theme.border} overflow-hidden flex flex-col`}>
+      {badge && (
+        <div className="absolute top-0 right-0 left-0 flex justify-center">
+          <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${theme.btn.split(' ')[0]} text-white`}>
+            {badge}
+          </span>
+        </div>
+      )}
+
+      <div className={`p-6 flex-1 flex flex-col ${badge ? 'pt-9' : ''}`}>
+        <div className="mb-5">
+          <h3 className={`text-xl font-extrabold mb-1 ${theme.accent}`}>{plan.name}</h3>
+          {plan.description && <p className="text-slate-400 text-xs">{plan.description}</p>}
+        </div>
+
+        <div className="mb-6">
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-extrabold text-white">{priceLabel}</span>
+            {plan.price > 0 && <span className="text-slate-400 text-sm">/mes</span>}
+          </div>
+          {plan.trial_days > 0 && (
+            <p className="text-xs text-slate-500 mt-1">{plan.trial_days} días de prueba gratis</p>
+          )}
+        </div>
+
+        <ul className="space-y-2.5 flex-1">
+          {features.map((f) => {
+            const label = FEATURE_LABELS[f.code] ?? f.name;
+            const val = formatFeatureValue(f);
+            return (
+              <li key={f.code} className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-slate-300">{label}</span>
+                {typeof val === 'boolean' ? (
+                  val ? (
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                      <Check className="w-3 h-3 text-emerald-400" />
+                    </span>
+                  ) : (
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center">
+                      <span className="w-2 h-px bg-slate-500 block" />
+                    </span>
+                  )
+                ) : (
+                  <span className={`flex-shrink-0 font-bold text-xs ${theme.accent}`}>{val}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        <button
+          onClick={onSubscribe}
+          className={`mt-6 w-full py-2.5 rounded-xl font-bold text-sm text-white shadow-lg transition-all ${theme.btn}`}
+        >
+          Suscribirse
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export const Landing = () => {
   const { login, register } = useAuth();
   const navigate = useNavigate();
+  const { plans, loading: plansLoading } = usePlans();
 
   return (
     <div className="min-h-screen bg-[#050d1a] text-white overflow-x-hidden">
@@ -273,7 +310,6 @@ export const Landing = () => {
 
       {/* ── PRICING ── */}
       <section className="py-24 px-6 sm:px-10 relative overflow-hidden">
-        {/* Background glows */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="glow-pulse absolute top-0 left-1/4 w-[600px] h-[400px] bg-cyan-500 rounded-full blur-[160px]" style={{ animationDelay: '1s' }} />
           <div className="glow-pulse absolute bottom-0 right-1/4 w-[500px] h-[300px] bg-teal-500 rounded-full blur-[140px]" style={{ animationDelay: '3s' }} />
@@ -289,96 +325,31 @@ export const Landing = () => {
               Elige el plan que se ajusta<br className="hidden sm:block" /> a tu equipo
             </h2>
             <p className="text-slate-400 text-lg max-w-xl mx-auto">
-              Todos los planes incluyen el acceso multi-tenant. Los límites son compartidos por todos los usuarios del mismo tenant.
+              Todos los planes incluyen acceso multi-tenant. Los límites son compartidos
+              <br className="hidden sm:block" />por todo el tenant y solo los administradores pueden actualizarlo.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {PLANS.map((plan) => (
-              <div
-                key={plan.key}
-                className={`plan-card relative rounded-2xl border bg-gradient-to-b ${plan.color} ${plan.border} overflow-hidden flex flex-col`}
-              >
-                {/* Popular badge */}
-                {plan.badge && (
-                  <div className="absolute top-0 right-0 left-0 flex justify-center">
-                    <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${
-                      plan.key === 'business'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-emerald-500 text-white'
-                    }`}>
-                      {plan.badge}
-                    </span>
-                  </div>
-                )}
+          {plansLoading ? (
+            <div className="flex justify-center items-center py-20">
+              <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+            </div>
+          ) : plans.length > 0 ? (
+            <div className={`grid grid-cols-1 gap-6 max-w-5xl mx-auto ${
+              plans.length === 1 ? 'sm:grid-cols-1 max-w-sm' :
+              plans.length === 2 ? 'sm:grid-cols-2' :
+              'sm:grid-cols-3'
+            }`}>
+              {plans.map((plan, i) => (
+                <PlanCard key={plan.id} plan={plan} index={i} onSubscribe={() => register()} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-slate-500 py-10">No hay planes disponibles en este momento.</p>
+          )}
 
-                <div className={`p-6 flex-1 flex flex-col ${plan.badge ? 'pt-9' : ''}`}>
-                  {/* Header */}
-                  <div className="mb-5">
-                    <h3 className={`text-xl font-extrabold mb-1 ${plan.accent}`}>{plan.name}</h3>
-                    <p className="text-slate-400 text-xs">{plan.tagline}</p>
-                  </div>
-
-                  {/* Price */}
-                  <div className="mb-6">
-                    {plan.price ? (
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-extrabold text-white">
-                          {plan.priceLabel}
-                        </span>
-                        <span className="text-slate-400 text-sm">/mes</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-extrabold text-white">Gratis</span>
-                        <span className="text-slate-400 text-sm">· 14 días</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Features */}
-                  <ul className="space-y-2.5 flex-1">
-                    {plan.features.map((f) => (
-                      <li key={f.label} className="flex items-center justify-between gap-2 text-sm">
-                        <span className="text-slate-300">{f.label}</span>
-                        {typeof f.value === 'boolean' ? (
-                          f.value ? (
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                              <Check className="w-3 h-3 text-emerald-400" />
-                            </span>
-                          ) : (
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center">
-                              <span className="w-2 h-px bg-slate-500 block" />
-                            </span>
-                          )
-                        ) : (
-                          <span className={`flex-shrink-0 font-bold text-xs ${plan.accent}`}>{f.value}</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* CTA */}
-                  <button
-                    onClick={() => register()}
-                    className={`mt-6 w-full py-2.5 rounded-xl font-bold text-sm transition-all ${
-                      plan.key === 'business'
-                        ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-500/25'
-                        : plan.key === 'pro'
-                        ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/25'
-                        : 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/25'
-                    }`}
-                  >
-                    Suscribirse
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Footnote */}
           <p className="text-center text-slate-600 text-sm mt-10">
-            Los límites son compartidos por el tenant · Solo administradores pueden cambiar el plan · Los precios son en pesos uruguayos (UYU)
+            Límites compartidos por tenant · Solo administradores pueden cambiar el plan · Los precios son en pesos uruguayos (UYU)
           </p>
         </div>
       </section>
