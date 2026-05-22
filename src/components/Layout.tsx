@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
   AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
-  Mail, Briefcase, AppWindow, Package, MessageSquare,
+  Mail, Briefcase, AppWindow, Package, MessageSquare, FlaskConical,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
@@ -158,6 +158,25 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
         Precios en pesos uruguayos (UYU) · Límites compartidos por tenant
       </p>
     </>
+  );
+};
+
+/* ── Testing environment banner ────────────────────────────────────── */
+
+const isTestingEnvironment = () =>
+  typeof window !== 'undefined' && window.location.hostname === 'test.sendcraft.net';
+
+const TestingBanner = () => {
+  if (!isTestingEnvironment()) return null;
+  return (
+    <div className="w-full bg-gradient-to-r from-teal-600/90 to-cyan-700/90 border-b border-teal-400/40 backdrop-blur-sm">
+      <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-center gap-2">
+        <FlaskConical className="w-4 h-4 text-teal-200 flex-shrink-0" />
+        <p className="text-sm text-teal-100 font-medium">
+          Ambiente de <span className="font-bold text-white">Testing</span> — los cambios y datos de este entorno no afectan producción.
+        </p>
+      </div>
+    </div>
   );
 };
 
@@ -443,6 +462,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       {/* Top header — only for mobile hamburger + user menu */}
       {/* Top header — UserMenu always visible here on all screen sizes */}
       <header className="sticky top-0 z-40 border-b border-slate-700/60 bg-slate-900/80 backdrop-blur-sm">
+        <TestingBanner />
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-2">
             <button
