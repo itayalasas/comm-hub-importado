@@ -4,10 +4,10 @@ on:
   push:
     branches:
       - main
+      - dev
 
 env:
   RESOURCE_GROUP: rg-sendcraft
-  CONTAINER_APP_NAME: ca-sendcraft
   ACR_NAME: acrsendcraft
   IMAGE_NAME: sendcraft
 
@@ -18,6 +18,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            echo "CONTAINER_APP_NAME=ca-sendcraft" >> $GITHUB_ENV
+          else
+            echo "CONTAINER_APP_NAME=ca-sendcraft-test" >> $GITHUB_ENV
+          fi
 
       - name: Login to Azure
         uses: azure/login@v2
