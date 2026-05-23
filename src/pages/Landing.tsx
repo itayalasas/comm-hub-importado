@@ -1,7 +1,9 @@
-import { Shield, Check, ArrowRight, Mail, FileText, Zap, Star, Building2, Loader2 } from 'lucide-react';
+import { Shield, Check, ArrowRight, Mail, FileText, Zap, Star, Building2, Loader2, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { usePlans, Plan, PlanFeature } from '../hooks/usePlans';
+import { usePlans, Plan, PlanFeature, CheckoutMeta } from '../hooks/usePlans';
+import { startManagedCheckout, saveCheckoutSession } from '../lib/subscriptionCheckout';
 
 const USE_CASES = [
   { icon: Mail,      title: 'Emails masivos',        desc: 'Campañas, notificaciones y alertas con alta entregabilidad.' },
@@ -43,14 +45,34 @@ function formatFeatureValue(f: PlanFeature): string | boolean {
   return f.value;
 }
 
-function PlanCard({ plan, index, onSubscribe }: { plan: Plan; index: number; onSubscribe: () => void }) {
+function PlanCard({
+  plan,
+  index,
+  checkout,
+  onSubscribeManaged,
+}: {
+  plan: Plan;
+  index: number;
+  checkout: CheckoutMeta | null;
+  onSubscribeManaged: (plan: Plan) => void;
+}) {
+  const { register } = useAuth();
   const theme = CARD_THEMES[index % CARD_THEMES.length];
   const badge = BADGE_LABELS[index] || '';
   const features = plan.entitlements?.features ?? [];
+  const managedCheckout = checkout?.managed_by_authsystem === true;
 
   const priceLabel = plan.price
     ? `${plan.currency} ${plan.price.toLocaleString('es-UY')}`
     : 'Gratis';
+
+  const handleSubscribe = () => {
+    if (managedCheckout) {
+      onSubscribeManaged(plan);
+    } else {
+      register(plan.id);
+    }
+  };
 
   return (
     <div className={`plan-card relative rounded-2xl border bg-gradient-to-b ${theme.color} ${theme.border} overflow-hidden flex flex-col`}>
@@ -104,7 +126,7 @@ function PlanCard({ plan, index, onSubscribe }: { plan: Plan; index: number; onS
         </ul>
 
         <button
-          onClick={onSubscribe}
+          onClick={handleSubscribe}
           className={`mt-6 w-full py-2.5 rounded-xl font-bold text-sm text-white shadow-lg transition-all ${theme.btn}`}
         >
           Suscribirse
@@ -117,7 +139,30 @@ function PlanCard({ plan, index, onSubscribe }: { plan: Plan; index: number; onS
 export const Landing = () => {
   const { login, register } = useAuth();
   const navigate = useNavigate();
-  const { plans, loading: plansLoading } = usePlans();
+  const { plans, checkout, loading: plansLoading } = usePlans();
+  const [, setProcessingPlanId] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  const handleManagedSubscribe = async (plan: Plan) => {
+    if (!checkout) return;
+    setCheckoutError(null);
+    setProcessingPlanId(plan.id);
+    try {
+      const returnUrl = `${window.location.origin}/subscription/result`;
+      const result = await startManagedCheckout({
+        startEndpoint: checkout.start_endpoint,
+        planId: plan.id,
+        returnUrl,
+      });
+      saveCheckoutSession(result.checkout_session_id, plan.id);
+      if (result.requires_redirect && (result.checkout_url || result.redirect_url)) {
+        window.location.href = (result.checkout_url || result.redirect_url)!;
+      }
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : 'Error al iniciar el checkout');
+      setProcessingPlanId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#050d1a] text-white overflow-x-hidden">
@@ -330,6 +375,13 @@ export const Landing = () => {
             </p>
           </div>
 
+          {checkoutError && (
+            <div className="mb-6 flex items-center justify-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm max-w-md mx-auto">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {checkoutError}
+            </div>
+          )}
+
           {plansLoading ? (
             <div className="flex justify-center items-center py-20">
               <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
@@ -341,7 +393,13 @@ export const Landing = () => {
               'sm:grid-cols-3'
             }`}>
               {plans.map((plan, i) => (
-                <PlanCard key={plan.id} plan={plan} index={i} onSubscribe={() => register()} />
+                <PlanCard
+                  key={plan.id}
+                  plan={plan}
+                  index={i}
+                  checkout={checkout}
+                  onSubscribeManaged={handleManagedSubscribe}
+                />
               ))}
             </div>
           ) : (

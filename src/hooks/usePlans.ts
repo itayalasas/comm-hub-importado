@@ -23,6 +23,7 @@ export interface Plan {
   is_default: boolean;
   sort_order: number;
   entitlements: { features: PlanFeature[] };
+  // Legacy fields kept for any remaining direct-link scenarios
   checkout_url: string | null;
   subscribe_url: string | null;
   mp_init_point: string | null;
@@ -36,21 +37,38 @@ export interface Plan {
   } | null;
 }
 
+export interface CheckoutMeta {
+  managed_by_authsystem: boolean;
+  start_endpoint: string;
+  status_endpoint: string;
+}
+
 interface PlansResult {
   plans: Plan[];
+  checkout: CheckoutMeta | null;
   loading: boolean;
   error: string | null;
 }
 
-let cachedPlans: Plan[] | null = null;
+interface CachedResult {
+  plans: Plan[];
+  checkout: CheckoutMeta | null;
+}
+
+let cached: CachedResult | null = null;
+
+const DEFAULT_CHECKOUT_ENDPOINTS = {
+  start_endpoint: 'https://sfqtmnncgiqkveaoqckt.supabase.co/functions/v1/subscription-start-checkout',
+  status_endpoint: 'https://sfqtmnncgiqkveaoqckt.supabase.co/functions/v1/subscription-checkout-status',
+};
 
 export const usePlans = (): PlansResult => {
-  const [plans, setPlans] = useState<Plan[]>(cachedPlans ?? []);
-  const [loading, setLoading] = useState<boolean>(cachedPlans === null);
+  const [result, setResult] = useState<CachedResult>(cached ?? { plans: [], checkout: null });
+  const [loading, setLoading] = useState<boolean>(cached === null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (cachedPlans !== null) return;
+    if (cached !== null) return;
 
     let cancelled = false;
 
@@ -72,7 +90,7 @@ export const usePlans = (): PlansResult => {
         const json = await res.json();
 
         if (!cancelled) {
-          const fetched: Plan[] = (json?.data?.available_plans ?? [])
+          const plans: Plan[] = (json?.data?.available_plans ?? [])
             .filter((p: any) => p.active !== false)
             .map((p: any): Plan => ({
               ...p,
@@ -85,8 +103,17 @@ export const usePlans = (): PlansResult => {
                   }
                 : null,
             }));
-          cachedPlans = fetched;
-          setPlans(fetched);
+
+          // Read checkout metadata; fall back to known Supabase endpoints
+          const rawCheckout = json?.data?.checkout;
+          const checkout: CheckoutMeta = {
+            managed_by_authsystem: rawCheckout?.managed_by_authsystem === true,
+            start_endpoint: rawCheckout?.start_endpoint || DEFAULT_CHECKOUT_ENDPOINTS.start_endpoint,
+            status_endpoint: rawCheckout?.status_endpoint || DEFAULT_CHECKOUT_ENDPOINTS.status_endpoint,
+          };
+
+          cached = { plans, checkout };
+          setResult(cached);
         }
       } catch (err) {
         if (!cancelled) {
@@ -101,5 +128,8 @@ export const usePlans = (): PlansResult => {
     return () => { cancelled = true; };
   }, []);
 
-  return { plans, loading, error };
+  return { plans: result.plans, checkout: result.checkout, loading, error };
 };
+
+// Clears the module-level cache (useful after a successful subscription)
+export const invalidatePlansCache = () => { cached = null; };

@@ -17,6 +17,7 @@ import { Marketplace } from './pages/Marketplace';
 import { MarketplaceEmbed } from './pages/MarketplaceEmbed';
 import { WhatsApp } from './pages/WhatsApp';
 import { WhatsAppTemplates } from './pages/WhatsAppTemplates';
+import { SubscriptionResult } from './pages/SubscriptionResult';
 
 
 const AppLoader = () => (
@@ -149,6 +150,7 @@ const AppRoutes = () => {
       <Route path="/app" element={<DashboardRedirect />} />
       <Route path="/callback" element={<Callback />} />
       <Route path="/auth-processing" element={<AuthProcessing />} />
+      <Route path="/subscription/result" element={<SubscriptionResult />} />
       <Route path="/embed/marketplace" element={<MarketplaceEmbed />} />
       <Route
         path="/dashboard"

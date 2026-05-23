@@ -3,13 +3,13 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
   AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
-  Mail, Briefcase, AppWindow, Package, MessageSquare, FlaskConical,
+  Mail, Briefcase, AppWindow, Package, MessageSquare, FlaskConical, AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
 import { UserMenu } from './UserMenu';
 import { usePlans } from '../hooks/usePlans';
-import { configManager } from '../lib/config';
+import { startManagedCheckout, saveCheckoutSession } from '../lib/subscriptionCheckout';
 
 interface LayoutProps {
   children: ReactNode;
@@ -49,20 +49,49 @@ const FEATURE_ORDER = [
   'priority_support',
 ];
 
-function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
-  if (plan.mercadopago?.init_point) return plan.mercadopago.init_point;
-  const base = configManager.authUrl;
-  const appId = configManager.authAppId;
-  const apiKey = configManager.authApiKey;
-  const redirectUri = configManager.redirectUri;
-  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${plan.id}`;
-}
-
 /* ── Plan card list (shared by blockers) ────────────────────────── */
 
 const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) => {
-  const { plans, loading } = usePlans();
+  const { user } = useAuth();
+  const { plans, checkout, loading } = usePlans();
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const paidPlans = plans.filter(p => p.price > 0 || p.trial_days === 0);
+  const managedCheckout = checkout?.managed_by_authsystem === true;
+
+  const handleSubscribe = async (plan: (typeof paidPlans)[0]) => {
+    setCheckoutError(null);
+
+    if (managedCheckout && checkout) {
+      setProcessingId(plan.id);
+      try {
+        const returnUrl = `${window.location.origin}/subscription/result`;
+        const result = await startManagedCheckout({
+          startEndpoint: checkout.start_endpoint,
+          planId: plan.id,
+          returnUrl,
+          email: user?.email,
+          tenantId: user?.tenant_id,
+        });
+        saveCheckoutSession(result.checkout_session_id, plan.id);
+        if (result.requires_redirect && (result.checkout_url || result.redirect_url)) {
+          window.location.href = (result.checkout_url || result.redirect_url)!;
+        }
+      } catch (err) {
+        setCheckoutError(err instanceof Error ? err.message : 'Error al iniciar el checkout');
+        setProcessingId(null);
+      }
+      return;
+    }
+
+    // Legacy: direct MercadoPago link
+    if (plan.mercadopago?.init_point) {
+      window.location.href = plan.mercadopago.init_point;
+    }
+  };
+
+  const canSubscribe = (plan: (typeof paidPlans)[0]) =>
+    managedCheckout ? true : Boolean(plan.mercadopago?.init_point);
 
   if (loading) {
     return (
@@ -74,6 +103,12 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
 
   return (
     <>
+      {checkoutError && (
+        <div className="mb-4 flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm max-w-md mx-auto">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {checkoutError}
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
         {paidPlans.map((plan, i) => {
           const styleIdx = Math.min(i + 1, 3);
@@ -87,6 +122,8 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
           const planMaxUsers = plan.entitlements?.features?.find(f => f.code === 'max_users');
           const planUserLimit = planMaxUsers ? parseInt(planMaxUsers.value, 10) : null;
           const coversNeeds = highlightUsersAbove === undefined || planUserLimit === null || planUserLimit > highlightUsersAbove;
+          const isProcessing = processingId === plan.id;
+          const canSub = canSubscribe(plan);
 
           return (
             <div
@@ -144,10 +181,18 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
                   })}
                 </ul>
                 <button
-                  onClick={() => { window.location.href = buildSubscribeUrl(plan); }}
-                  className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btn}`}
+                  onClick={() => handleSubscribe(plan)}
+                  disabled={!canSub || isProcessing}
+                  className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                    canSub
+                      ? `hover:scale-[1.02] active:scale-95 ${style.btn}`
+                      : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                  }`}
                 >
-                  {highlightUsersAbove !== undefined ? `Actualizar a ${plan.name}` : 'Suscribirse'}
+                  {isProcessing
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando...</>
+                    : highlightUsersAbove !== undefined ? `Actualizar a ${plan.name}` : 'Suscribirse'
+                  }
                 </button>
               </div>
             </div>
