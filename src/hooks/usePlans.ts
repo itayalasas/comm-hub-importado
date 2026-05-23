@@ -104,12 +104,13 @@ export const usePlans = (): PlansResult => {
                 : null,
             }));
 
-          // Read checkout metadata; fall back to known Supabase endpoints
+          // Always use the direct Supabase endpoints — the proxy at sendcraft.net
+          // does not yet expose these routes (405 Method Not Allowed).
           const rawCheckout = json?.data?.checkout;
           const checkout: CheckoutMeta = {
             managed_by_authsystem: rawCheckout?.managed_by_authsystem === true,
-            start_endpoint: rawCheckout?.start_endpoint || DEFAULT_CHECKOUT_ENDPOINTS.start_endpoint,
-            status_endpoint: rawCheckout?.status_endpoint || DEFAULT_CHECKOUT_ENDPOINTS.status_endpoint,
+            start_endpoint: DEFAULT_CHECKOUT_ENDPOINTS.start_endpoint,
+            status_endpoint: DEFAULT_CHECKOUT_ENDPOINTS.status_endpoint,
           };
 
           cached = { plans, checkout };
