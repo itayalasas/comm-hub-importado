@@ -1,14 +1,14 @@
-import { useState, useCallback } from 'react';
+﻿import { useState, useCallback } from 'react';
 import {
   Zap, Copy, Check, ChevronDown, ChevronRight, Play,
   AlertCircle, CheckCircle, Clock, Send, FileText, Mail,
   Webhook, Activity, Eye, Code2, Lock, BookOpen, Terminal
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { configManager } from '../lib/config';
+import { buildFunctionsUrl, getRuntimeConfig } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// Types
 
 type HttpMethod = 'GET' | 'POST';
 
@@ -39,7 +39,14 @@ interface EndpointDef {
   icon: React.FC<{ className?: string }>;
 }
 
-// ─── Endpoint Definitions ────────────────────────────────────────────────────
+const getFunctionsBaseUrl = () => {
+  const { functionsBaseUrlRaw, functionsBaseUrl } = getRuntimeConfig();
+  return functionsBaseUrlRaw || functionsBaseUrl || 'https://your-project.supabase.co/v1';
+};
+
+const cleanFunctionPath = (path: string) => path.replace(/^\/functions\/v1/i, '') || path;
+
+// Endpoint Definitions
 
 const ENDPOINTS: EndpointDef[] = [
   {
@@ -47,7 +54,7 @@ const ENDPOINTS: EndpointDef[] = [
     group: 'Email',
     title: 'Enviar Email',
     method: 'POST',
-    path: '/functions/v1/send-email',
+    path: '/send-email',
     description: 'Envía un email utilizando un template HTML predefinido. Soporta adjuntos PDF, datos de template dinámicos y control de duplicados.',
     authType: 'api-key',
     icon: Mail,
@@ -86,7 +93,7 @@ const ENDPOINTS: EndpointDef[] = [
     group: 'Email',
     title: 'Enviar Email con PDF Adjunto',
     method: 'POST',
-    path: '/functions/v1/send-email-with-pdf',
+    path: '/send-email-with-pdf',
     description: 'Genera un PDF y lo envía como adjunto en un solo llamado. Define el template de email y el template del PDF por separado, cada uno con sus propios datos. Si el PDF supera 1MB se adjunta un link de descarga en el cuerpo del email.',
     authType: 'api-key',
     icon: FileText,
@@ -124,7 +131,7 @@ const ENDPOINTS: EndpointDef[] = [
     group: 'Comunicaciones Pendientes',
     title: 'Crear Comunicación Pendiente',
     method: 'POST',
-    path: '/functions/v1/pending-communication',
+    path: '/pending-communication',
     description: 'Crea una comunicación en estado de espera. Útil cuando necesitas enviar un email pero aún no tienes todos los datos (ej: esperar a que se genere una factura PDF).',
     authType: 'api-key',
     icon: Clock,
@@ -155,7 +162,7 @@ const ENDPOINTS: EndpointDef[] = [
     group: 'Comunicaciones Pendientes',
     title: 'Completar Comunicación Pendiente',
     method: 'POST',
-    path: '/functions/v1/complete-pending-communication',
+    path: '/complete-pending-communication',
     description: 'Completa una comunicación pendiente con los datos faltantes y dispara el envío del email. Se usa cuando ya tienes toda la información necesaria.',
     authType: 'api-key',
     icon: Send,
@@ -184,7 +191,7 @@ const ENDPOINTS: EndpointDef[] = [
     group: 'PDF',
     title: 'Generar PDF',
     method: 'POST',
-    path: '/functions/v1/generate-pdf',
+    path: '/generate-pdf',
     description: 'Genera un PDF desde un template HTML usando Chromium. El PDF se guarda en la base de datos y se retorna en base64 junto con una URL pública temporal de 90 días.',
     authType: 'api-key',
     icon: FileText,
@@ -206,7 +213,7 @@ const ENDPOINTS: EndpointDef[] = [
             pdf_base64: 'JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3Ro...',
             filename: 'factura_F-001.pdf',
             size_bytes: 48320,
-            public_url: 'https://your-project.supabase.co/functions/v1/view-pdf?token=abc123xyz'
+            public_url: 'https://your-project.supabase.co/v1/view-pdf?token=abc123xyz'
           }
         }
       },
@@ -225,7 +232,7 @@ const ENDPOINTS: EndpointDef[] = [
     group: 'PDF',
     title: 'Ver / Descargar PDF',
     method: 'GET',
-    path: '/functions/v1/view-pdf',
+    path: '/view-pdf',
     description: 'Endpoint público para visualizar o descargar un PDF generado. Accesible sin autenticación mediante un token temporal. Los links expiran a los 90 días.',
     authType: 'none',
     icon: Eye,
@@ -245,12 +252,12 @@ const ENDPOINTS: EndpointDef[] = [
     group: 'Monitoreo',
     title: 'Health Check Email',
     method: 'GET',
-    path: '/functions/v1/health-check-email',
+    path: '/health-check-email',
     description: 'Verifica el estado del servicio de email. Retorna el proveedor configurado y si está operativo.',
     authType: 'none',
     icon: Activity,
     fields: [
-      { name: 'x-api-key', type: 'string (header)', required: false, description: 'API key de la aplicación para verificar credenciales específicas de la app', example: 'sk_live_abc123...' },
+      { name: 'x-api-key', type: 'string (header)', required: false, description: 'Clave API de la aplicación para verificar credenciales específicas de la app', example: 'sk_live_abc123...' },
     ],
     responses: [
       { code: 200, label: 'Operativo', body: { status: 'operational', responseTime: 145, provider: 'resend', configured: true, timestamp: '2024-01-15T10:30:00Z' } },
@@ -262,7 +269,7 @@ const ENDPOINTS: EndpointDef[] = [
     group: 'Monitoreo',
     title: 'Health Check PDF',
     method: 'GET',
-    path: '/functions/v1/health-check-pdf',
+    path: '/health-check-pdf',
     description: 'Verifica el estado del servicio de generación de PDF (Gotenberg). Genera un PDF de prueba y mide el tiempo de respuesta.',
     authType: 'none',
     icon: Activity,
@@ -277,7 +284,7 @@ const ENDPOINTS: EndpointDef[] = [
     group: 'Webhooks',
     title: 'Webhook Resend',
     method: 'POST',
-    path: '/functions/v1/resend-webhook',
+    path: '/resend-webhook',
     description: 'Recibe eventos del proveedor de email Resend. Actualiza el estado de los logs de email (entregado, rebotado, queja). Configura esta URL en tu panel de Resend.',
     authType: 'none',
     icon: Webhook,
@@ -288,7 +295,7 @@ const ENDPOINTS: EndpointDef[] = [
     ],
     responses: [
       { code: 200, label: 'Procesado', body: { success: true, message: 'Webhook processed', email_log_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' } },
-      { code: 200, label: 'Sin matching', body: { success: true, message: 'No matching email log found for this event' } },
+      { code: 200, label: 'Sin coincidencias', body: { success: true, message: 'No matching email log found for this event' } },
     ],
   },
 ];
@@ -303,7 +310,7 @@ const GROUP_ICONS: Record<string, React.FC<{ className?: string }>> = {
   'Webhooks': Webhook,
 };
 
-// ─── Method badge ─────────────────────────────────────────────────────────────
+// Method badge
 
 const MethodBadge = ({ method }: { method: HttpMethod }) => (
   <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-bold tracking-wide ${
@@ -324,7 +331,7 @@ const StatusBadge = ({ code }: { code: number }) => {
   );
 };
 
-// ─── Code Block ──────────────────────────────────────────────────────────────
+// Code Block
 
 const CodeBlock = ({ code, id, onCopy, copied }: { code: string; id: string; onCopy: (code: string, id: string) => void; copied: string | null }) => (
   <div className="relative group">
@@ -340,7 +347,7 @@ const CodeBlock = ({ code, id, onCopy, copied }: { code: string; id: string; onC
   </div>
 );
 
-// ─── Try-it panel ─────────────────────────────────────────────────────────────
+// Try-it panel
 
 interface TryItPanelProps {
   endpoint: EndpointDef;
@@ -381,8 +388,8 @@ const TryItPanel = ({ endpoint, baseUrl }: TryItPanelProps) => {
     const start = Date.now();
     try {
       const url = endpoint.method === 'GET' && queryParams
-        ? `${baseUrl}${endpoint.path}?${queryParams}`
-        : `${baseUrl}${endpoint.path}`;
+        ? `${buildFunctionsUrl(endpoint.path, baseUrl)}?${queryParams}`
+        : buildFunctionsUrl(endpoint.path, baseUrl);
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (endpoint.authType === 'api-key' && apiKey) headers['x-api-key'] = apiKey;
       const opts: RequestInit = { method: endpoint.method, headers };
@@ -403,7 +410,7 @@ const TryItPanel = ({ endpoint, baseUrl }: TryItPanelProps) => {
     <div className="space-y-4">
       {endpoint.authType === 'api-key' && (
         <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wide">API Key</label>
+          <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wide">Clave API</label>
           <input
             value={apiKey}
             onChange={e => setApiKey(e.target.value)}
@@ -472,7 +479,7 @@ const TryItPanel = ({ endpoint, baseUrl }: TryItPanelProps) => {
   );
 };
 
-// ─── Endpoint Card ────────────────────────────────────────────────────────────
+// Endpoint Card
 
 const EndpointCard = ({
   endpoint, baseUrl, expanded, onToggle, copiedCode, onCopy
@@ -486,15 +493,16 @@ const EndpointCard = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'docs' | 'try'>('docs');
   const Icon = endpoint.icon;
+  const endpointUrl = buildFunctionsUrl(endpoint.path, baseUrl);
 
   const curlExample = endpoint.method === 'POST'
-    ? `curl -X POST "${baseUrl}${endpoint.path}" \\
+    ? `curl -X POST "${endpointUrl}" \\
   -H "Content-Type: application/json" \\${endpoint.authType === 'api-key' ? '\n  -H "x-api-key: YOUR_API_KEY" \\' : ''}
   -d '${JSON.stringify(
       Object.fromEntries(endpoint.fields.filter(f => f.required && !f.name.includes('header')).map(f => [f.name, f.example ?? ''])),
       null, 2
     ).replace(/\n/g, '\n  ')}'`
-    : `curl -X GET "${baseUrl}${endpoint.path}${endpoint.fields.length ? '?' + endpoint.fields.map(f => `${f.name.replace(' (query param)', '')}=VALOR`).join('&') : ''}"${endpoint.authType === 'api-key' ? ` \\\n  -H "x-api-key: YOUR_API_KEY"` : ''}`;
+    : `curl -X GET "${endpointUrl}${endpoint.fields.length ? '?' + endpoint.fields.map(f => `${f.name.replace(' (query param)', '')}=VALOR`).join('&') : ''}"${endpoint.authType === 'api-key' ? ` \\\n  -H "x-api-key: YOUR_API_KEY"` : ''}`;
 
   return (
     <div className="border border-slate-700/70 rounded-xl overflow-hidden bg-slate-800/30">
@@ -509,7 +517,7 @@ const EndpointCard = ({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <MethodBadge method={endpoint.method} />
-              <span className="text-sm font-mono text-slate-400 truncate">{endpoint.path}</span>
+              <span className="text-sm font-mono text-slate-400 truncate">{cleanFunctionPath(endpoint.path)}</span>
             </div>
             <p className="text-white font-semibold text-sm mt-0.5">{endpoint.title}</p>
           </div>
@@ -549,7 +557,7 @@ const EndpointCard = ({
                 <div className="flex items-center gap-2 text-sm">
                   <Lock className="w-4 h-4 text-slate-400" />
                   {endpoint.authType === 'api-key'
-                    ? <span className="text-slate-300">Requiere header <code className="text-cyan-400 bg-slate-900 px-1.5 py-0.5 rounded text-xs">x-api-key</code> con tu API key de aplicación</span>
+                    ? <span className="text-slate-300">Requiere header <code className="text-cyan-400 bg-slate-900 px-1.5 py-0.5 rounded text-xs">x-api-key</code> con la clave API de tu aplicación</span>
                     : <span className="text-slate-400">Sin autenticación requerida</span>
                   }
                 </div>
@@ -622,7 +630,7 @@ const EndpointCard = ({
   );
 };
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// Main Page
 
 export default function ApiExplorer() {
   const [expandedEndpoints, setExpandedEndpoints] = useState<string[]>([]);
@@ -631,12 +639,7 @@ export default function ApiExplorer() {
   const [filterGroup, setFilterGroup] = useState<string>('all');
   useAuth();
 
-  const baseUrl = (() => {
-    try {
-      if (configManager.isLoaded()) return configManager.supabaseUrl;
-    } catch {}
-    return import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
-  })();
+  const baseUrl = getFunctionsBaseUrl();
 
   const copyToClipboard = useCallback((text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -686,10 +689,10 @@ export default function ApiExplorer() {
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3">
           <Lock className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="text-sm">
-            <p className="text-amber-300 font-semibold mb-1">Autenticación por API Key</p>
+            <p className="text-amber-300 font-semibold mb-1">Autenticación por clave API</p>
             <p className="text-slate-400">
               Todos los endpoints de integración requieren el header <code className="text-cyan-400 bg-slate-900 px-1.5 py-0.5 rounded">x-api-key</code> con
-              la API Key de tu aplicación. Encuéntrala en <strong className="text-white">Configuración → Aplicaciones → API Key</strong>.
+              la clave API de tu aplicación. Encuéntrala en <strong className="text-white">Configuración → Aplicaciones → Clave API</strong>.
             </p>
           </div>
         </div>
@@ -815,7 +818,7 @@ export default function ApiExplorer() {
 const API_KEY  = "sk_live_TU_API_KEY";
 
 async function sendEmail({ recipient, template, data }) {
-  const res = await fetch(\`\${BASE_URL}/functions/v1/send-email\`, {
+  const res = await fetch(\`\${BASE_URL}/send-email\`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -851,3 +854,6 @@ await sendEmail({
     </Layout>
   );
 }
+
+
+

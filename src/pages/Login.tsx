@@ -1,10 +1,28 @@
-import { Shield, Check, ArrowRight } from 'lucide-react';
+import { useState } from 'react';
+import { Shield, Check, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 export const Login = () => {
   const { login, register } = useAuth();
   const navigate = useNavigate();
+  const [pendingAction, setPendingAction] = useState<'login' | 'register' | null>(null);
+
+  const handleLogin = () => {
+    if (pendingAction) return;
+    setPendingAction('login');
+    window.setTimeout(() => {
+      login();
+    }, 140);
+  };
+
+  const handleRegister = () => {
+    if (pendingAction) return;
+    setPendingAction('register');
+    window.setTimeout(() => {
+      register();
+    }, 140);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-950 flex">
@@ -86,14 +104,15 @@ export const Login = () => {
             </div>
 
             <button
-              onClick={login}
-              className="w-full group relative px-6 py-4 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-semibold text-lg overflow-hidden transition-all hover:shadow-xl hover:shadow-cyan-500/30 hover:scale-[1.02] mb-6"
+              onClick={handleLogin}
+              disabled={pendingAction === 'login'}
+              className="w-full group relative px-6 py-4 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-semibold text-lg overflow-hidden transition-all hover:shadow-xl hover:shadow-cyan-500/30 hover:scale-[1.02] mb-6 disabled:opacity-80 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <span className="relative flex items-center justify-center space-x-2">
-                <Shield className="w-5 h-5" />
-                <span>Iniciar Sesion</span>
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              <span className="relative flex items-center justify-center gap-2">
+                {pendingAction === 'login' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
+                <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar Sesion'}</span>
+                {pendingAction === 'login' ? null : <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
               </span>
             </button>
 
@@ -125,10 +144,16 @@ export const Login = () => {
               <p className="text-slate-400 text-sm">
                 No tienes cuenta?{' '}
                 <button
-                  onClick={() => register()}
-                  className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors"
+                  onClick={handleRegister}
+                  disabled={pendingAction === 'register'}
+                  className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors disabled:opacity-80 disabled:cursor-not-allowed"
                 >
-                  Crear cuenta
+                  {pendingAction === 'register' ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Iniciando...
+                    </span>
+                  ) : 'Crear cuenta'}
                 </button>
               </p>
             </div>
@@ -148,24 +173,31 @@ export const Login = () => {
 
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 p-6">
         <button
-          onClick={login}
-          className="w-full group relative px-6 py-4 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-semibold text-lg overflow-hidden transition-all hover:shadow-xl hover:shadow-cyan-500/30"
+          onClick={handleLogin}
+          disabled={pendingAction === 'login'}
+          className="w-full group relative px-6 py-4 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-semibold text-lg overflow-hidden transition-all hover:shadow-xl hover:shadow-cyan-500/30 disabled:opacity-80 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <span className="relative flex items-center justify-center space-x-2">
-            <Shield className="w-5 h-5" />
-            <span>Iniciar Sesion</span>
-            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+          <span className="relative flex items-center justify-center gap-2">
+            {pendingAction === 'login' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
+            <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar Sesion'}</span>
+            {pendingAction === 'login' ? null : <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
           </span>
         </button>
         <div className="text-center mt-4">
           <p className="text-slate-400 text-sm">
             No tienes cuenta?{' '}
             <button
-              onClick={() => register()}
-              className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors"
+              onClick={handleRegister}
+              disabled={pendingAction === 'register'}
+              className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors disabled:opacity-80 disabled:cursor-not-allowed"
             >
-              Crear cuenta
+              {pendingAction === 'register' ? (
+                <span className="inline-flex items-center gap-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Iniciando...
+                </span>
+              ) : 'Crear cuenta'}
             </button>
           </p>
         </div>

@@ -1,8 +1,11 @@
-import { createPortal } from 'react-dom';
+﻿import { createPortal } from 'react-dom';
 import { X, CreditCard, Calendar, Check, Minus, Clock, AlertTriangle, Zap, Users, FileText, LayoutGrid, Mail, FileOutput, RefreshCw, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UpgradeModal } from './UpgradeModal';
+import { usePlans } from '../hooks/usePlans';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
+import { getRuntimeConfig } from '../lib/config';
+import { resolveCheckoutEndpoint } from '../lib/subscriptionCheckout';
 import { useState } from 'react';
 
 interface SubscriptionModalProps {
@@ -30,6 +33,15 @@ const FEATURE_ICON: Record<string, React.ElementType> = {
   pdf_generations_monthly:    FileOutput,
 };
 
+const CANCEL_REASON_OPTIONS = [
+  { value: 'price', label: 'El plan quedó caro' },
+  { value: 'usage', label: 'Ya no lo estoy usando' },
+  { value: 'alternative', label: 'Encontré otra solución' },
+  { value: 'support', label: 'Tuve problemas con el servicio' },
+  { value: 'temporary', label: 'Es solo temporal' },
+  { value: 'other', label: 'Otra razón' },
+] as const;
+
 function formatNumber(value: string | number, unit?: string | null): string {
   const n = typeof value === 'number' ? value : parseInt(String(value), 10);
   if (!isNaN(n)) {
@@ -40,20 +52,44 @@ function formatNumber(value: string | number, unit?: string | null): string {
 }
 
 export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
-  const { subscription, user, refreshSubscription } = useAuth();
+  const { subscription, user, applyCheckoutStatus, subscriptionHasAccess } = useAuth();
+  const { plans, checkout } = usePlans();
   const { applicationCount, templateCount, emailsThisMonth, pdfsThisMonth } = useSubscriptionLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelDone, setCancelDone] = useState(false);
   const [cancelActiveUntil, setCancelActiveUntil] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState<string>('');
+  const [cancelReasonDetails, setCancelReasonDetails] = useState('');
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
   const activeUsersCount = user?.active_users_count ?? 0;
 
   const features = subscription?.entitlements?.features ?? [];
-  const planPrice = typeof subscription?.plan_price === 'number' ? subscription.plan_price : 0;
-  const planCurrency = subscription?.plan_currency || 'UYU';
+  const currentPlanById = plans.find((plan) => plan.id === subscription?.plan_id) ?? null;
+  const currentPlanByName = plans.find((plan) => plan.name === subscription?.plan_name) ?? null;
+  const currentPlan = currentPlanById ?? currentPlanByName;
+  const normalizedStatus = String(subscription?.status ?? '').toLowerCase();
+  const subscriptionPlanPrice =
+    typeof subscription?.plan_price === 'number'
+      ? subscription.plan_price
+      : currentPlan?.price ?? null;
+  const accessUntilSource =
+    subscription?.current_period_end ||
+    subscription?.period_end ||
+    subscription?.next_payment_date ||
+    subscription?.trial_end ||
+    null;
+  const isPaidSubscription =
+    subscriptionHasAccess === true ||
+    normalizedStatus === 'authorized' ||
+    (normalizedStatus === 'active' && subscriptionPlanPrice === 0);
+  const isTrialing = normalizedStatus === 'trialing';
+  const planPrice = currentPlan?.price ?? (typeof subscription?.plan_price === 'number' ? subscription.plan_price : 0);
+  const planCurrency = currentPlan?.currency || subscription?.plan_currency || 'UYU';
+  const planName = currentPlan?.name || subscription?.plan_name || 'Plan actual';
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
@@ -62,48 +98,136 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
     });
   };
 
-  const isTrialing = subscription?.status === 'trialing';
-  const isActive = subscription?.status === 'active';
   const trialEndDate = subscription?.trial_end ? new Date(subscription.trial_end) : null;
   const now = new Date();
   const trialExpired = isTrialing && trialEndDate !== null && trialEndDate < now;
   const trialActive  = isTrialing && trialEndDate !== null && trialEndDate >= now;
+  const accessUntilDate = accessUntilSource ? new Date(accessUntilSource) : null;
+  const accessWindowActive =
+    accessUntilDate !== null &&
+    !Number.isNaN(accessUntilDate.getTime()) &&
+    accessUntilDate >= now;
+  const isCancellationScheduled =
+    normalizedStatus === 'cancelled' ||
+    normalizedStatus === 'canceled';
+  const isCancellationPending = isCancellationScheduled && accessWindowActive;
+  const hasAccess = isPaidSubscription || accessWindowActive || trialActive;
+  const isActive = (isPaidSubscription || accessWindowActive || trialActive) && !isTrialing;
 
   const daysRemaining = trialActive && trialEndDate
     ? Math.max(0, Math.floor((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
     : null;
 
-  const isTrial = planPrice === 0 || isTrialing;
+  const periodStart =
+    subscription?.current_period_start ||
+    subscription?.period_start ||
+    subscription?.trial_start ||
+    null;
+  const periodEnd =
+    subscription?.current_period_end ||
+    subscription?.period_end ||
+    subscription?.next_payment_date ||
+    subscription?.trial_end ||
+    null;
+  const periodLabel = trialActive && trialEndDate
+    ? `Prueba vigente hasta ${formatDate(subscription?.trial_end)}`
+    : isCancellationPending && accessUntilSource
+    ? `Cancelada, vigente hasta ${formatDate(accessUntilSource)}`
+    : periodStart && periodEnd
+    ? `${formatDate(periodStart)} - ${formatDate(periodEnd)}`
+    : periodEnd
+    ? `Vigente hasta ${formatDate(periodEnd)}`
+    : hasAccess
+    ? 'Se actualizará cuando el servidor confirme la suscripción.'
+    : 'Se actualizará cuando termine la sincronización.';
+  const isFreePlan = planPrice === 0 && !isTrialing;
 
-  // Show cancel button only when mp_preapproval_id exists and mp_status is 'active'
-  const canCancelMp = !!(
-    subscription?.mp_preapproval_id &&
-    subscription?.mp_status === 'active'
-  );
+  const canCancelSubscription = !!subscription?.id && normalizedStatus !== 'cancelled' && normalizedStatus !== 'canceled';
+  const activeUntilLabel = cancelActiveUntil || periodEnd || subscription?.next_payment_date || subscription?.trial_end || null;
+  const selectedCancelReason = CANCEL_REASON_OPTIONS.find((option) => option.value === cancelReason);
+  const cancelReasonText =
+    cancelReason === 'other'
+      ? cancelReasonDetails.trim()
+      : selectedCancelReason?.label ?? '';
+  const canSubmitCancellation = !cancelling && cancelReasonText.length > 0;
+  const resetCancelForm = () => {
+    setCancelReason('');
+    setCancelReasonDetails('');
+    setCancelError(null);
+    setCancelDone(false);
+    setCancelActiveUntil(null);
+  };
+  const openCancelModal = () => {
+    setShowUpgradeModal(false);
+    resetCancelForm();
+    setShowCancelModal(true);
+  };
+  const closeCancelModal = () => {
+    if (cancelling) return;
+    setShowCancelModal(false);
+    resetCancelForm();
+  };
 
   const handleCancelSubscription = async () => {
-    if (!subscription?.mp_preapproval_id) return;
+    if (!subscription?.id) return;
+    if (!cancelReasonText) {
+      setCancelError('Selecciona un motivo para continuar.');
+      return;
+    }
     setCancelling(true);
     setCancelError(null);
     try {
-      const res = await fetch(
-        'https://veymthufmfqhxxxzfmfi.supabase.co/functions/v1/cancel-subscription',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mp_preapproval_id: subscription.mp_preapproval_id }),
-        }
+      const { authAppId, authApiKey, supabaseAnonKey } = getRuntimeConfig();
+      const cancelEndpoint = resolveCheckoutEndpoint(
+        checkout?.cancel_endpoint || checkout?.cancel_proxy_endpoint,
+        'subscription-cancel'
       );
+      const res = await fetch(cancelEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supabaseAnonKey ?? ''}`,
+          apikey: supabaseAnonKey ?? '',
+        },
+        body: JSON.stringify({
+          application_id: authAppId,
+          api_key: authApiKey,
+          subscription_id: subscription.id,
+          provider_subscription_id: subscription.mp_preapproval_id ?? undefined,
+          tenant_id: user?.tenant_id ?? undefined,
+          app_user_id: user?.sub ?? undefined,
+          cancel_reason: cancelReasonText,
+        }),
+      });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
+      if (!res.ok || body?.success === false) {
         throw new Error(body?.message || body?.error || `Error ${res.status}`);
       }
-      // Use next_payment_date from MP response as the real active-until date
+      const responseData = body?.data ?? body ?? {};
+      const responseSubscription = responseData.subscription ?? responseData.license ?? {};
       const activeUntil: string | undefined =
-        body?.data?.next_payment_date ?? undefined;
+        responseSubscription?.current_period_end ??
+        responseSubscription?.period_end ??
+        responseSubscription?.next_payment_date ??
+        responseData?.next_payment_date ??
+        responseData?.license?.current_period_end ??
+        responseData?.license?.period_end ??
+        responseData?.license?.next_payment_date ??
+        periodEnd ??
+        null;
       setCancelActiveUntil(activeUntil ?? null);
+      applyCheckoutStatus({
+        subscription: {
+          ...subscription,
+          ...responseSubscription,
+          current_period_end: activeUntil ?? responseSubscription?.current_period_end ?? subscription?.current_period_end,
+          period_end: activeUntil ?? responseSubscription?.period_end ?? subscription?.period_end,
+          next_payment_date: activeUntil ?? responseSubscription?.next_payment_date ?? subscription?.next_payment_date,
+        },
+        available_plans: responseData?.available_plans,
+        has_access: typeof responseData?.has_access === 'boolean' ? responseData.has_access : undefined,
+      });
       setCancelDone(true);
-      await refreshSubscription();
     } catch (err) {
       setCancelError(err instanceof Error ? err.message : 'Error al cancelar. Intenta nuevamente.');
     } finally {
@@ -173,14 +297,14 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
           {!subscription ? (
             <div className="text-center py-12">
               <CreditCard className="w-14 h-14 text-slate-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-white mb-2">Sin Suscripción Activa</h3>
-              <p className="text-slate-400 text-sm mb-6">No tienes una suscripción activa en este momento.</p>
+              <h3 className="text-lg font-semibold text-white mb-2">Sin suscripción activa</h3>
+              <p className="text-slate-400 text-sm mb-6">No tienes una suscripción activa ahora mismo.</p>
               {isAdmin && (
                 <button
                   onClick={() => setShowUpgradeModal(true)}
                   className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors font-semibold"
                 >
-                  Ver Planes Disponibles
+                  Ver planes disponibles
                 </button>
               )}
             </div>
@@ -188,7 +312,9 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
             <>
               {/* Plan header card */}
               <div className={`rounded-xl p-5 border ${
-                isActive
+                isCancellationPending
+                  ? 'bg-gradient-to-br from-amber-500/10 to-orange-500/5 border-amber-500/25'
+                  : isActive
                   ? 'bg-gradient-to-br from-cyan-500/10 to-teal-500/5 border-cyan-500/25'
                   : trialExpired
                   ? 'bg-gradient-to-br from-red-500/10 to-orange-500/5 border-red-500/20'
@@ -197,25 +323,33 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
                     <h3 className="text-2xl font-extrabold text-white leading-tight">
-                      {isTrialing ? 'Trial' : subscription.plan_name}
+                      {planName}
                     </h3>
                     {isTrialing && (
-                      <p className="text-slate-400 text-xs mt-0.5">Prueba del plan {subscription.plan_name}</p>
+                      <p className="text-slate-400 text-xs mt-0.5">Prueba del plan {planName}</p>
                     )}
                   </div>
                   <span className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-bold border ${
-                    isActive
+                    isCancellationPending
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                      : isActive
                       ? 'bg-green-500/20 text-green-400 border-green-500/30'
                       : trialExpired
                       ? 'bg-red-500/20 text-red-400 border-red-500/30'
                       : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
                   }`}>
-                    {isActive ? 'Activa' : trialExpired ? 'Trial vencido' : 'En prueba'}
+                    {isCancellationPending
+                      ? 'Se cancela al vencer'
+                      : isActive
+                      ? 'Activa'
+                      : trialExpired
+                      ? 'Trial vencido'
+                      : 'En prueba'}
                   </span>
                 </div>
 
                 <div className="flex items-baseline gap-2">
-                  {isTrial ? (
+                  {isFreePlan ? (
                     <>
                       <span className="text-3xl font-extrabold text-white">Gratis</span>
                       <span className="text-slate-400 text-sm">· período de prueba</span>
@@ -262,11 +396,15 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
               <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 flex items-center gap-3">
                 <Calendar className="w-5 h-5 text-cyan-400 flex-shrink-0" />
                 <div>
-                  <p className="text-xs font-semibold text-slate-400 mb-1">Período actual</p>
-                  <p className="text-sm text-white">
-                    {formatDate(subscription.period_start)} — {formatDate(subscription.period_end)}
-                  </p>
+                  <p className="text-xs font-semibold text-slate-400 mb-1">Período vigente</p>
+                  <p className="text-sm text-white">{periodLabel}</p>
                 </div>
+
+                {isCancellationPending && (
+                  <p className="mt-2 text-xs text-amber-300">
+                    Se canceló, pero seguirá vigente hasta que termine el período actual.
+                  </p>
+                )}
               </div>
 
               {/* Features with real usage */}
@@ -346,75 +484,190 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                 </div>
               )}
 
-              {/* Cancel subscription — only for admin when mp_status is active */}
-              {canCancelMp && isAdmin && (
-                <div className="border border-red-500/15 bg-red-500/5 rounded-xl p-4 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-semibold text-red-300">Cancelar suscripción</p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Tu plan seguirá activo hasta el fin del período vigente. Al vencer se bloqueará el acceso hasta que elijas un nuevo plan.
-                      </p>
-                    </div>
-                  </div>
-
-                  {cancelDone ? (
-                    <div className="flex items-start gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm text-emerald-300 font-semibold">Suscripción cancelada</p>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          Tu plan sigue activo hasta el <span className="text-white font-medium">{formatDate(cancelActiveUntil ?? subscription?.period_end)}</span>. Al vencer, el acceso se bloqueará hasta que elijas un nuevo plan.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {cancelError && (
-                        <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-                          <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                          <p className="text-xs text-red-300">{cancelError}</p>
-                        </div>
-                      )}
-                      <button
-                        onClick={handleCancelSubscription}
-                        disabled={cancelling}
-                        className="w-full py-2.5 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {cancelling ? (
-                          <><RefreshCw className="w-4 h-4 animate-spin" /> Cancelando...</>
-                        ) : (
-                          <><XCircle className="w-4 h-4" /> Cancelar suscripción</>
-                        )}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-
               {/* Actions */}
               <div className="flex gap-3 pt-1">
                 {isAdmin ? (
-                  <button
-                    onClick={() => setShowUpgradeModal(true)}
-                    className="flex-1 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-white rounded-xl font-bold text-sm transition-all hover:shadow-lg hover:shadow-cyan-500/25"
-                  >
-                    {trialExpired ? 'Suscribirse ahora' : 'Actualizar Plan'}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowUpgradeModal(true)}
+                      className="flex-1 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-white rounded-xl font-bold text-sm transition-all hover:shadow-lg hover:shadow-cyan-500/25"
+                    >
+                      {trialExpired ? 'Suscribirse ahora' : 'Actualizar plan'}
+                    </button>
+                    {canCancelSubscription ? (
+                      <button
+                        onClick={openCancelModal}
+                        className="px-5 py-2.5 border border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl font-semibold text-sm transition-colors whitespace-nowrap"
+                      >
+                        Cancelar suscripción
+                      </button>
+                    ) : (
+                      <button
+                        onClick={onClose}
+                        className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-colors whitespace-nowrap"
+                      >
+                        Cerrar
+                      </button>
+                    )}
+                  </>
                 ) : (
-                  <div className="flex-1 flex items-center gap-2 px-4 py-2.5 bg-slate-800/60 border border-slate-700/50 rounded-xl">
-                    <span className="text-xs text-slate-400">Solo un Administrador puede cambiar el plan</span>
-                  </div>
+                  <>
+                    <div className="flex-1 flex items-center gap-2 px-4 py-2.5 bg-slate-800/60 border border-slate-700/50 rounded-xl">
+                      <span className="text-xs text-slate-400">Solo un Administrador puede cambiar el plan</span>
+                    </div>
+                    <button
+                      onClick={onClose}
+                      className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-colors whitespace-nowrap"
+                    >
+                      Cerrar
+                    </button>
+                  </>
                 )}
-                {(!trialExpired || !isAdmin) && (
-                  <button
-                    onClick={onClose}
-                    className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-colors"
-                  >
-                    Cerrar
-                  </button>
-                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const cancelModalContent = showCancelModal && (
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[210] p-4"
+      style={{ margin: 0, left: 0, right: 0 }}
+      onClick={closeCancelModal}
+    >
+      <div
+        className="bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="border-b border-slate-700/80 px-4 sm:px-5 py-3 sm:py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+              <XCircle className="w-5 h-5 text-red-400" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-white">Cancelar suscripción</h3>
+              <p className="text-xs text-slate-400 max-w-[28rem]">
+                Tu plan seguirá activo hasta que termine el período vigente.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={closeCancelModal}
+            disabled={cancelling}
+            className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+
+        <div className="p-4 sm:p-5 space-y-3 sm:space-y-4">
+          {cancelDone ? (
+            <>
+              <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10">
+                <Check className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-emerald-300">Cancelación confirmada</p>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Tu suscripción seguirá activa hasta{' '}
+                    <span className="font-medium text-white">{formatDate(activeUntilLabel ?? undefined)}</span>.
+                    Después de esa fecha, el acceso se bloqueará automáticamente.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={closeCancelModal}
+                className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-colors"
+              >
+                Cerrar
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="rounded-xl border border-red-500/15 bg-red-500/5 px-4 py-3">
+                <p className="text-sm font-semibold text-red-300">Antes de cancelar</p>
+                <p className="text-xs text-slate-400 mt-1">
+                El plan seguirá activo hasta que termine el período actual. Después de esa fecha, el acceso se bloqueará.
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-slate-300 mb-2">¿Por qué cancelas?</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2">
+                  {CANCEL_REASON_OPTIONS.map((option) => {
+                    const isSelected = cancelReason === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setCancelReason(option.value);
+                          setCancelError(null);
+                          if (option.value !== 'other') {
+                            setCancelReasonDetails('');
+                          }
+                        }}
+                        className={`text-left rounded-xl border px-3 py-2 transition-colors ${
+                          isSelected
+                            ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-200'
+                            : 'border-slate-700/60 bg-slate-800/40 text-slate-300 hover:border-slate-600 hover:bg-slate-800/70'
+                        }`}
+                      >
+                        <span className="block text-sm font-medium leading-snug">{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {cancelReason === 'other' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-2">
+                    Cuéntanos un poco más
+                  </label>
+                  <textarea
+                    value={cancelReasonDetails}
+                    onChange={(event) => setCancelReasonDetails(event.target.value)}
+                    rows={3}
+                    className="w-full rounded-xl border border-slate-700/60 bg-slate-900/70 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50 min-h-[84px]"
+                    placeholder="Escribe el motivo de la cancelación..."
+                  />
+                </div>
+              )}
+
+              {cancelError && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <p className="text-xs text-red-300">{cancelError}</p>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <button
+                  onClick={closeCancelModal}
+                  className="w-full sm:flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-colors"
+                >
+                  Mantener suscripción
+                </button>
+                <button
+                  onClick={handleCancelSubscription}
+                  disabled={!canSubmitCancellation}
+                  className="w-full sm:flex-1 py-2.5 border border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {cancelling ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Cancelando...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-4 h-4" />
+                      Confirmar cancelación
+                    </>
+                  )}
+                </button>
               </div>
             </>
           )}
@@ -429,6 +682,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   return (
     <>
       {modalContent && createPortal(modalContent, modalRoot)}
+      {cancelModalContent && createPortal(cancelModalContent, modalRoot)}
       <UpgradeModal
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
@@ -436,3 +690,4 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
     </>
   );
 };
+

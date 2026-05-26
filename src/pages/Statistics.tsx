@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
-import { supabase } from '../lib/supabase';
 import { configManager } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
+import { buildFunctionsUrl } from '../lib/config';
+import { queryMutate, querySelect, querySingle } from '../lib/queryApi';
 import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send, Check, Search } from 'lucide-react';
 
 interface Stats {
@@ -95,94 +96,46 @@ export const Statistics = () => {
   }, [searchEmail, searchDateStart, searchDateEnd, searchStatus]);
 
   useEffect(() => {
-    if (selectedApp) {
-      loadStats(selectedApp);
-      loadLogs(selectedApp);
-      loadPendingCommunications(selectedApp);
+    if (!selectedApp) return;
 
-      const emailLogsChannel = supabase
-        .channel(`email_logs_${selectedApp}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'email_logs',
-            filter: `application_id=eq.${selectedApp}`,
-          },
-          (payload) => {
-            if (payload.eventType === 'INSERT') {
-              const newLog = payload.new as EmailLog;
-              if (!newLog.parent_log_id && newLog.communication_type !== 'pdf_generation') {
-                setLogs((prev) => [newLog, ...prev]);
-              }
-              loadStats(selectedApp);
-            } else if (payload.eventType === 'UPDATE') {
-              setLogs((prev) =>
-                prev.map((log) =>
-                  log.id === payload.new.id ? (payload.new as EmailLog) : log
-                )
-              );
-              loadStats(selectedApp);
-            } else if (payload.eventType === 'DELETE') {
-              setLogs((prev) => prev.filter((log) => log.id !== payload.old.id));
-              loadStats(selectedApp);
-            }
-          }
-        )
-        .subscribe();
+    let cancelled = false;
 
-      const pendingChannel = supabase
-        .channel(`pending_communications_${selectedApp}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'pending_communications',
-            filter: `application_id=eq.${selectedApp}`,
-          },
-          (payload) => {
-            if (payload.eventType === 'INSERT') {
-              setPendingComms((prev) => [payload.new as PendingCommunication, ...prev]);
-              loadStats(selectedApp);
-            } else if (payload.eventType === 'UPDATE') {
-              setPendingComms((prev) =>
-                prev.map((comm) =>
-                  comm.id === payload.new.id ? (payload.new as PendingCommunication) : comm
-                )
-              );
-              loadStats(selectedApp);
-            } else if (payload.eventType === 'DELETE') {
-              setPendingComms((prev) => prev.filter((comm) => comm.id !== payload.old.id));
-              loadStats(selectedApp);
-            }
-          }
-        )
-        .subscribe();
+    const refresh = () => {
+      if (cancelled) return;
+      void loadStats(selectedApp);
+      void loadLogs(selectedApp);
+      void loadPendingCommunications(selectedApp);
+    };
 
-      return () => {
-        supabase.removeChannel(emailLogsChannel);
-        supabase.removeChannel(pendingChannel);
-      };
-    }
+    refresh();
+
+    const intervalId = window.setInterval(refresh, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
   }, [selectedApp]);
 
   const loadApplications = async () => {
     try {
       if (!user?.sub) return;
 
-      const { data: prefs } = await supabase
-        .from('user_preferences')
-        .select('default_application_id')
-        .eq('user_id', user.sub)
-        .maybeSingle();
+      const { data: prefs } = await querySingle<{ default_application_id: string | null }>({
+        table: 'user_preferences',
+        operation: 'select',
+        select: 'default_application_id',
+        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
+        limit: 1,
+      });
 
-      const { data, error } = await supabase
-        .from('applications')
-        .select('id, name, api_key')
-        .eq('user_id', user.sub)
-        .order('created_at', { ascending: false });
+      const { data, error } = await querySelect<Application>({
+        table: 'applications',
+        operation: 'select',
+        select: 'id, name, api_key',
+        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
+        order: { column: 'created_at', ascending: false },
+      });
 
       if (error) throw error;
 
@@ -202,18 +155,24 @@ export const Statistics = () => {
 
   const loadStats = async (appId: string) => {
     try {
-      const { data: logs, error } = await supabase
-        .from('email_logs')
-        .select('status, delivery_status, opened_at, clicked_at, communication_type, pdf_generated')
-        .eq('application_id', appId);
+      const { data: logs, error } = await querySelect<Pick<EmailLog, 'status' | 'delivery_status' | 'opened_at' | 'clicked_at' | 'communication_type' | 'pdf_generated'>>({
+        table: 'email_logs',
+        operation: 'select',
+        select: 'status, delivery_status, opened_at, clicked_at, communication_type, pdf_generated',
+        filters: [{ column: 'application_id', op: 'eq', value: appId }],
+      });
 
       if (error) throw error;
 
-      const { data: pendingData } = await supabase
-        .from('pending_communications')
-        .select('status')
-        .eq('application_id', appId)
-        .in('status', ['waiting_data', 'processing', 'pdf_generated']);
+      const { data: pendingData } = await querySelect<{ status: string }>({
+        table: 'pending_communications',
+        operation: 'select',
+        select: 'status',
+        filters: [
+          { column: 'application_id', op: 'eq', value: appId },
+          { column: 'status', op: 'in', value: ['waiting_data', 'processing', 'pdf_generated'] },
+        ],
+      });
 
       const sent = logs?.filter((l) => l.delivery_status === 'delivered' || (l.status === 'sent' && !l.delivery_status)).length || 0;
       const failed = logs?.filter((l) => l.status === 'failed' || l.delivery_status === 'bounced' || l.delivery_status === 'complained').length || 0;
@@ -240,14 +199,18 @@ export const Statistics = () => {
 
   const loadLogs = async (appId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('email_logs')
-        .select('*')
-        .eq('application_id', appId)
-        .is('parent_log_id', null)
-        .neq('communication_type', 'pdf_generation')
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const { data, error } = await querySelect<EmailLog>({
+        table: 'email_logs',
+        operation: 'select',
+        select: '*',
+        filters: [
+          { column: 'application_id', op: 'eq', value: appId },
+          { column: 'parent_log_id', op: 'is', value: null },
+          { column: 'communication_type', op: 'neq', value: 'pdf_generation' },
+        ],
+        order: { column: 'created_at', ascending: false },
+        limit: 50,
+      });
 
       if (error) throw error;
       setLogs(data || []);
@@ -258,11 +221,15 @@ export const Statistics = () => {
 
   const loadChildLogs = async (parentId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('email_logs')
-        .select('*')
-        .eq('parent_log_id', parentId)
-        .order('created_at', { ascending: true});
+      const { data, error } = await querySelect<EmailLog>({
+        table: 'email_logs',
+        operation: 'select',
+        select: '*',
+        filters: [
+          { column: 'parent_log_id', op: 'eq', value: parentId },
+        ],
+        order: { column: 'created_at', ascending: true },
+      });
 
       if (error) throw error;
       setChildLogs(prev => ({ ...prev, [parentId]: data || [] }));
@@ -286,13 +253,17 @@ export const Statistics = () => {
 
   const loadPendingCommunications = async (appId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('pending_communications')
-        .select('*')
-        .eq('application_id', appId)
-        .in('status', ['waiting_data', 'processing', 'pdf_generated', 'sent', 'failed'])
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const { data, error } = await querySelect<PendingCommunication>({
+        table: 'pending_communications',
+        operation: 'select',
+        select: '*',
+        filters: [
+          { column: 'application_id', op: 'eq', value: appId },
+          { column: 'status', op: 'in', value: ['waiting_data', 'processing', 'pdf_generated', 'sent', 'failed'] },
+        ],
+        order: { column: 'created_at', ascending: false },
+        limit: 50,
+      });
 
       if (error) throw error;
       setPendingComms(data || []);
@@ -394,10 +365,11 @@ export const Statistics = () => {
     if (!deleteConfirmPending) return;
 
     try {
-      const { error } = await supabase
-        .from('pending_communications')
-        .delete()
-        .eq('id', deleteConfirmPending);
+      const { error } = await queryMutate({
+        table: 'pending_communications',
+        operation: 'delete',
+        filters: [{ column: 'id', op: 'eq', value: deleteConfirmPending }],
+      });
 
       if (error) throw error;
 
@@ -416,10 +388,11 @@ export const Statistics = () => {
     if (!deleteConfirmLog) return;
 
     try {
-      const { error } = await supabase
-        .from('email_logs')
-        .delete()
-        .eq('id', deleteConfirmLog);
+      const { error } = await queryMutate({
+        table: 'email_logs',
+        operation: 'delete',
+        filters: [{ column: 'id', op: 'eq', value: deleteConfirmLog }],
+      });
 
       if (error) throw error;
 
@@ -462,10 +435,9 @@ export const Statistics = () => {
   const resendCommunication = async () => {
     if (!resendConfirmLog || !selectedApp) return;
 
-    setResending(true);
-    try {
-      const log = resendConfirmLog;
-      const supabaseUrl = configManager.supabaseUrl;
+      setResending(true);
+        try {
+          const log = resendConfirmLog;
       const supabaseAnonKey = configManager.supabaseAnonKey;
 
       const currentApp = applications.find(app => app.id === selectedApp);
@@ -481,11 +453,15 @@ export const Statistics = () => {
         throw new Error('El log no tiene un template_id asociado');
       }
 
-      const { data: template, error: templateError } = await supabase
-        .from('communication_templates')
-        .select('name')
-        .eq('id', log.template_id)
-        .maybeSingle();
+      const { data: template, error: templateError } = await querySingle<{ name: string }>({
+        table: 'communication_templates',
+        operation: 'select',
+        select: 'name',
+        filters: [
+          { column: 'id', op: 'eq', value: log.template_id },
+        ],
+        limit: 1,
+      });
 
       if (templateError || !template) {
         throw new Error('No se pudo encontrar el template asociado');
@@ -502,15 +478,18 @@ export const Statistics = () => {
           pdfFilename = log.metadata?.pdf_filename || 'document.pdf';
         }
 
-        if (!pdfEmailLogId) {
-          const { data: pdfChildLog } = await supabase
-            .from('email_logs')
-            .select('id, metadata')
-            .eq('parent_log_id', log.id)
-            .eq('communication_type', 'pdf_generation')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+      if (!pdfEmailLogId) {
+          const { data: pdfChildLog } = await querySingle<{ id: string; metadata: any }>({
+            table: 'email_logs',
+            operation: 'select',
+            select: 'id, metadata',
+            filters: [
+              { column: 'parent_log_id', op: 'eq', value: log.id },
+              { column: 'communication_type', op: 'eq', value: 'pdf_generation' },
+            ],
+            order: { column: 'created_at', ascending: false },
+            limit: 1,
+          });
 
           if (pdfChildLog?.id) {
             pdfEmailLogId = pdfChildLog.id;
@@ -519,11 +498,15 @@ export const Statistics = () => {
         }
 
         if (pdfEmailLogId && !pdfBase64) {
-          const { data: pdfData } = await supabase
-            .from('pdf_generation_logs')
-            .select('pdf_base64, filename')
-            .eq('email_log_id', pdfEmailLogId)
-            .maybeSingle();
+          const { data: pdfData } = await querySingle<{ pdf_base64: string | null; filename: string | null }>({
+            table: 'pdf_generation_logs',
+            operation: 'select',
+            select: 'pdf_base64, filename',
+            filters: [
+              { column: 'email_log_id', op: 'eq', value: pdfEmailLogId },
+            ],
+            limit: 1,
+          });
 
           if (pdfData?.pdf_base64) {
             pdfBase64 = pdfData.pdf_base64;
@@ -533,14 +516,17 @@ export const Statistics = () => {
       }
 
       if (!templateData || Object.keys(templateData).length === 0) {
-        const { data: pdfChildLog } = await supabase
-          .from('email_logs')
-          .select('id, metadata')
-          .eq('parent_log_id', log.id)
-          .eq('communication_type', 'pdf_generation')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        const { data: pdfChildLog } = await querySingle<{ id: string; metadata: any }>({
+          table: 'email_logs',
+          operation: 'select',
+          select: 'id, metadata',
+          filters: [
+            { column: 'parent_log_id', op: 'eq', value: log.id },
+            { column: 'communication_type', op: 'eq', value: 'pdf_generation' },
+          ],
+          order: { column: 'created_at', ascending: false },
+          limit: 1,
+        });
 
         if (pdfChildLog?.metadata?.request_payload?.data) {
           templateData = pdfChildLog.metadata.request_payload.data;
@@ -576,7 +562,7 @@ export const Statistics = () => {
         };
       }
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/${endpoint}`, {
+      const response = await fetch(buildFunctionsUrl(endpoint), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${supabaseAnonKey}`,
@@ -635,27 +621,30 @@ export const Statistics = () => {
 
     const directToken = metadata.pdf_access_token || metadata?.pdf_info?.pdf_access_token;
     if (directToken) {
-      return {
-        url: `${configManager.supabaseUrl}/functions/v1/view-pdf?token=${directToken}`,
-        filename,
-      };
+        return {
+          url: buildFunctionsUrl(`view-pdf?token=${directToken}`),
+          filename,
+        };
     }
 
     // For send-email-with-pdf logs: look up public_pdf_links by pdf_log_id stored in metadata
     const pdfLogId = metadata.pdf_log_id;
     if (pdfLogId) {
-      const { data: linkByPdfLog } = await supabase
-        .from('public_pdf_links')
-        .select('access_token, filename, created_at')
-        .eq('pdf_generation_log_id', pdfLogId)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data: linkByPdfLog } = await querySingle<{ access_token: string; filename: string | null; created_at: string }>({
+        table: 'public_pdf_links',
+        operation: 'select',
+        select: 'access_token, filename, created_at',
+        filters: [
+          { column: 'pdf_generation_log_id', op: 'eq', value: pdfLogId },
+          { column: 'is_active', op: 'eq', value: true },
+        ],
+        order: { column: 'created_at', ascending: false },
+        limit: 1,
+      });
 
       if (linkByPdfLog?.access_token) {
         return {
-          url: `${configManager.supabaseUrl}/functions/v1/view-pdf?token=${linkByPdfLog.access_token}`,
+          url: buildFunctionsUrl(`view-pdf?token=${linkByPdfLog.access_token}`),
           filename: linkByPdfLog.filename || metadata.pdf_filename || filename,
         };
       }
@@ -666,21 +655,24 @@ export const Statistics = () => {
       return null;
     }
 
-    const { data: linkData, error } = await supabase
-      .from('public_pdf_links')
-      .select('access_token, filename, created_at')
-      .eq('order_id', orderId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: linkData, error } = await querySingle<{ access_token: string; filename: string | null; created_at: string }>({
+      table: 'public_pdf_links',
+      operation: 'select',
+      select: 'access_token, filename, created_at',
+      filters: [
+        { column: 'order_id', op: 'eq', value: orderId },
+        { column: 'is_active', op: 'eq', value: true },
+      ],
+      order: { column: 'created_at', ascending: false },
+      limit: 1,
+    });
 
     if (error || !linkData?.access_token) {
       return null;
     }
 
     return {
-      url: `${configManager.supabaseUrl}/functions/v1/view-pdf?token=${linkData.access_token}`,
+      url: buildFunctionsUrl(`view-pdf?token=${linkData.access_token}`),
       filename: linkData.filename || filename,
     };
   };

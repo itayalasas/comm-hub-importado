@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Layout } from '../components/Layout';
+import { getRuntimeConfig } from '../lib/config';
 import {
   Package, CheckCircle2, Copy, X, ChevronRight,
   Mail, FileText, Zap, Globe, ShieldCheck, ExternalLink,
@@ -55,7 +56,7 @@ interface ConnectorManifest {
 
 /* ── Connector definitions ─────────────────────────────────────────── */
 
-const BASE_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1';
+const BASE_URL = getRuntimeConfig().functionsBaseUrlRaw || getRuntimeConfig().functionsBaseUrl || 'https://drhbcmithlrldtjlhnee.supabase.co/v1';
 
 const CONNECTORS: ConnectorManifest[] = [
   {
@@ -782,10 +783,10 @@ const ConnectorModal = ({
               </div>
               <div className="flex items-center gap-2 bg-slate-950/50 border border-slate-700/50 rounded-lg px-3 py-2">
                 <code className="flex-1 text-[11px] text-cyan-300 break-all">
-                  {`https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors/${connector.id}`}
+                  {`${BASE_URL}/connectors/${connector.id}`}
                 </code>
                 <button
-                  onClick={() => copy(`https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors/${connector.id}`, 'url')}
+                  onClick={() => copy(`${BASE_URL}/connectors/${connector.id}`, 'url')}
                   className="flex-shrink-0 text-slate-500 hover:text-slate-300 transition-colors"
                 >
                   {copied === 'url' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1153,7 +1154,7 @@ const EmbedSection = () => {
 
 /* ── Main page ─────────────────────────────────────────────────────── */
 
-const REGISTRY_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors';
+const REGISTRY_URL = `${BASE_URL}/connectors`;
 
 export const Marketplace = () => {
   const [filter, setFilter] = useState<'all' | 'email' | 'pdf' | 'automation'>('all');

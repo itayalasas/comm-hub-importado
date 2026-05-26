@@ -6,7 +6,7 @@ import { SubscriptionModal } from './SubscriptionModal';
 import { InvitationsModal } from './InvitationsModal';
 
 export const UserMenu = () => {
-  const { user, logout, subscription } = useAuth();
+  const { user, logout, subscription, subscriptionHasAccess } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
@@ -14,6 +14,54 @@ export const UserMenu = () => {
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
   const menuRef = useRef<HTMLDivElement>(null);
+  const normalizedStatus = String(subscription?.status ?? '').toLowerCase();
+  const trialEnd = subscription?.trial_end ? new Date(subscription.trial_end) : null;
+  const accessUntilSource =
+    subscription?.current_period_end ||
+    subscription?.period_end ||
+    subscription?.next_payment_date ||
+    subscription?.trial_end ||
+    null;
+  const accessUntilDate = accessUntilSource ? new Date(accessUntilSource) : null;
+  const trialActive = normalizedStatus === 'trialing' && trialEnd !== null && trialEnd >= new Date();
+  const accessWindowActive =
+    accessUntilDate !== null &&
+    !Number.isNaN(accessUntilDate.getTime()) &&
+    accessUntilDate >= new Date();
+  const isCancellationScheduled =
+    normalizedStatus === 'cancelled' || normalizedStatus === 'canceled';
+  const isCancellationPending = isCancellationScheduled && accessWindowActive;
+  const isCancellationExpired = isCancellationScheduled && !accessWindowActive;
+  const isFreeActivePlan =
+    normalizedStatus === 'active' && typeof subscription?.plan_price === 'number' && subscription.plan_price === 0;
+  const subscriptionLabel = trialActive
+    ? 'En prueba'
+    : isCancellationPending
+    ? 'Cancelada'
+    : isCancellationExpired
+    ? 'Cancelada'
+    : subscriptionHasAccess === true || normalizedStatus === 'authorized' || isFreeActivePlan || accessWindowActive || normalizedStatus === 'active'
+    ? 'Activa'
+    : subscription?.status
+    ? String(subscription.status).replace(/_/g, ' ')
+    : 'Sin plan';
+  const subscriptionBadgeTitle = isCancellationPending
+    ? 'Se canceló, pero sigue vigente hasta que termine el período actual'
+    : isCancellationExpired
+    ? 'Suscripción cancelada'
+    : trialActive
+    ? 'Suscripción en prueba'
+    : 'Estado de la suscripción';
+  const subscriptionBadgeClass =
+    isCancellationPending
+      ? 'bg-amber-500/10 text-amber-300'
+      : isCancellationExpired
+      ? 'bg-red-500/10 text-red-400'
+      : subscriptionHasAccess === true || normalizedStatus === 'authorized' || isFreeActivePlan || accessWindowActive || normalizedStatus === 'active'
+      ? 'bg-green-500/10 text-green-400'
+      : trialActive
+      ? 'bg-blue-500/10 text-blue-400'
+      : 'bg-red-500/10 text-red-400';
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -123,14 +171,11 @@ export const UserMenu = () => {
                 <div className="flex-1 flex items-center justify-between">
                   <span>Suscripción</span>
                   {subscription && (
-                    <span className={`text-xs px-2 py-0.5 rounded ${
-                      subscription.status === 'active'
-                        ? 'bg-green-500/10 text-green-400'
-                        : subscription.status === 'trialing'
-                        ? 'bg-blue-500/10 text-blue-400'
-                        : 'bg-red-500/10 text-red-400'
-                    }`}>
-                      {subscription.status === 'trialing' ? 'Trial' : subscription.status}
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${subscriptionBadgeClass}`}
+                      title={subscriptionBadgeTitle}
+                    >
+                      {subscriptionLabel}
                     </span>
                   )}
                 </div>

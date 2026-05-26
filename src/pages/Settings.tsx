@@ -1,16 +1,23 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { authClient } from '../lib/auth';
+import { buildFunctionsUrl, configManager, getRuntimeConfig } from '../lib/config';
+import { queryCount, queryMutate, querySelect, querySingle } from '../lib/queryApi';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
-import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink } from 'lucide-react';
+import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink, AlertTriangle, Loader2, X } from 'lucide-react';
 
 interface Application {
   id: string;
   name: string;
   api_key: string;
+}
+
+interface ApplicationDeleteSummary {
+  templates_count: number;
+  jobs_count: number;
 }
 
 interface EmailCredentials {
@@ -35,6 +42,14 @@ interface EmbedCredential {
   created_at: string;
 }
 
+const isLocalHost = () => typeof window !== 'undefined' && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+
+const maskSecret = (value: string) => {
+  if (!value) return '(vacío)';
+  if (value.length <= 8) return '***';
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+};
+
 export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' }) => {
   const { user } = useAuth();
   const toast = useToast();
@@ -46,9 +61,16 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
   const [showPassword, setShowPassword] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showNewAppModal, setShowNewAppModal] = useState(false);
+  const [showDeleteAppModal, setShowDeleteAppModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [deleteAppTarget, setDeleteAppTarget] = useState<Application | null>(null);
+  const [deleteAppSummary, setDeleteAppSummary] = useState<ApplicationDeleteSummary | null>(null);
+  const [deleteAppConfirmName, setDeleteAppConfirmName] = useState('');
+  const [deleteAppPreviewLoading, setDeleteAppPreviewLoading] = useState(false);
+  const [deleteAppLoading, setDeleteAppLoading] = useState(false);
+  const [deleteAppError, setDeleteAppError] = useState('');
   const [newAppData, setNewAppData] = useState({
     name: '',
     domain: '',
@@ -56,7 +78,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
 
-  // ── Embed credentials state ──────────────────────────────────────────
+  // Embed credentials state
   const [embedCreds, setEmbedCreds] = useState<EmbedCredential[]>([]);
   const [embedLoading, setEmbedLoading] = useState(false);
   const [showEmbedModal, setShowEmbedModal] = useState(false);
@@ -70,8 +92,8 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
   const canUseSmtp = hasFeature('configuracion_smtp');
   const canUseResend = hasFeature('acceso_api_resend');
   const [copiedReturnUrl, setCopiedReturnUrl] = useState(false);
-  // Build the return URL dynamically from the current app origin so it works on any domain/environment
-  const subscriptionReturnUrl = `${window.location.origin}/dashboard`;
+  // Build the final frontend return URL dynamically so it works on any domain/environment
+  const subscriptionReturnUrl = `${window.location.origin}/subscription/result`;
   const [formData, setFormData] = useState<EmailCredentials>({
     provider_type: 'smtp',
     smtp_host: '',
@@ -98,14 +120,26 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
 
   const provisionDefaultEmail = async (appId: string) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      await fetch(`${supabaseUrl}/functions/v1/provision-default-email`, {
+      await configManager.loadConfig();
+      const token = authClient.getAccessToken() || localStorage.getItem('access_token') || '';
+      const apiKey = getRuntimeConfig().apiKey || '';
+      if (!token) return;
+      if (isLocalHost()) {
+        console.groupCollapsed('[settings] provision-default-email request');
+        console.log('url:', buildFunctionsUrl('provision-default-email'));
+        console.log('body:', { application_id: appId });
+        console.log('headers:', {
+          authorization: token ? `Bearer ${maskSecret(token)}` : '(none)',
+          'x-api-key': apiKey || '(none)',
+        });
+        console.groupEnd();
+      }
+      await fetch(buildFunctionsUrl('provision-default-email'), {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          ...(apiKey ? { 'x-api-key': apiKey } : {}),
         },
         body: JSON.stringify({ application_id: appId }),
       });
@@ -131,37 +165,69 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     setTimeout(() => setCopiedReturnUrl(false), 2000);
   };
 
+  const applicationManagementFetch = async (payload: Record<string, unknown>) => {
+    await configManager.loadConfig();
+    const apiKey = getRuntimeConfig().apiKey || '';
+    if (isLocalHost()) {
+      console.groupCollapsed('[settings] delete-application request');
+      console.log('url:', buildFunctionsUrl('delete-application'));
+      console.log('body:', payload);
+      console.log('headers:', {
+        'x-api-key': apiKey || '(none)',
+      });
+      console.groupEnd();
+    }
+
+    return fetch(buildFunctionsUrl('delete-application'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { 'x-api-key': apiKey } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+  };
+
   const loadApplications = async () => {
     try {
       if (!user?.sub) return;
 
-      // Filter by tenant when available so all users in the same tenant share apps
-      const appsQuery = supabase
-        .from('applications')
-        .select('id, name, api_key')
-        .order('created_at', { ascending: false });
-
-      const { data, error } = await (
-        user.tenant_id
-          ? appsQuery.eq('tenant_id', user.tenant_id)
-          : appsQuery.eq('user_id', user.sub)
-      );
+      const { data, error } = await querySelect<Application>({
+        table: 'applications',
+        operation: 'select',
+        select: 'id, name, api_key',
+        filters: user.tenant_id
+          ? [{ column: 'tenant_id', op: 'eq', value: user.tenant_id }]
+          : [{ column: 'user_id', op: 'eq', value: user.sub }],
+        order: { column: 'created_at', ascending: false },
+      });
 
       if (error) throw error;
 
       setApplications(data || []);
 
-      const { data: prefs } = await supabase
-        .from('user_preferences')
-        .select('default_application_id')
-        .eq('user_id', user.sub)
-        .maybeSingle();
+      const { data: prefs } = await querySingle<{ default_application_id: string | null }>({
+        table: 'user_preferences',
+        operation: 'select',
+        select: 'default_application_id',
+        filters: [
+          { column: 'user_id', op: 'eq', value: user.sub },
+        ],
+        limit: 1,
+      });
 
-      if (prefs?.default_application_id) {
-        setDefaultApp(prefs.default_application_id);
-        setSelectedApp(prefs.default_application_id);
-      } else if (data && data.length > 0) {
-        setSelectedApp(data[0].id);
+      const defaultApplicationId = prefs?.default_application_id ?? null;
+      const hasDefaultApplication = defaultApplicationId
+        ? (data || []).some((app) => app.id === defaultApplicationId)
+        : false;
+      const resolvedDefaultApplicationId = hasDefaultApplication ? defaultApplicationId : null;
+      const nextSelectedApplicationId = resolvedDefaultApplicationId ?? data?.[0]?.id ?? null;
+
+      setDefaultApp(resolvedDefaultApplicationId);
+      setSelectedApp(nextSelectedApplicationId);
+
+      if (!nextSelectedApplicationId) {
+        setCredentials(null);
       }
     } catch {
       // ignore
@@ -172,14 +238,18 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
 
   const loadCredentials = async (appId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('email_credentials')
-        .select('*')
-        .eq('application_id', appId)
-        .eq('is_active', true)
-        .maybeSingle();
+      const { data, error } = await querySingle<EmailCredentials>({
+        table: 'email_credentials',
+        operation: 'select',
+        select: '*',
+        filters: [
+          { column: 'application_id', op: 'eq', value: appId },
+          { column: 'is_active', op: 'eq', value: true },
+        ],
+        limit: 1,
+      });
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error) throw error;
 
       setCredentials(data);
       if (data) {
@@ -201,7 +271,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     }
   };
 
-  // ── Embed credential helpers ─────────────────────────────────────────
+  // Embed credential helpers
 
   const sha256 = async (text: string): Promise<string> => {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -217,14 +287,14 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     setGeneratedPass(pass);
   };
 
-  const embedFetch = (path: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem('access_token') || '';
-    const base = import.meta.env.VITE_SUPABASE_URL;
-    return fetch(`${base}/functions/v1/embed-credentials${path}`, {
-      ...options,
-      headers: {
+    const embedFetch = (path: string, options: RequestInit = {}) => {
+      const token = authClient.getAccessToken() || '';
+      return fetch(buildFunctionsUrl(`embed-credentials${path}`), {
+        ...options,
+        credentials: 'include',
+        headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...options.headers,
       },
     });
@@ -316,18 +386,24 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
       }
 
       if (credentials?.id) {
-        const { error } = await supabase
-          .from('email_credentials')
-          .update(updateData)
-          .eq('id', credentials.id);
+        const { error } = await queryMutate({
+          table: 'email_credentials',
+          operation: 'update',
+          data: updateData,
+          filters: [{ column: 'id', op: 'eq', value: credentials.id }],
+        });
 
         if (error) throw error;
         toast.success('Credenciales actualizadas exitosamente');
       } else {
-        const { error } = await supabase.from('email_credentials').insert({
-          application_id: selectedApp,
-          ...updateData,
-          is_active: true,
+        const { error } = await queryMutate({
+          table: 'email_credentials',
+          operation: 'insert',
+          data: {
+            application_id: selectedApp,
+            ...updateData,
+            is_active: true,
+          },
         });
 
         if (error) throw error;
@@ -385,24 +461,22 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     try {
       if (!user?.sub) return;
 
-      const { error } = await supabase
-        .from('user_preferences')
-        .upsert(
-          {
-            user_id: user.sub,
-            default_application_id: appId,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: 'user_id',
-          }
-        );
+      const { error } = await queryMutate({
+        table: 'user_preferences',
+        operation: 'upsert',
+        data: {
+          user_id: user.sub,
+          default_application_id: appId,
+          updated_at: new Date().toISOString(),
+        },
+        onConflict: 'user_id',
+      });
 
       if (error) throw error;
 
       setDefaultApp(appId);
       setSelectedApp(appId);
-      toast.success('Aplicación por defecto actualizada');
+      toast.success('Aplicación predeterminada actualizada');
     } catch {
       toast.error('Error al guardar la configuración');
     }
@@ -411,7 +485,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
   const copyApiKey = (apiKey: string) => {
     navigator.clipboard.writeText(apiKey);
     setCopiedKey(true);
-    toast.success('API Key copiada al portapapeles');
+      toast.success('Clave API copiada al portapapeles');
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
@@ -444,22 +518,27 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
       const appId = crypto.randomUUID();
       const apiKey = `sk_${generateSecureKey()}`;
 
-      const { data, error } = await supabase
-        .from('applications')
-        .insert({
+      const { data, error } = await queryMutate<Application>({
+        table: 'applications',
+        operation: 'insert',
+        data: {
           user_id: user.sub,
           name: newAppData.name,
           app_id: appId,
           domain: newAppData.domain || null,
           api_key: apiKey,
           ...(user.tenant_id ? { tenant_id: user.tenant_id } : {}),
-        })
-        .select()
-        .single();
+        },
+      });
 
       if (error) throw error;
 
-      await setAsDefault(data.id);
+      const createdApp = data?.[0];
+      if (!createdApp) {
+        throw new Error('No se pudo crear la aplicación');
+      }
+
+      await setAsDefault(createdApp.id);
       await refreshCounts();
 
       toast.success('Aplicación creada y marcada como favorita');
@@ -471,13 +550,132 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     }
   };
 
+  const normalizeApplicationName = (value: string) => value.trim().toLowerCase();
+
+  const openDeleteApplicationModal = async (app: Application) => {
+    setDeleteAppTarget(app);
+    setDeleteAppSummary(null);
+    setDeleteAppConfirmName('');
+    setDeleteAppError('');
+    setDeleteAppPreviewLoading(true);
+    setShowDeleteAppModal(true);
+
+    try {
+      if (isLocalHost()) {
+        console.groupCollapsed('[settings] delete-application preview requests');
+        console.log('application_id:', app.id);
+        console.table([
+          {
+            table: 'communication_templates',
+            operation: 'select',
+            select: 'id',
+            filter: `application_id eq ${app.id}`,
+          },
+          {
+            table: 'campaign_jobs',
+            operation: 'select',
+            select: 'id',
+            filter: `application_id eq ${app.id}`,
+          },
+        ]);
+        console.groupEnd();
+      }
+      const [templatesResult, jobsResult] = await Promise.all([
+        queryCount({
+          table: 'communication_templates',
+          operation: 'select',
+          select: 'id',
+          filters: [{ column: 'application_id', op: 'eq', value: app.id }],
+        }),
+        queryCount({
+          table: 'campaign_jobs',
+          operation: 'select',
+          select: 'id',
+          filters: [{ column: 'application_id', op: 'eq', value: app.id }],
+        }),
+      ]);
+
+      if (templatesResult.error) throw templatesResult.error;
+      if (jobsResult.error) throw jobsResult.error;
+
+      setDeleteAppSummary({
+        templates_count: templatesResult.count,
+        jobs_count: jobsResult.count,
+      });
+    } catch (error) {
+      setDeleteAppError(error instanceof Error ? error.message : 'No se pudo cargar la información de la aplicación');
+    } finally {
+      setDeleteAppPreviewLoading(false);
+    }
+  };
+
+  const closeDeleteApplicationModal = () => {
+    if (deleteAppLoading) return;
+    setShowDeleteAppModal(false);
+    setDeleteAppTarget(null);
+    setDeleteAppSummary(null);
+    setDeleteAppConfirmName('');
+    setDeleteAppError('');
+    setDeleteAppPreviewLoading(false);
+  };
+
+  const confirmDeleteApplication = async () => {
+    if (!deleteAppTarget || deleteAppLoading || deleteAppPreviewLoading) return;
+
+    if (normalizeApplicationName(deleteAppConfirmName) !== normalizeApplicationName(deleteAppTarget.name)) {
+      setDeleteAppError('Escribe el nombre exacto de la aplicación para confirmar.');
+      return;
+    }
+
+    setDeleteAppLoading(true);
+    setDeleteAppError('');
+
+    try {
+      const response = await applicationManagementFetch(
+        {
+          application_id: deleteAppTarget.id,
+          confirm_name: deleteAppConfirmName.trim(),
+        },
+      );
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error?.message || result?.error || 'No se pudo eliminar la aplicación');
+      }
+
+      const deletedTemplates = result.data?.dependency_summary?.templates_count ?? 0;
+      const deletedJobs = result.data?.dependency_summary?.jobs_count ?? 0;
+
+      setShowDeleteAppModal(false);
+      setDeleteAppTarget(null);
+      setDeleteAppSummary(null);
+      setDeleteAppConfirmName('');
+      setDeleteAppError('');
+      setSelectedApp(null);
+      setCredentials(null);
+
+      await refreshCounts();
+      await loadApplications();
+
+      if (deletedTemplates > 0 || deletedJobs > 0) {
+        toast.success('Aplicación eliminada y dependencias limpiadas');
+      } else {
+        toast.success('Aplicación eliminada');
+      }
+    } catch (error) {
+      setDeleteAppError(error instanceof Error ? error.message : 'No se pudo eliminar la aplicación');
+    } finally {
+      setDeleteAppLoading(false);
+    }
+  };
+
   const currentPageSlug = tab === 'email' ? 'settings-email' : tab === 'embed' ? 'settings-embed' : 'settings-apps';
   const pageTitle = tab === 'email' ? 'Correo Electrónico' : tab === 'embed' ? 'Acceso al Embed' : 'Aplicaciones';
   const pageDesc = tab === 'email'
     ? 'Configura el proveedor de email para cada aplicación'
     : tab === 'embed'
     ? 'Genera credenciales para proteger el acceso al Marketplace embebido'
-    : 'Gestiona tus aplicaciones y API keys';
+    : 'Gestiona tus aplicaciones y claves API';
 
   if (loading) {
     return (
@@ -502,25 +700,25 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
             <div className="flex items-center space-x-2">
               <Key className="w-5 h-5 text-cyan-400" />
-              <h3 className="text-base sm:text-lg font-semibold text-white">Aplicaciones y API Keys</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-white">Aplicaciones y claves API</h3>
             </div>
             <button
               onClick={handleNewApplicationClick}
               className="flex items-center justify-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />
-              <span>Nueva Aplicación</span>
+              <span>Nueva aplicación</span>
             </button>
           </div>
 
           {applications.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-slate-400 mb-4">No tienes aplicaciones creadas</p>
+              <p className="text-slate-400 mb-4">Todavía no tienes aplicaciones creadas</p>
               <button
                 onClick={handleNewApplicationClick}
                 className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
               >
-                Crear Primera Aplicación
+                Crear la primera aplicación
               </button>
             </div>
           ) : (
@@ -534,7 +732,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                         : 'border-slate-700'
                     }`}
                   >
-                    <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start justify-between mb-3 gap-3">
                       <div className="flex items-center space-x-3">
                         <h4 className="text-white font-semibold">{app.name}</h4>
                         {defaultApp === app.id && (
@@ -544,19 +742,28 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                           </span>
                         )}
                       </div>
-                      {defaultApp !== app.id && (
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {defaultApp !== app.id && (
+                          <button
+                            onClick={() => setAsDefault(app.id)}
+                            className="text-xs px-3 py-1 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors"
+                          >
+                            Definir como predeterminada
+                          </button>
+                        )}
                         <button
-                          onClick={() => setAsDefault(app.id)}
-                          className="text-xs px-3 py-1 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors"
+                          onClick={() => { void openDeleteApplicationModal(app); }}
+                          className="inline-flex items-center gap-1 text-xs px-3 py-1 bg-red-500/10 text-red-300 border border-red-500/20 rounded hover:bg-red-500/20 transition-colors"
                         >
-                          Marcar como predeterminada
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Eliminar</span>
                         </button>
-                      )}
+                      </div>
                     </div>
 
                     <div className="space-y-2">
                       <div>
-                        <div className="text-xs text-slate-500 mb-1">API Key</div>
+                        <div className="text-xs text-slate-500 mb-1">Clave API</div>
                         <div className="flex items-center space-x-2">
                           <code className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-cyan-400 font-mono overflow-x-auto">
                             {app.api_key}
@@ -564,7 +771,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                           <button
                             onClick={() => copyApiKey(app.api_key)}
                             className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition-colors"
-                            title="Copiar API Key"
+                            title="Copiar clave API"
                           >
                             {copiedKey ? (
                               <CheckCircle2 className="w-4 h-4 text-green-400" />
@@ -575,7 +782,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-slate-500 mb-1">ID de Aplicación</div>
+                        <div className="text-xs text-slate-500 mb-1">ID de la aplicación</div>
                         <code className="block px-3 py-2 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-mono overflow-x-auto">
                           {app.id}
                         </code>
@@ -639,7 +846,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
               ))}
             </div>
 
-            {/* Plan uses platform email — show locked status only */}
+            {/* Plan uses platform email - show locked status only */}
             {!canUseSmtp && !canUseResend ? (
               <div className="flex items-start gap-4 bg-slate-900/50 border border-slate-700/60 rounded-xl p-5">
                 <div className="w-10 h-10 flex-shrink-0 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
@@ -692,7 +899,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                 ) : (
                   <div className="grid md:grid-cols-2 gap-3">
                     <div className="bg-slate-900/50 rounded-lg p-3">
-                      <div className="text-xs text-slate-500 mb-1">API Key</div>
+                      <div className="text-xs text-slate-500 mb-1">Clave API</div>
                       <div className="text-sm text-white font-mono">••••••••{credentials.resend_api_key?.slice(-8)}</div>
                     </div>
                     <div className="bg-slate-900/50 rounded-lg p-3">
@@ -724,7 +931,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
           </div>
         )}
 
-        {/* ── Embed credentials tab ──────────────────────────────────── */}
+        {/* Embed credentials tab */}
         {tab === 'embed' && (
           <div className="space-y-4">
             {/* Info banner */}
@@ -829,16 +1036,16 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
           </div>
         )}
 
-        {/* Subscription return URL — visible to admins on email tab */}
+        {/* Subscription return URL - visible to admins on email tab */}
         {tab === 'email' && isAdmin && (
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-2">
               <Link className="w-5 h-5 text-cyan-400" />
-              <h3 className="text-base sm:text-lg font-semibold text-white">URL de Retorno de Suscripción</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-white">URL final de suscripción</h3>
             </div>
             <p className="text-sm text-slate-400 mb-4 leading-relaxed">
-              Usá esta URL como <span className="text-slate-300 font-mono text-xs">back_url</span> en MercadoPago.
-              Cuando el usuario complete el pago será redireccionado aquí automáticamente.
+              Usá esta URL como <span className="text-slate-300 font-mono text-xs">return_url</span> del checkout gestionado.
+              AuthSystem se encarga del <span className="text-slate-300 font-mono text-xs">back_url</span> técnico de Mercado Pago.
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-cyan-400 font-mono overflow-x-auto whitespace-nowrap">
@@ -861,6 +1068,112 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
         )}
       </div>
 
+      {showDeleteAppModal && deleteAppTarget && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-lg overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Eliminar aplicación</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Esta acción no se puede deshacer</p>
+                </div>
+              </div>
+              <button
+                onClick={closeDeleteApplicationModal}
+                disabled={deleteAppLoading}
+                className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
+                <div className="text-xs uppercase tracking-wider text-slate-500">Aplicación</div>
+                <div className="mt-1 text-lg font-semibold text-white">{deleteAppTarget.name}</div>
+                <div className="mt-2 text-xs text-slate-500 break-all">
+                  ID: <span className="text-cyan-400">{deleteAppTarget.id}</span>
+                </div>
+              </div>
+
+              {deleteAppPreviewLoading ? (
+                <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-white">Cargando dependencias...</p>
+                    <p className="text-xs text-slate-400">Revisando templates y jobs asociados</p>
+                  </div>
+                </div>
+              ) : deleteAppSummary ? (
+                <div className={`rounded-xl border p-4 ${deleteAppSummary.templates_count > 0 || deleteAppSummary.jobs_count > 0 ? 'border-amber-500/25 bg-amber-500/10' : 'border-slate-700 bg-slate-900/50'}`}>
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${deleteAppSummary.templates_count > 0 || deleteAppSummary.jobs_count > 0 ? 'text-amber-400' : 'text-emerald-400'}`} />
+                    <div>
+                      <p className="text-sm font-semibold text-white">
+                        {deleteAppSummary.templates_count > 0 || deleteAppSummary.jobs_count > 0
+                          ? 'Se eliminarán también los datos asociados'
+                          : 'No se detectaron templates ni jobs asociados'}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                        {deleteAppSummary.templates_count} templates y {deleteAppSummary.jobs_count} jobs serán eliminados junto con la aplicación.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Escribe el nombre de la aplicación para confirmar
+                </label>
+                <input
+                  type="text"
+                  value={deleteAppConfirmName}
+                  onChange={(e) => {
+                    setDeleteAppConfirmName(e.target.value);
+                    setDeleteAppError('');
+                  }}
+                  placeholder={deleteAppTarget.name}
+                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors"
+                />
+              </div>
+
+              {deleteAppError && (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+                  <p className="text-sm text-red-300">{deleteAppError}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 p-5 border-t border-slate-700">
+              <button
+                onClick={closeDeleteApplicationModal}
+                disabled={deleteAppLoading}
+                className="px-5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { void confirmDeleteApplication(); }}
+                disabled={
+                  deleteAppLoading ||
+                  deleteAppPreviewLoading ||
+                  !deleteAppTarget ||
+                  normalizeApplicationName(deleteAppConfirmName) !== normalizeApplicationName(deleteAppTarget.name)
+                }
+                className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-bold transition-colors disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed"
+              >
+                {deleteAppLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {deleteAppLoading ? 'Eliminando...' : 'Eliminar aplicación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showEmbedModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-md overflow-hidden shadow-2xl">
@@ -870,7 +1183,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                 <h2 className="text-base font-bold text-white">Nueva credencial de embed</h2>
               </div>
               <button onClick={() => setShowEmbedModal(false)} className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
-                <span className="text-lg leading-none">×</span>
+                <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-5 space-y-4">
@@ -1196,7 +1509,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                 <>
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Resend API Key
+                      Clave API de Resend
                     </label>
                     <input
                       type="text"
@@ -1206,7 +1519,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                       placeholder="re_xxxxxxxxxxxx"
                     />
                     <p className="text-xs text-slate-400 mt-1">
-                      Obtén tu API key en <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">resend.com/api-keys</a>
+                      Obtén tu clave API en <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">resend.com/api-keys</a>
                     </p>
                   </div>
 
@@ -1275,3 +1588,5 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     </Layout>
   );
 };
+
+

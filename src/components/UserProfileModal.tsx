@@ -83,15 +83,6 @@ export const UserProfileModal = ({ onClose }: UserProfileModalProps) => {
               </p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                User ID
-              </label>
-              <div className="px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg">
-                <code className="text-xs text-cyan-400 break-all">{user?.sub}</code>
-              </div>
-            </div>
-
             {user?.role && (
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">

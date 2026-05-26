@@ -1,6 +1,8 @@
-import { Shield, Check, ArrowRight, Mail, FileText, Zap, Star, Building2 } from 'lucide-react';
+import { useState } from 'react';
+import { Shield, Check, ArrowRight, Mail, FileText, Zap, Star, Building2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { PricingPlansSection } from '../components/PricingPlansSection';
 
 const PLANS = [
   {
@@ -81,6 +83,23 @@ const USE_CASES = [
 export const Landing = () => {
   const { login, register } = useAuth();
   const navigate = useNavigate();
+  const [pendingAction, setPendingAction] = useState<'login' | 'register' | null>(null);
+
+  const handleLogin = () => {
+    if (pendingAction) return;
+    setPendingAction('login');
+    window.setTimeout(() => {
+      login();
+    }, 140);
+  };
+
+  const handleRegister = () => {
+    if (pendingAction) return;
+    setPendingAction('register');
+    window.setTimeout(() => {
+      register();
+    }, 140);
+  };
 
   return (
     <div className="min-h-screen bg-[#050d1a] text-white overflow-x-hidden">
@@ -191,12 +210,13 @@ export const Landing = () => {
 
                 <div className="slide-3 mb-7">
                   <button
-                    onClick={login}
-                    className="btn-shimmer w-full group flex items-center justify-center gap-2.5 px-6 py-4 text-white rounded-xl font-bold text-lg transition-all hover:shadow-2xl hover:shadow-cyan-500/35 hover:scale-[1.02] active:scale-[0.98]"
+                    onClick={handleLogin}
+                    disabled={pendingAction === 'login'}
+                    className="btn-shimmer w-full group flex items-center justify-center gap-2.5 px-6 py-4 text-white rounded-xl font-bold text-lg transition-all hover:shadow-2xl hover:shadow-cyan-500/35 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-80 disabled:cursor-not-allowed"
                   >
-                    <Shield className="w-5 h-5" />
-                    <span>Iniciar Sesión</span>
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                    {pendingAction === 'login' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
+                    <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar Sesión'}</span>
+                    {pendingAction === 'login' ? null : <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
                   </button>
                 </div>
 
@@ -224,8 +244,13 @@ export const Landing = () => {
                 <div className="slide-5 text-center mb-4">
                   <p className="text-slate-500 text-sm">
                     ¿No tienes cuenta?{' '}
-                    <button onClick={() => register()} className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors">
-                      Crear cuenta
+                    <button onClick={handleRegister} disabled={pendingAction === 'register'} className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors disabled:opacity-80 disabled:cursor-not-allowed">
+                      {pendingAction === 'register' ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Iniciando...
+                        </span>
+                      ) : 'Crear cuenta'}
                     </button>
                   </p>
                 </div>
@@ -272,7 +297,9 @@ export const Landing = () => {
       </section>
 
       {/* ── PRICING ── */}
-      <section className="py-24 px-6 sm:px-10 relative overflow-hidden">
+      <PricingPlansSection />
+
+      <section className="hidden py-24 px-6 sm:px-10 relative overflow-hidden">
         {/* Background glows */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="glow-pulse absolute top-0 left-1/4 w-[600px] h-[400px] bg-cyan-500 rounded-full blur-[160px]" style={{ animationDelay: '1s' }} />
@@ -360,7 +387,7 @@ export const Landing = () => {
 
                   {/* CTA */}
                   <button
-                    onClick={() => register()}
+                    onClick={() => register(plan.key)}
                     className={`mt-6 w-full py-2.5 rounded-xl font-bold text-sm transition-all ${
                       plan.key === 'business'
                         ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-500/25'
@@ -398,18 +425,24 @@ export const Landing = () => {
       {/* ── MOBILE bottom bar ── */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#050d1a]/95 backdrop-blur-xl border-t border-white/8 p-4 z-50">
         <button
-          onClick={login}
-          className="btn-shimmer w-full group flex items-center justify-center gap-2.5 px-6 py-4 text-white rounded-xl font-bold text-base transition-all hover:shadow-xl hover:shadow-cyan-500/30 active:scale-95"
+          onClick={handleLogin}
+          disabled={pendingAction === 'login'}
+          className="btn-shimmer w-full group flex items-center justify-center gap-2.5 px-6 py-4 text-white rounded-xl font-bold text-base transition-all hover:shadow-xl hover:shadow-cyan-500/30 active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
         >
-          <Shield className="w-5 h-5" />
-          <span>Iniciar Sesión</span>
-          <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+          {pendingAction === 'login' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
+          <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar Sesión'}</span>
+          {pendingAction === 'login' ? null : <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
         </button>
         <div className="text-center mt-3">
           <p className="text-slate-400 text-sm">
             ¿No tienes cuenta?{' '}
-            <button onClick={() => register()} className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors">
-              Crear cuenta
+            <button onClick={handleRegister} disabled={pendingAction === 'register'} className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors disabled:opacity-80 disabled:cursor-not-allowed">
+              {pendingAction === 'register' ? (
+                <span className="inline-flex items-center gap-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Iniciando...
+                </span>
+              ) : 'Crear cuenta'}
             </button>
           </p>
         </div>

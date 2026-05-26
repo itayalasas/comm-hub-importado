@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Book, Code, Copy, Check, ChevronDown, ChevronRight, Info, AlertCircle, Mail, FileText, Zap, Globe, CheckCircle2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { configManager } from '../lib/config';
+import { buildFunctionsUrl, getRuntimeConfig } from '../lib/config';
 
 interface EndpointSection {
   id: string;
@@ -24,23 +24,22 @@ interface EndpointSection {
   }[];
 }
 
-export default function Documentation() {
+interface DocumentationProps {
+  publicView?: boolean;
+}
+
+export default function Documentation({ publicView = false }: DocumentationProps) {
   const [activeSection, setActiveSection] = useState('introduction');
   const [expandedEndpoints, setExpandedEndpoints] = useState<string[]>(['send-email']);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  const supabaseUrl = (() => {
-    try {
-      if (configManager.isLoaded()) {
-        return configManager.supabaseUrl;
-      }
-    } catch {
-      // ignore
-    }
-
-    return import.meta.env.VITE_SUPABASE_URL || '';
+  const functionsBaseUrl = (() => {
+    const { functionsBaseUrlRaw, functionsBaseUrl } = getRuntimeConfig();
+    return functionsBaseUrlRaw || functionsBaseUrl || '';
   })();
-  const apiBaseUrl = supabaseUrl || 'https://your-project.supabase.co';
+  const apiBaseUrl = functionsBaseUrl || 'https://your-project.supabase.co/v1';
+  const functionUrl = (path: string) => buildFunctionsUrl(path, apiBaseUrl);
+  const cleanFunctionPath = (path: string) => path.replace(/^\/functions\/v1/i, '') || path;
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -69,7 +68,7 @@ export default function Documentation() {
       id: 'generate-pdf',
       title: 'Generar PDF',
       method: 'POST',
-      path: '/functions/v1/generate-pdf',
+      path: '/generate-pdf',
       description: 'Genera un PDF desde un template HTML usando un renderer Chromium self-hosted. El PDF se guarda en la base de datos y puede adjuntarse a comunicaciones pendientes si se proporciona un order_id.',
       authentication: 'API Key (x-api-key header)',
       headers: [
@@ -176,7 +175,7 @@ export default function Documentation() {
       id: 'send-email-with-pdf',
       title: 'Enviar Email con PDF Adjunto',
       method: 'POST',
-      path: '/functions/v1/send-email-with-pdf',
+      path: '/send-email-with-pdf',
       description: 'Genera un PDF desde un template y lo envía como adjunto en un único llamado. El template del email y el template del PDF se definen en secciones separadas, cada uno con sus propios datos independientes. Si el PDF supera 1MB el adjunto se reemplaza por un link de descarga inyectado en el cuerpo del email.',
       authentication: 'API Key (x-api-key header)',
       headers: [
@@ -239,7 +238,7 @@ export default function Documentation() {
             pdf_filename: 'factura-ORD-2024-001.pdf',
             pdf_size_bytes: 48320,
             pdf_attached_inline: true,
-            pdf_public_url: 'https://your-project.supabase.co/functions/v1/view-pdf?token=abc123',
+            pdf_public_url: 'https://your-project.supabase.co/v1/view-pdf?token=abc123',
             resend_email_id: 're_abc123',
             processing_time_ms: 1240,
           },
@@ -270,7 +269,7 @@ export default function Documentation() {
       id: 'send-email',
       title: 'Enviar Email',
       method: 'POST',
-      path: '/functions/v1/send-email',
+      path: '/send-email',
       description: 'Envía un email inmediatamente usando un template configurado.',
       authentication: 'API Key (x-api-key header)',
       headers: [
@@ -332,7 +331,7 @@ export default function Documentation() {
       id: 'pending-create',
       title: 'Crear Comunicación Pendiente',
       method: 'POST',
-      path: '/functions/v1/pending-communication/create',
+      path: '/pending-communication/create',
       description: 'Crea una comunicación que espera datos externos antes de ser enviada.',
       authentication: 'API Key (x-api-key header)',
       headers: [
@@ -377,7 +376,7 @@ export default function Documentation() {
               id: 'uuid-123',
               external_reference_id: 'INVOICE-12345',
               status: 'waiting_data',
-              complete_url: `${supabaseUrl}/functions/v1/pending-communication/complete`,
+              complete_url: functionUrl('pending-communication/complete'),
             },
           },
         },
@@ -387,7 +386,7 @@ export default function Documentation() {
       id: 'pending-complete',
       title: 'Completar Comunicación Pendiente',
       method: 'POST',
-      path: '/functions/v1/pending-communication/complete',
+      path: '/pending-communication/complete',
       description: 'Completa una comunicación pendiente con los datos faltantes y envía el email automáticamente.',
       authentication: 'No requiere (usa external_reference_id)',
       requestBody: {
@@ -429,7 +428,7 @@ export default function Documentation() {
       id: 'pending-status',
       title: 'Consultar Estado',
       method: 'GET',
-      path: '/functions/v1/pending-communication/status',
+      path: '/pending-communication/status',
       description: 'Consulta el estado de una comunicación pendiente.',
       authentication: 'No requiere',
       parameters: [
@@ -477,7 +476,7 @@ export default function Documentation() {
             .join('&')}`
         : '';
 
-    const url = `${apiBaseUrl}${endpoint.path}${queryParams}`;
+    const url = `${functionUrl(endpoint.path)}${queryParams}`;
     const lines: string[] = [`curl --request ${endpoint.method} '${url}'`];
 
     const headers = endpoint.headers || [];
@@ -512,9 +511,9 @@ export default function Documentation() {
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-white mb-3">Base URL</h3>
         <div className="bg-slate-900 border border-slate-700 rounded p-3 font-mono text-sm text-cyan-400 flex items-center justify-between">
-          <span>{supabaseUrl}</span>
+          <span>{functionsBaseUrl}</span>
           <button
-            onClick={() => copyToClipboard(supabaseUrl, 'base-url')}
+            onClick={() => copyToClipboard(functionsBaseUrl, 'base-url')}
             className="p-1 text-slate-400 hover:text-white transition-colors"
           >
             {copiedCode === 'base-url' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -770,7 +769,7 @@ export default function Documentation() {
               <li>2. Haz clic en "Add Endpoint"</li>
               <li>3. Ingresa la URL del webhook:
                 <div className="mt-2 bg-slate-800 p-2 rounded">
-                  <code className="text-cyan-400 text-xs break-all">{supabaseUrl}/functions/v1/resend-webhook</code>
+                  <code className="text-cyan-400 text-xs break-all">{functionUrl('resend-webhook')}</code>
                 </div>
               </li>
               <li>4. Selecciona los eventos:
@@ -923,9 +922,9 @@ Content-Type: application/json`}
               </div>
             </button>
             <div className="flex items-center gap-2">
-              <code className="text-sm text-slate-400 font-mono">{endpoint.path}</code>
+              <code className="text-sm text-slate-400 font-mono">{cleanFunctionPath(endpoint.path)}</code>
               <button
-                onClick={() => copyToClipboard(`${supabaseUrl}${endpoint.path}`, `${endpoint.id}-url`)}
+                onClick={() => copyToClipboard(functionUrl(endpoint.path), `${endpoint.id}-url`)}
                 className="p-2 hover:bg-slate-700 rounded transition-colors"
                 title="Copiar URL completa"
               >
@@ -1397,7 +1396,7 @@ Content-Type: application/json`}
           <p className="text-slate-300 text-sm mb-3">Una sola llamada hace todo el trabajo</p>
           <div className="relative">
             <pre className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
-{`curl -X POST ${supabaseUrl}/functions/v1/send-email \\
+{`curl -X POST ${functionUrl('send-email')} \\
   -H "x-api-key: tu_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -1430,7 +1429,7 @@ Content-Type: application/json`}
               step: 1,
               title: 'Crear comunicación pendiente',
               description: 'Tu app crea el registro inmediatamente después de la cita',
-              code: `curl -X POST ${supabaseUrl}/functions/v1/pending-communication/create \\
+              code: `curl -X POST ${functionUrl('pending-communication/create')} \\
   -H "x-api-key: tu_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -1449,7 +1448,7 @@ Content-Type: application/json`}
               step: 2,
               title: 'Generar el PDF',
               description: 'Tu sistema de facturación genera el PDF usando el template',
-              code: `curl -X POST ${supabaseUrl}/functions/v1/generate-pdf \\
+              code: `curl -X POST ${functionUrl('generate-pdf')} \\
   -H "x-api-key: tu_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -1468,7 +1467,7 @@ Content-Type: application/json`}
               step: 3,
               title: 'Completar la comunicación',
               description: 'Envía el PDF generado para completar y enviar el email',
-              code: `curl -X POST ${supabaseUrl}/functions/v1/pending-communication/complete \\
+              code: `curl -X POST ${functionUrl('pending-communication/complete')} \\
   -H "Content-Type: application/json" \\
   -d '{
     "external_reference_id": "INV-001",
@@ -1522,7 +1521,7 @@ Content-Type: application/json`}
       version: '1.0.0',
       protocol: 'REST/HTTPS',
       auth: 'API Key',
-      endpoint: '/functions/v1/send-email',
+      endpoint: '/send-email',
       method: 'POST',
       description: 'Conector oficial para enviar emails transaccionales directamente desde tu CRM o automatización. Soporta templates HTML con variables dinámicas, logos, códigos QR y tracking de aperturas y clics.',
       features: [
@@ -1556,7 +1555,7 @@ Content-Type: application/json`}
       version: '1.0.0',
       protocol: 'REST/HTTPS',
       auth: 'API Key',
-      endpoint: '/functions/v1/send-email-with-pdf',
+      endpoint: '/send-email-with-pdf',
       method: 'POST',
       description: 'Genera un PDF desde un template HTML y lo adjunta al email en una sola llamada API. Ideal para facturas, recibos, confirmaciones con documentos adjuntos. Si el PDF supera 1 MB se incluye un link de descarga en el email.',
       features: [
@@ -1591,7 +1590,7 @@ Content-Type: application/json`}
       version: '1.0.0',
       protocol: 'REST/HTTPS',
       auth: 'API Key',
-      endpoint: '/functions/v1/generate-pdf',
+      endpoint: '/generate-pdf',
       method: 'POST',
       description: 'Genera PDFs dinámicos desde templates HTML usando Chromium. Devuelve el PDF en base64 y una URL pública de descarga con expiración configurable. CSS completo soportado incluyendo fuentes, imágenes y tablas.',
       features: [
@@ -1623,7 +1622,7 @@ Content-Type: application/json`}
       version: '1.0.0',
       protocol: 'GET (automático)',
       auth: 'Sin auth',
-      endpoint: '/functions/v1/track-email',
+      endpoint: '/track-email',
       method: 'GET',
       description: 'Pixel de tracking y redirección de clics para monitorear la interacción con emails enviados. SendCraft inyecta automáticamente el pixel 1×1 y los links de tracking en cada email — no requiere llamadas manuales desde tu CRM.',
       features: [
@@ -1639,8 +1638,8 @@ Content-Type: application/json`}
       ],
       example: {
         _nota: 'Automático — SendCraft lo inyecta en el HTML del email',
-        apertura: `${apiBaseUrl}/functions/v1/track-email/open?log_id=<log_id>`,
-        clic: `${apiBaseUrl}/functions/v1/track-email/click?log_id=<log_id>&url=<encoded_url>`,
+        apertura: functionUrl('track-email/open?log_id=<log_id>'),
+        clic: functionUrl('track-email/click?log_id=<log_id>&url=<encoded_url>'),
       },
     },
   ];
@@ -1669,8 +1668,8 @@ Content-Type: application/json`}
           Tu CRM puede descubrir los conectores automáticamente apuntando al registry:
         </p>
         <div className="bg-slate-900 border border-slate-700 rounded p-3 font-mono text-sm text-cyan-400 flex items-center justify-between">
-          <span>{apiBaseUrl}/functions/v1/connectors</span>
-          <button onClick={() => copyToClipboard(`${apiBaseUrl}/functions/v1/connectors`, 'registry-url')} className="p-1 text-slate-400 hover:text-white transition-colors ml-4">
+          <span>{functionUrl('connectors')}</span>
+          <button onClick={() => copyToClipboard(functionUrl('connectors'), 'registry-url')} className="p-1 text-slate-400 hover:text-white transition-colors ml-4">
             {copiedCode === 'registry-url' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
           </button>
         </div>
@@ -1768,7 +1767,7 @@ Content-Type: application/json`}
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="bg-green-500 text-white px-2 py-0.5 rounded text-xs font-bold">{connector.method}</span>
-                    <code className="text-xs text-slate-400 font-mono">{connector.endpoint}</code>
+                    <code className="text-xs text-slate-400 font-mono">{cleanFunctionPath(connector.endpoint)}</code>
                   </div>
                   <button
                     onClick={() => copyToClipboard(JSON.stringify(connector.example, null, 2), `${connector.id}-example`)}
@@ -1786,9 +1785,9 @@ Content-Type: application/json`}
               <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
                 <Globe className="w-3.5 h-3.5" />
                 <span>Registry:</span>
-                <code className="text-cyan-500">{apiBaseUrl}/functions/v1/connectors/{connector.id}</code>
+                <code className="text-cyan-500">{functionUrl(`connectors/${connector.id}`)}</code>
                 <button
-                  onClick={() => copyToClipboard(`${apiBaseUrl}/functions/v1/connectors/${connector.id}`, `${connector.id}-registry`)}
+                  onClick={() => copyToClipboard(functionUrl(`connectors/${connector.id}`), `${connector.id}-registry`)}
                   className="p-1 hover:bg-slate-700 rounded transition-colors"
                 >
                   {copiedCode === `${connector.id}-registry` ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3 text-slate-500" />}
@@ -1822,40 +1821,85 @@ Content-Type: application/json`}
     }
   };
 
+  const docsWorkspace = (
+    <div
+      className={`flex gap-6 ${
+        publicView ? 'min-h-[calc(100vh-7rem)]' : '-mt-8 -mx-8 h-[calc(100vh-8rem)]'
+      }`}
+    >
+      <aside className="w-64 bg-slate-800/30 border-r border-slate-700 overflow-y-auto">
+        <div className="p-4">
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+            Documentación
+          </h2>
+          <nav className="space-y-1">
+            {sections.map((section) => {
+              const Icon = section.icon;
+              return (
+                <button
+                  key={section.id}
+                  onClick={() => setActiveSection(section.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    activeSection === section.id
+                      ? 'bg-cyan-500/10 text-cyan-400'
+                      : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {section.title}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </aside>
+
+      <main className="flex-1 overflow-y-auto p-8">
+        {renderContent()}
+      </main>
+    </div>
+  );
+
+  if (publicView) {
+    return (
+      <div className="min-h-screen bg-[#020c1b] text-white">
+        <header className="border-b border-white/10 bg-slate-950/70 backdrop-blur-sm">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+            <a href="/" className="inline-flex items-center gap-3">
+              <img src="/logo.svg" alt="SendCraft" className="h-9" />
+              <span className="hidden sm:inline-flex flex-col">
+                <span className="text-sm font-semibold text-white">SendCraft</span>
+                <span className="text-xs text-slate-400">Documentación pública</span>
+              </span>
+            </a>
+
+            <div className="flex items-center gap-2">
+              <a
+                href="/"
+                className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition-colors hover:border-cyan-500/30 hover:text-white"
+              >
+                Ir al inicio
+              </a>
+              <a
+                href="/login"
+                className="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-cyan-400"
+              >
+                Iniciar sesión
+              </a>
+            </div>
+          </div>
+        </header>
+
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          {docsWorkspace}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Layout currentPage="documentation">
-      <div className="flex gap-6 -mt-8 -mx-8 h-[calc(100vh-8rem)]">
-        <aside className="w-64 bg-slate-800/30 border-r border-slate-700 overflow-y-auto">
-          <div className="p-4">
-            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-              Documentación
-            </h2>
-            <nav className="space-y-1">
-              {sections.map((section) => {
-                const Icon = section.icon;
-                return (
-                  <button
-                    key={section.id}
-                    onClick={() => setActiveSection(section.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                      activeSection === section.id
-                        ? 'bg-cyan-500/10 text-cyan-400'
-                        : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {section.title}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-        </aside>
-
-        <main className="flex-1 overflow-y-auto p-8">
-          {renderContent()}
-        </main>
-      </div>
+      {docsWorkspace}
     </Layout>
   );
 }

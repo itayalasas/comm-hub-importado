@@ -1,8 +1,14 @@
 import { createPortal } from 'react-dom';
+import { useState } from 'react';
 import { X, Check, Minus, TrendingUp, Loader2, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlans } from '../hooks/usePlans';
 import type { PlanFeature } from '../hooks/usePlans';
+import { getRuntimeConfig } from '../lib/config';
+import {
+  startManagedSubscriptionCheckout,
+  storePendingSubscriptionCheckout,
+} from '../lib/subscriptionCheckout';
 
 interface UpgradeModalProps {
   isOpen: boolean;
@@ -49,23 +55,73 @@ function formatFeatureValue(f: PlanFeature): string {
 }
 
 export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
-  const { subscription } = useAuth();
-  const { plans, loading } = usePlans();
+  const { subscription, user } = useAuth();
+  const { plans, loading, checkout } = usePlans();
+  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const managedCheckout = checkout?.managed_by_authsystem === true;
 
   if (!isOpen) return null;
 
   // Sort plans by price ascending
   const sortedPlans = [...plans].sort((a, b) => a.price - b.price);
 
-  // Identify current plan by matching plan_name
+  // Identify current plan by id first, then fallback to name
+  const currentPlanId = subscription?.plan_id ?? null;
   const currentPlanName = subscription?.plan_name?.toLowerCase().trim() ?? '';
 
-  const isCurrentPlan = (planName: string) =>
-    planName.toLowerCase().trim() === currentPlanName;
+  const isCurrentPlan = (plan: { id: string; name: string }) =>
+    (currentPlanId ? plan.id === currentPlanId : false) ||
+    plan.name.toLowerCase().trim() === currentPlanName;
 
-  const handleSelect = (initPoint: string | null | undefined) => {
-    if (!initPoint) return;
-    window.location.href = initPoint;
+  const handleSelect = async (plan: typeof sortedPlans[0]) => {
+    if (subscribingPlanId) return;
+
+    setCheckoutError(null);
+    setSubscribingPlanId(plan.id);
+
+    try {
+      const { authAppId, authApiKey } = getRuntimeConfig();
+      if (!authAppId || !authApiKey) {
+        throw new Error('No se encontraron las credenciales de la aplicación');
+      }
+
+      if (managedCheckout) {
+        const result = await startManagedSubscriptionCheckout({
+          applicationId: authAppId,
+          apiKey: authApiKey,
+          planId: plan.id,
+          returnUrl: `${window.location.origin}/subscription/result?plan_id=${encodeURIComponent(plan.id)}`,
+          email: user?.email ?? undefined,
+          tenantId: user?.tenant_id ?? undefined,
+          endpoint: checkout?.start_endpoint,
+        });
+
+        if (!result.checkout_session_id) {
+          throw new Error('No se recibió el identificador de checkout');
+        }
+
+        storePendingSubscriptionCheckout({
+          checkout_session_id: result.checkout_session_id,
+          plan_id: plan.id,
+          created_at: Date.now(),
+        });
+
+        const checkoutUrl = result.checkout_url || result.redirect_url;
+        if (!checkoutUrl) {
+          throw new Error('No se recibió la URL de checkout');
+        }
+
+        window.location.href = checkoutUrl;
+        return;
+      }
+
+      throw new Error('El checkout gestionado no está disponible para este plan.');
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : 'No se pudo iniciar la suscripción');
+    } finally {
+      setSubscribingPlanId(null);
+    }
   };
 
   // Collect all unique feature codes across all plans in defined order
@@ -86,7 +142,7 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
       className="fixed inset-0 z-[300] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md"
       style={{ margin: 0, left: 0, right: 0, top: 0, bottom: 0 }}
     >
-      <div className="relative w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
+      <div className="relative w-fit max-w-[calc(100vw-1rem)] max-h-[95vh] sm:max-h-[90vh] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
         {/* Background accents */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-cyan-500/8 via-transparent to-transparent pointer-events-none" />
 
@@ -111,6 +167,11 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
 
         {/* Content */}
         <div className="relative flex-1 overflow-y-auto px-4 sm:px-6 py-6">
+          {checkoutError && (
+            <div className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {checkoutError}
+            </div>
+          )}
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
@@ -122,7 +183,7 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] border-collapse">
+              <table className="mx-auto w-max table-fixed border-collapse">
                 {/* Plan headers */}
                 <thead>
                   <tr>
@@ -130,49 +191,52 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                       <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Características</span>
                     </th>
                     {sortedPlans.map((plan) => {
-                      const isCurrent = isCurrentPlan(plan.name);
+                      const isCurrent = isCurrentPlan(plan);
                       return (
-                        <th key={plan.id} className="pb-4 px-2 text-center align-bottom">
-                          <div className={`relative rounded-2xl border p-4 transition-all ${
-                            isCurrent
-                              ? 'bg-cyan-500/10 border-cyan-500/40'
-                              : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-600'
-                          }`}>
+                        <th key={plan.id} className="relative w-[16rem] px-2 pb-6 text-center align-bottom overflow-visible">
+                          <div className="relative pt-8 overflow-visible">
                             {isCurrent && (
-                              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                                <span className="inline-flex items-center gap-1 bg-cyan-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg shadow-cyan-500/30 whitespace-nowrap">
+                              <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2">
+                                <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-500 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-[0_12px_28px_rgba(34,211,238,0.35)] ring-1 ring-white/25 backdrop-blur">
                                   <Star className="w-2.5 h-2.5 fill-current" />
                                   Plan actual
                                 </span>
                               </div>
                             )}
-                            <p className={`font-extrabold text-base mb-1 ${isCurrent ? 'text-cyan-400' : 'text-white'}`}>
-                              {plan.name}
-                            </p>
-                            <div className="flex items-baseline justify-center gap-1">
-                              <span className="text-xl font-extrabold text-white">
-                                {plan.currency} {plan.price.toLocaleString('es-UY')}
-                              </span>
-                              <span className="text-slate-400 text-xs">/mes</span>
-                            </div>
-                            {!isCurrent && (
-                              <button
-                                onClick={() => handleSelect(plan.mercadopago?.init_point)}
-                                disabled={!plan.mercadopago?.init_point}
-                                className={`mt-3 w-full py-2 rounded-lg text-xs font-bold transition-all ${
-                                  plan.mercadopago?.init_point
-                                    ? 'bg-cyan-500 hover:bg-cyan-400 text-white hover:shadow-md hover:shadow-cyan-500/20'
-                                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                                }`}
-                              >
-                                {plan.mercadopago?.init_point ? 'Seleccionar' : 'No disponible'}
-                              </button>
-                            )}
-                            {isCurrent && (
-                              <div className="mt-3 w-full py-2 rounded-lg text-xs font-bold bg-cyan-500/10 text-cyan-400 text-center border border-cyan-500/20">
-                                Plan activo
+                            <div className={`relative w-full overflow-visible rounded-2xl border px-4 pb-4 pt-11 transition-all ${
+                              isCurrent
+                                ? 'bg-cyan-500/12 border-cyan-500/45 shadow-[0_0_0_1px_rgba(34,211,238,0.15)]'
+                                : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-600'
+                            }`}>
+                              <p className={`font-extrabold text-base mb-1 ${isCurrent ? 'text-cyan-400' : 'text-white'}`}>
+                                {plan.name}
+                              </p>
+                              <div className="flex items-baseline justify-center gap-1">
+                                <span className="text-xl font-extrabold text-white">
+                                  {plan.currency} {plan.price.toLocaleString('es-UY')}
+                                </span>
+                                <span className="text-slate-400 text-xs">/mes</span>
                               </div>
-                            )}
+                              {!isCurrent && (
+                                <button
+                                  onClick={() => { void handleSelect(plan); }}
+                                  disabled={subscribingPlanId === plan.id}
+                                  className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold transition-all bg-cyan-500 hover:bg-cyan-400 text-white hover:shadow-md hover:shadow-cyan-500/20 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                  {subscribingPlanId === plan.id ? (
+                                    <>
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                      Iniciando...
+                                    </>
+                                  ) : 'Suscribirse'}
+                                </button>
+                              )}
+                              {isCurrent && (
+                                <div className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-cyan-500/10 text-cyan-300 text-center border border-cyan-500/20">
+                                  Plan activo
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </th>
                       );
@@ -186,12 +250,12 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                     const label = FEATURE_LABEL[code] ?? code.replace(/_/g, ' ');
                     return (
                       <tr key={code} className="group">
-                        <td className="py-3 pr-4 text-sm text-slate-400 font-medium group-hover:text-slate-300 transition-colors">
+                        <td className="py-3 pr-4 text-sm text-slate-400 font-medium group-hover:text-slate-300 transition-colors w-44">
                           {label}
                         </td>
                         {sortedPlans.map((plan) => {
                           const feature = getFeature(plan, code);
-                          const isCurrent = isCurrentPlan(plan.name);
+                          const isCurrent = isCurrentPlan(plan);
 
                           if (!feature) {
                             return (

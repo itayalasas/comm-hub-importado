@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { configManager } from '../lib/config';
+import { configManager, logRuntimeConfig } from '../lib/config';
+import { authClient } from '../lib/auth';
 
 type MenuPermission = 'create' | 'read' | 'update' | 'delete';
 
@@ -20,6 +21,7 @@ interface Feature {
 interface Subscription {
   id: string;
   status: string;
+  plan_id?: string;
   plan_name: string;
   plan_price: number;
   plan_currency: string;
@@ -27,6 +29,9 @@ interface Subscription {
   trial_end?: string;
   period_start: string;
   period_end: string;
+  current_period_start?: string;
+  current_period_end?: string;
+  next_payment_date?: string;
   entitlements: {
     features: Feature[];
   };
@@ -35,6 +40,7 @@ interface Subscription {
   mp_preapproval_plan_id?: string;
   mp_preapproval_id?: string;
   mp_status?: string;
+  metadata?: Record<string, any>;
 }
 
 interface AvailablePlan {
@@ -75,6 +81,7 @@ interface AuthContextType {
   isAuth: boolean;
   isLoading: boolean;
   subscription: Subscription | null;
+  subscriptionHasAccess: boolean | null;
   availablePlans: AvailablePlan[];
   login: () => void;
   register: (planId?: string) => void;
@@ -83,6 +90,11 @@ interface AuthContextType {
   hasPermission: (menu: string, permission: MenuPermission) => boolean;
   hasMenuAccess: (menu: string) => boolean;
   refreshSubscription: () => Promise<void>;
+  applyCheckoutStatus: (status: {
+    subscription?: any;
+    available_plans?: any[];
+    has_access?: boolean | null;
+  }) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -102,6 +114,7 @@ interface AuthProviderProps {
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [subscriptionHasAccess, setSubscriptionHasAccess] = useState<boolean | null>(null);
   const [availablePlans, setAvailablePlans] = useState<AvailablePlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -163,6 +176,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return {
       id: String(rawSubscription.id),
       status: String(rawSubscription.status),
+      plan_id: rawSubscription.plan_id ? String(rawSubscription.plan_id) : undefined,
       plan_name: String(rawSubscription.plan_name || 'Plan'),
       plan_price: Number(rawSubscription.plan_price || 0),
       plan_currency: String(rawSubscription.plan_currency || 'USD'),
@@ -170,6 +184,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       trial_end: rawSubscription.trial_end ? String(rawSubscription.trial_end) : undefined,
       period_start: String(rawSubscription.period_start || ''),
       period_end: String(rawSubscription.period_end || ''),
+      current_period_start: rawSubscription.current_period_start ? String(rawSubscription.current_period_start) : undefined,
+      current_period_end: rawSubscription.current_period_end ? String(rawSubscription.current_period_end) : undefined,
+      next_payment_date: rawSubscription.next_payment_date ? String(rawSubscription.next_payment_date) : undefined,
       entitlements: {
         features: normalizeFeatures(rawFeatures),
       },
@@ -178,6 +195,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       mp_preapproval_plan_id: rawSubscription.mp_preapproval_plan_id ? String(rawSubscription.mp_preapproval_plan_id) : undefined,
       mp_preapproval_id: rawSubscription.mp_preapproval_id ? String(rawSubscription.mp_preapproval_id) : undefined,
       mp_status: rawSubscription.mp_status ? String(rawSubscription.mp_status) : undefined,
+      metadata: rawSubscription.metadata && typeof rawSubscription.metadata === 'object'
+        ? rawSubscription.metadata
+        : undefined,
     };
   };
 
@@ -206,28 +226,85 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const storedToken = localStorage.getItem('access_token');
-    const storedSubscription = localStorage.getItem('subscription');
-    const storedPlans = localStorage.getItem('available_plans');
+    let cancelled = false;
 
-    if (storedUser && storedToken) {
-      const parsedUser = JSON.parse(storedUser);
-      setUser(parsedUser);
-    }
+    const bootstrapAuthState = async () => {
+      const storedUser = localStorage.getItem('user');
+      const storedToken = localStorage.getItem('access_token');
+      const storedSubscription = localStorage.getItem('subscription');
+      const storedSubscriptionHasAccess = localStorage.getItem('subscription_has_access');
+      const storedPlans = localStorage.getItem('available_plans');
 
-    if (storedSubscription) {
-      const parsedSubscription = JSON.parse(storedSubscription);
-      const normalizedSubscription = normalizeSubscription(parsedSubscription);
-      setSubscription(normalizedSubscription);
-    }
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          if (!cancelled) {
+            setUser(parsedUser);
+          }
+        } catch {
+          localStorage.removeItem('user');
+        }
+      }
 
-    if (storedPlans) {
-      const parsedPlans = JSON.parse(storedPlans);
-      setAvailablePlans(normalizeAvailablePlans(parsedPlans));
-    }
+      if (storedToken) {
+        authClient.setAccessToken(storedToken);
+      } else if (storedUser && localStorage.getItem('refresh_token')) {
+        try {
+          await configManager.loadConfig();
+          const refreshedToken = await authClient.refreshAccessToken(configManager.functionsBaseUrl);
+          if (refreshedToken) {
+            localStorage.setItem('access_token', refreshedToken);
+            authClient.setAccessToken(refreshedToken);
+          }
+        } catch {
+          // If cookie-based recovery is unavailable, keep the stored user visible.
+        }
+      }
 
-    setIsLoading(false);
+      if (storedSubscription) {
+        try {
+          const parsedSubscription = JSON.parse(storedSubscription);
+          const normalizedSubscription = normalizeSubscription(parsedSubscription);
+          if (!cancelled) {
+            setSubscription(normalizedSubscription);
+          }
+        } catch {
+          localStorage.removeItem('subscription');
+        }
+      }
+
+      if (storedSubscriptionHasAccess !== null) {
+        try {
+          const parsedHasAccess = JSON.parse(storedSubscriptionHasAccess);
+          if (!cancelled) {
+            setSubscriptionHasAccess(typeof parsedHasAccess === 'boolean' ? parsedHasAccess : null);
+          }
+        } catch {
+          localStorage.removeItem('subscription_has_access');
+        }
+      }
+
+      if (storedPlans) {
+        try {
+          const parsedPlans = JSON.parse(storedPlans);
+          if (!cancelled) {
+            setAvailablePlans(normalizeAvailablePlans(parsedPlans));
+          }
+        } catch {
+          localStorage.removeItem('available_plans');
+        }
+      }
+
+      if (!cancelled) {
+        setIsLoading(false);
+      }
+    };
+
+    void bootstrapAuthState();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = () => {
@@ -252,13 +329,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     window.location.href = authUrl;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await authClient.logout(configManager.functionsBaseUrl);
+    } catch {}
     localStorage.removeItem('user');
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('subscription');
+    localStorage.removeItem('subscription_has_access');
     setUser(null);
     setSubscription(null);
+    setSubscriptionHasAccess(null);
     window.location.href = '/';
   };
 
@@ -288,6 +370,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const handleCallback = async (tokenOrCode: string) => {
     try {
+      await configManager.loadConfig();
+      logRuntimeConfig('login');
+
       let accessToken = tokenOrCode;
       let authResponse = null;
 
@@ -343,6 +428,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           }
         }
 
+        const earlyHasAccess =
+          typeof authResponse.has_access === 'boolean'
+            ? authResponse.has_access
+            : typeof authResponse.data?.has_access === 'boolean'
+            ? authResponse.data.has_access
+            : undefined;
+        if (typeof earlyHasAccess === 'boolean') {
+          localStorage.setItem('subscription_has_access', JSON.stringify(earlyHasAccess));
+          setSubscriptionHasAccess(earlyHasAccess);
+        }
+
         // Save available_plans from exchange response
         const earlyPlans =
           authResponse.available_plans ??
@@ -353,13 +449,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           localStorage.setItem('available_plans', JSON.stringify(normalizedPlans));
           setAvailablePlans(normalizedPlans);
         }
+
       }
 
       if (!accessToken) {
         throw new Error('No access token available');
       }
 
+      // Persist access token so the session survives browser refreshes.
       localStorage.setItem('access_token', accessToken);
+      authClient.setAccessToken(accessToken);
 
       let decodedToken = decodeJWT(accessToken);
       let userInfo: User;
@@ -385,6 +484,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
             setSubscription(normalizedSubscription);
           }
+        }
+
+        const authHasAccess =
+          typeof authResponse?.has_access === 'boolean'
+            ? authResponse.has_access
+            : typeof authResponse?.data?.has_access === 'boolean'
+            ? authResponse.data.has_access
+            : typeof decodedToken?.has_access === 'boolean'
+            ? decodedToken.has_access
+            : undefined;
+        if (typeof authHasAccess === 'boolean') {
+          localStorage.setItem('subscription_has_access', JSON.stringify(authHasAccess));
+          setSubscriptionHasAccess(authHasAccess);
         }
       } else if (decodedToken) {
         const rawSub =
@@ -468,18 +580,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Re-exchange the stored refresh_token to get a fresh subscription state
   const refreshSubscription = async (): Promise<void> => {
     try {
-      const refreshToken = localStorage.getItem('refresh_token');
-      const accessToken = localStorage.getItem('access_token');
-      const tokenToUse = refreshToken || accessToken;
-      if (!tokenToUse) return;
-
+      // Prefer in-memory access token; if absent, try refresh via cookie
       await configManager.loadConfig();
+      let accessToken = authClient.getAccessToken();
+      if (!accessToken) {
+        accessToken = await authClient.refreshAccessToken(configManager.functionsBaseUrl);
+      }
+      if (!accessToken) return;
 
       const res = await fetch(configManager.authValidaToken, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          code: tokenToUse,
+          code: accessToken,
           application_id: configManager.authAppId,
         }),
       });
@@ -491,6 +604,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         data.subscription ??
         data.data?.subscription ??
         data.data?.user?.subscription;
+      const rawHasAccess =
+        typeof data.has_access === 'boolean'
+          ? data.has_access
+          : typeof data.data?.has_access === 'boolean'
+          ? data.data.has_access
+          : undefined;
 
       if (rawSub) {
         const normalized = normalizeSubscription(rawSub);
@@ -502,8 +621,40 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         localStorage.removeItem('subscription');
         setSubscription(null);
       }
+
+      if (typeof rawHasAccess === 'boolean') {
+        localStorage.setItem('subscription_has_access', JSON.stringify(rawHasAccess));
+        setSubscriptionHasAccess(rawHasAccess);
+      }
+
+      localStorage.setItem('access_token', accessToken);
     } catch {
       // Silently fail — caller decides what to do next
+    }
+  };
+
+  const applyCheckoutStatus = (status: {
+    subscription?: any;
+    available_plans?: any[];
+    has_access?: boolean | null;
+  }): void => {
+    if (status.subscription) {
+      const normalized = normalizeSubscription(status.subscription);
+      if (normalized) {
+        localStorage.setItem('subscription', JSON.stringify(normalized));
+        setSubscription(normalized);
+      }
+    }
+
+    if (Array.isArray(status.available_plans)) {
+      const normalizedPlans = normalizeAvailablePlans(status.available_plans);
+      localStorage.setItem('available_plans', JSON.stringify(normalizedPlans));
+      setAvailablePlans(normalizedPlans);
+    }
+
+    if (typeof status.has_access === 'boolean') {
+      localStorage.setItem('subscription_has_access', JSON.stringify(status.has_access));
+      setSubscriptionHasAccess(status.has_access);
     }
   };
 
@@ -514,6 +665,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         isAuth: !!user,
         isLoading,
         subscription,
+        subscriptionHasAccess,
         availablePlans,
         login,
         register,
@@ -522,6 +674,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         hasPermission,
         hasMenuAccess,
         refreshSubscription,
+        applyCheckoutStatus,
       }}
     >
       {children}

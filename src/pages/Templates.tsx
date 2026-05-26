@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { TemplateEditor } from '../components/TemplateEditor';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { verifyApplicationOwnership } from '../lib/security';
+import { queryMutate, querySelect, querySingle } from '../lib/queryApi';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
@@ -97,22 +97,23 @@ export const Templates = () => {
     try {
       if (!user?.sub) return;
 
-      const { data: prefs } = await supabase
-        .from('user_preferences')
-        .select('default_application_id')
-        .eq('user_id', user.sub)
-        .maybeSingle();
+      const { data: prefs } = await querySingle<{ default_application_id: string | null }>({
+        table: 'user_preferences',
+        operation: 'select',
+        select: 'default_application_id',
+        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
+        limit: 1,
+      });
 
-      const appsQuery = supabase
-        .from('applications')
-        .select('id, name')
-        .order('created_at', { ascending: false });
-
-      const { data, error } = await (
-        user.tenant_id
-          ? appsQuery.eq('tenant_id', user.tenant_id)
-          : appsQuery.eq('user_id', user.sub)
-      );
+      const { data, error } = await querySelect<Application>({
+        table: 'applications',
+        operation: 'select',
+        select: 'id, name',
+        filters: user.tenant_id
+          ? [{ column: 'tenant_id', op: 'eq', value: user.tenant_id }]
+          : [{ column: 'user_id', op: 'eq', value: user.sub }],
+        order: { column: 'created_at', ascending: false },
+      });
 
       if (error) throw error;
 
@@ -139,33 +140,29 @@ export const Templates = () => {
         return;
       }
 
-      let countQuery = supabase
-        .from('communication_templates')
-        .select('*', { count: 'exact', head: true })
-        .eq('application_id', appId);
+      const filters = [
+        { column: 'application_id', op: 'eq', value: appId },
+        ...(searchTerm ? [{ column: 'name', op: 'ilike', value: `%${searchTerm}%` }] : []),
+      ];
 
-      if (searchTerm) {
-        countQuery = countQuery.ilike('name', `%${searchTerm}%`);
-      }
-
-      const { count } = await countQuery;
-      setTotalTemplates(count || 0);
+      const countQuery = await querySelect<{ id: string }>({
+        table: 'communication_templates',
+        operation: 'select',
+        select: 'id',
+        filters,
+      });
+      setTotalTemplates(countQuery.count || 0);
 
       const from = (currentPage - 1) * templatesPerPage;
-      const to = from + templatesPerPage - 1;
-
-      let dataQuery = supabase
-        .from('communication_templates')
-        .select('*')
-        .eq('application_id', appId)
-        .order('created_at', { ascending: false })
-        .range(from, to);
-
-      if (searchTerm) {
-        dataQuery = dataQuery.ilike('name', `%${searchTerm}%`);
-      }
-
-      const { data, error } = await dataQuery;
+      const { data, error } = await querySelect<Template>({
+        table: 'communication_templates',
+        operation: 'select',
+        select: '*',
+        filters,
+        order: { column: 'created_at', ascending: false },
+        limit: templatesPerPage,
+        offset: from,
+      });
 
       if (error) throw error;
       setTemplates(data || []);
@@ -243,9 +240,10 @@ export const Templates = () => {
       const variables = extractVariables(formData.html_content);
 
       if (editingTemplate) {
-        const { error } = await supabase
-          .from('communication_templates')
-          .update({
+        const { error } = await queryMutate({
+          table: 'communication_templates',
+          operation: 'update',
+          data: {
             name: formData.name,
             description: formData.description || null,
             channel: formData.channel,
@@ -262,28 +260,33 @@ export const Templates = () => {
             pdf_template_id: formData.pdf_template_id || null,
             pdf_filename_pattern: formData.template_type === 'pdf' ? formData.pdf_filename_pattern : null,
             updated_at: new Date().toISOString(),
-          })
-          .eq('id', editingTemplate.id);
+          },
+          filters: [{ column: 'id', op: 'eq', value: editingTemplate.id }],
+        });
 
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('communication_templates').insert({
-          application_id: selectedApp,
-          name: formData.name,
-          description: formData.description || null,
-          channel: formData.channel,
-          subject: formData.subject || null,
-          html_content: formData.html_content,
-          variables: variables,
-          has_attachment: formData.has_attachment,
-          attachment_variable: formData.has_attachment ? formData.attachment_variable : null,
-          has_logo: formData.has_logo,
-          logo_variable: formData.has_logo ? formData.logo_variable : null,
-          has_qr: formData.has_qr,
-          qr_variable: formData.has_qr ? formData.qr_variable : null,
-          template_type: formData.template_type,
-          pdf_template_id: formData.pdf_template_id || null,
-          pdf_filename_pattern: formData.template_type === 'pdf' ? formData.pdf_filename_pattern : null,
+        const { error } = await queryMutate({
+          table: 'communication_templates',
+          operation: 'insert',
+          data: {
+            application_id: selectedApp,
+            name: formData.name,
+            description: formData.description || null,
+            channel: formData.channel,
+            subject: formData.subject || null,
+            html_content: formData.html_content,
+            variables: variables,
+            has_attachment: formData.has_attachment,
+            attachment_variable: formData.has_attachment ? formData.attachment_variable : null,
+            has_logo: formData.has_logo,
+            logo_variable: formData.has_logo ? formData.logo_variable : null,
+            has_qr: formData.has_qr,
+            qr_variable: formData.has_qr ? formData.qr_variable : null,
+            template_type: formData.template_type,
+            pdf_template_id: formData.pdf_template_id || null,
+            pdf_filename_pattern: formData.template_type === 'pdf' ? formData.pdf_filename_pattern : null,
+          },
         });
 
         if (error) throw error;
@@ -300,10 +303,11 @@ export const Templates = () => {
     if (!deleteConfirm) return;
 
     try {
-      const { error } = await supabase
-        .from('communication_templates')
-        .delete()
-        .eq('id', deleteConfirm);
+      const { error } = await queryMutate({
+        table: 'communication_templates',
+        operation: 'delete',
+        filters: [{ column: 'id', op: 'eq', value: deleteConfirm }],
+      });
 
       if (error) throw error;
       if (selectedApp) loadTemplates(selectedApp);

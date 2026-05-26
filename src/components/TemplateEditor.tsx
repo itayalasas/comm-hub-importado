@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, Eye, Code, FileText, Image, QrCode, Plus, Trash2, Maximize2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
 import { HTMLEditor } from './HTMLEditor';
+import { queryMutate, querySelect } from '../lib/queryApi';
 
 interface TemplateEditorProps {
   formData: any;
@@ -84,13 +84,17 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
   const loadPdfTemplates = async () => {
     if (!applicationId) return;
 
-    const { data, error } = await supabase
-      .from('communication_templates')
-      .select('id, name, description')
-      .eq('application_id', applicationId)
-      .eq('template_type', 'pdf')
-      .eq('is_active', true)
-      .order('name');
+    const { data, error } = await querySelect<{ id: string; name: string; description: string | null }>({
+      table: 'communication_templates',
+      operation: 'select',
+      select: 'id, name, description',
+      filters: [
+        { column: 'application_id', op: 'eq', value: applicationId },
+        { column: 'template_type', op: 'eq', value: 'pdf' },
+        { column: 'is_active', op: 'eq', value: true },
+      ],
+      order: { column: 'name', ascending: true },
+    });
 
     if (!error && data) {
       setPdfTemplates(data);
@@ -101,11 +105,15 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
     if (!applicationId) return;
 
     try {
-      const { data, error } = await supabase
-        .from('predefined_variables')
-        .select('*')
-        .eq('application_id', applicationId)
-        .order('created_at', { ascending: true });
+      const { data, error } = await querySelect<PredefinedVariable>({
+        table: 'predefined_variables',
+        operation: 'select',
+        select: '*',
+        filters: [
+          { column: 'application_id', op: 'eq', value: applicationId },
+        ],
+        order: { column: 'created_at', ascending: true },
+      });
 
       if (error) throw error;
       setCustomVariables(data || []);
@@ -121,11 +129,15 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
     }
 
     try {
-      const { error } = await supabase.from('predefined_variables').insert({
-        application_id: applicationId,
-        name: newVariable.name,
-        description: newVariable.description,
-        example: newVariable.example,
+      const { error } = await queryMutate({
+        table: 'predefined_variables',
+        operation: 'insert',
+        data: {
+          application_id: applicationId,
+          name: newVariable.name,
+          description: newVariable.description,
+          example: newVariable.example,
+        },
       });
 
       if (error) throw error;
@@ -147,10 +159,11 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
     if (!deleteConfirm) return;
 
     try {
-      const { error } = await supabase
-        .from('predefined_variables')
-        .delete()
-        .eq('id', deleteConfirm);
+      const { error } = await queryMutate({
+        table: 'predefined_variables',
+        operation: 'delete',
+        filters: [{ column: 'id', op: 'eq', value: deleteConfirm }],
+      });
 
       if (error) throw error;
       await loadCustomVariables();

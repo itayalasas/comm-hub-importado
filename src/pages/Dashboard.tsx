@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { buildFunctionsUrl } from '../lib/config';
+import { querySelect, querySingle } from '../lib/queryApi';
 import {
   Mail, FileText, CheckCircle2, XCircle, TrendingUp,
-  Activity, Server, Zap, RefreshCw, Eye, AlertTriangle,
+  Activity, Server, Zap, Eye, AlertTriangle,
   MousePointerClick,
 } from 'lucide-react';
 
@@ -175,7 +176,7 @@ const StatCard = ({
 /* ── Main component ──────────────────────────────────────────────── */
 
 export const Dashboard = () => {
-  const { user, refreshSubscription } = useAuth();
+  const { user } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({
@@ -186,27 +187,17 @@ export const Dashboard = () => {
   const [weeklyActivity, setWeeklyActivity] = useState<number[]>([]);
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [mpActivating, setMpActivating] = useState(false);
-  const [mpPlanName, setMpPlanName] = useState<string | null>(null);
-  const mpHandled = useRef(false);
 
   useEffect(() => {
-    if (mpHandled.current) return;
     const params = new URLSearchParams(window.location.search);
+    const checkoutSessionId = params.get('checkout_session_id');
     const subscriptionId = params.get('subscription_id');
-    const planName = params.get('plan_name');
-    if (!subscriptionId) return;
-    mpHandled.current = true;
-    setMpPlanName(planName);
-    setMpActivating(true);
-    window.history.replaceState({}, '', window.location.pathname);
-    const timer = setTimeout(async () => {
-      await refreshSubscription();
-      setMpActivating(false);
-    }, 2500);
-    return () => clearTimeout(timer);
-  }, []);
+    const externalReference = params.get('external_reference');
 
+    if (checkoutSessionId || externalReference || subscriptionId) {
+      window.location.replace(`/subscription/result${window.location.search}`);
+    }
+  }, []);
   useEffect(() => { if (user) loadApplications(); }, [user]);
   useEffect(() => {
     if (selectedApp) {
@@ -223,11 +214,27 @@ export const Dashboard = () => {
   const loadApplications = async () => {
     try {
       if (!user?.sub) return;
-      const { data: prefs } = await supabase
-        .from('user_preferences').select('default_application_id')
-        .eq('user_id', user.sub).maybeSingle();
-      const appsQuery = supabase.from('applications').select('id, name').order('created_at', { ascending: false });
-      const { data, error } = await (user.tenant_id ? appsQuery.eq('tenant_id', user.tenant_id) : appsQuery.eq('user_id', user.sub));
+
+      const { data: prefs } = await querySingle<{ default_application_id: string | null }>({
+        table: 'user_preferences',
+        operation: 'select',
+        select: 'default_application_id',
+        filters: [
+          { column: 'user_id', op: 'eq', value: user.sub },
+        ],
+        limit: 1,
+      });
+
+      const { data, error } = await querySelect<Application>({
+        table: 'applications',
+        operation: 'select',
+        select: 'id, name',
+        filters: user.tenant_id
+          ? [{ column: 'tenant_id', op: 'eq', value: user.tenant_id }]
+          : [{ column: 'user_id', op: 'eq', value: user.sub }],
+        order: { column: 'created_at', ascending: false },
+      });
+
       if (error) throw error;
       setApplications(data || []);
       if (prefs?.default_application_id) setSelectedApp(prefs.default_application_id);
@@ -238,10 +245,21 @@ export const Dashboard = () => {
   const loadStats = async () => {
     if (!selectedApp) return;
     try {
-      const { data: logs, error } = await supabase
-        .from('email_logs')
-        .select('status, communication_type, opened_at, clicked_at, delivery_status, bounce_type')
-        .eq('application_id', selectedApp);
+      const { data: logs, error } = await querySelect<{
+        status: string;
+        communication_type: string;
+        opened_at: string | null;
+        clicked_at: string | null;
+        delivery_status: string | null;
+        bounce_type: string | null;
+      }>({
+        table: 'email_logs',
+        operation: 'select',
+        select: 'status, communication_type, opened_at, clicked_at, delivery_status, bounce_type',
+        filters: [
+          { column: 'application_id', op: 'eq', value: selectedApp },
+        ],
+      });
       if (error) throw error;
       const all = logs || [];
       const totalEmails = all.length;
@@ -262,12 +280,19 @@ export const Dashboard = () => {
     try {
       const since = new Date();
       since.setDate(since.getDate() - 29);
-      const { data, error } = await supabase
-        .from('email_logs')
-        .select('status, created_at')
-        .eq('application_id', selectedApp)
-        .gte('created_at', since.toISOString())
-        .order('created_at', { ascending: true });
+      const { data, error } = await querySelect<{
+        status: string;
+        created_at: string;
+      }>({
+        table: 'email_logs',
+        operation: 'select',
+        select: 'status, created_at',
+        filters: [
+          { column: 'application_id', op: 'eq', value: selectedApp },
+          { column: 'created_at', op: 'gte', value: since.toISOString() },
+        ],
+        order: { column: 'created_at', ascending: true },
+      });
       if (error) throw error;
 
       // Build 30-day buckets
@@ -308,9 +333,14 @@ export const Dashboard = () => {
 
     try {
       const t = Date.now();
-      const { error } = await supabase.from('applications').select('id').limit(1);
+      const { data, error } = await querySelect<{ id: string }>({
+        table: 'applications',
+        operation: 'select',
+        select: 'id',
+        limit: 1,
+      });
       const rt = Date.now() - t;
-      if (error) {
+      if (error || !data || data.length === 0) {
         healthChecks[0].status = 'degraded'; healthChecks[0].responseTime = rt;
         healthChecks[1].status = 'degraded'; healthChecks[1].responseTime = rt;
       } else {
@@ -321,10 +351,10 @@ export const Dashboard = () => {
 
     try {
       const t = Date.now();
-      const { data, error } = await supabase.functions.invoke('health-check-email', { method: 'GET' });
+      const emailRes = await fetch(buildFunctionsUrl('health-check-email'), { method: 'GET' });
       const rt = Date.now() - t;
-      if (error) throw error;
-      const d = parse(data);
+      if (!emailRes.ok) throw new Error(`health-check-email ${emailRes.status}`);
+      const d = parse(await emailRes.json());
       healthChecks[2].status = d.status === 'operational' ? (d.configured ? 'operational' : 'unconfigured') : d.status === 'down' ? 'down' : 'degraded';
       healthChecks[2].message = d.configured ? `${d.provider?.toUpperCase() || 'Email'} configurado` : 'No configurado';
       healthChecks[2].responseTime = d.responseTime || rt;
@@ -332,10 +362,10 @@ export const Dashboard = () => {
 
     try {
       const t = Date.now();
-      const { data, error } = await supabase.functions.invoke('health-check-pdf', { method: 'GET' });
+      const pdfRes = await fetch(buildFunctionsUrl('health-check-pdf'), { method: 'GET' });
       const rt = Date.now() - t;
-      if (error) throw error;
-      const d = parse(data);
+      if (!pdfRes.ok) throw new Error(`health-check-pdf ${pdfRes.status}`);
+      const d = parse(await pdfRes.json());
       healthChecks[3].status = d.status === 'operational' || d.status === 'healthy' ? 'operational' : d.status === 'down' ? 'down' : 'degraded';
       healthChecks[3].responseTime = d.responseTime || rt;
     } catch { healthChecks[3].status = 'down'; }
@@ -380,26 +410,6 @@ export const Dashboard = () => {
 
   return (
     <Layout currentPage="dashboard">
-      {/* MP activation overlay */}
-      {mpActivating && (
-        <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-6">
-          <div className="relative">
-            <div className="w-20 h-20 rounded-2xl border border-cyan-500/20 absolute inset-0 animate-ping opacity-20" />
-            <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-2xl shadow-cyan-500/30">
-              <RefreshCw className="w-9 h-9 text-white animate-spin" />
-            </div>
-          </div>
-          <div className="text-center space-y-1.5">
-            <p className="text-white font-semibold text-lg">Activando tu suscripción</p>
-            <p className="text-slate-400 text-sm">{mpPlanName ? `Plan ${mpPlanName} · ` : ''}Actualizando tu sesión…</p>
-          </div>
-          <div className="w-48 h-0.5 bg-white/5 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full animate-[loading_1.4s_ease-in-out_infinite]" style={{ width: '40%' }} />
-          </div>
-          <style>{`@keyframes loading { 0% { transform: translateX(-200%); } 100% { transform: translateX(400%); } }`}</style>
-        </div>
-      )}
-
       <div className="space-y-5">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -600,3 +610,5 @@ export const Dashboard = () => {
     </Layout>
   );
 };
+
+

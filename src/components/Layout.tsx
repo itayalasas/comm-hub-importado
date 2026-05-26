@@ -3,13 +3,17 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
   AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
-  Mail, Briefcase, AppWindow, Package,
+  Mail, Briefcase, AppWindow, Package, Star,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
 import { UserMenu } from './UserMenu';
 import { usePlans } from '../hooks/usePlans';
-import { configManager } from '../lib/config';
+import { getRuntimeConfig } from '../lib/config';
+import {
+  startManagedSubscriptionCheckout,
+  storePendingSubscriptionCheckout,
+} from '../lib/subscriptionCheckout';
 
 interface LayoutProps {
   children: ReactNode;
@@ -49,20 +53,66 @@ const FEATURE_ORDER = [
   'priority_support',
 ];
 
-function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
-  if (plan.mercadopago?.init_point) return plan.mercadopago.init_point;
-  const base = configManager.authUrl;
-  const appId = configManager.authAppId;
-  const apiKey = configManager.authApiKey;
-  const redirectUri = configManager.redirectUri;
-  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${plan.id}`;
-}
 
 /* ── Plan card list (shared by blockers) ────────────────────────── */
 
 const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) => {
-  const { plans, loading } = usePlans();
+  const { plans, loading, checkout } = usePlans();
+  const { user } = useAuth();
+  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const managedCheckout = checkout?.managed_by_authsystem === true;
   const paidPlans = plans.filter(p => p.price > 0 || p.trial_days === 0);
+
+  const handleSubscribe = async (plan: import('../hooks/usePlans').Plan) => {
+    if (subscribingPlanId) return;
+
+    setCheckoutError(null);
+    setSubscribingPlanId(plan.id);
+
+    try {
+      const { authAppId, authApiKey } = getRuntimeConfig();
+      if (!authAppId || !authApiKey) {
+        throw new Error('No se encontraron las credenciales de la aplicación');
+      }
+
+      if (managedCheckout) {
+        const result = await startManagedSubscriptionCheckout({
+          applicationId: authAppId,
+          apiKey: authApiKey,
+          planId: plan.id,
+          returnUrl: `${window.location.origin}/subscription/result?plan_id=${encodeURIComponent(plan.id)}`,
+          email: user?.email ?? undefined,
+          tenantId: user?.tenant_id ?? undefined,
+          endpoint: checkout?.start_endpoint,
+        });
+
+        if (!result.checkout_session_id) {
+          throw new Error('No se recibió el identificador de checkout');
+        }
+
+        storePendingSubscriptionCheckout({
+          checkout_session_id: result.checkout_session_id,
+          plan_id: plan.id,
+          created_at: Date.now(),
+        });
+
+        const checkoutUrl = result.checkout_url || result.redirect_url;
+        if (!checkoutUrl) {
+          throw new Error('No se recibió la URL de checkout');
+        }
+
+        window.location.href = checkoutUrl;
+        return;
+      }
+
+      throw new Error('El checkout gestionado no está disponible para actualizar el plan.');
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : 'No se pudo iniciar la suscripción');
+    } finally {
+      setSubscribingPlanId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -74,7 +124,12 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
+      {checkoutError && (
+        <div className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {checkoutError}
+        </div>
+      )}
+      <div className="mx-auto grid w-full max-w-[72rem] grid-cols-1 justify-center gap-5 mb-6 sm:[grid-template-columns:repeat(auto-fit,minmax(18rem,20rem))]">
         {paidPlans.map((plan, i) => {
           const styleIdx = Math.min(i + 1, 3);
           const style = PLAN_STYLE[styleIdx];
@@ -91,18 +146,21 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
           return (
             <div
               key={plan.id}
-              className={`relative rounded-2xl border ${style.border} ${style.bg} flex flex-col overflow-hidden transition-transform hover:-translate-y-1 duration-200 ${
+              className={`relative mx-auto w-full max-w-[20rem] rounded-2xl border ${style.border} ${style.bg} flex flex-col overflow-hidden transition-transform hover:-translate-y-1 duration-200 ${
                 highlightUsersAbove !== undefined && !coversNeeds ? 'opacity-60' : ''
               } ${highlightUsersAbove !== undefined && coversNeeds ? 'ring-1 ring-cyan-500/30' : ''}`}
             >
               {style.badge && (
-                <div className="absolute top-0 left-0 right-0 flex justify-center">
-                  <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${styleIdx === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-cyan-500/30 ring-1 ring-white/20 backdrop-blur ${
+                    styleIdx === 2 ? 'bg-gradient-to-r from-blue-500 to-cyan-400' : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                  }`}>
+                    <Star className="w-3 h-3 fill-current" />
                     {style.badge}
                   </span>
                 </div>
               )}
-              <div className={`p-5 flex flex-col flex-1 ${style.badge ? 'pt-9' : ''}`}>
+              <div className={`p-5 flex flex-col flex-1 ${style.badge ? 'pt-8' : ''}`}>
                 <div className="mb-4">
                   <h3 className={`text-lg font-extrabold mb-0.5 ${style.accent}`}>{plan.name}</h3>
                   <p className="text-slate-500 text-xs">{plan.description}</p>
@@ -144,10 +202,15 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
                   })}
                 </ul>
                 <button
-                  onClick={() => { window.location.href = buildSubscribeUrl(plan); }}
-                  className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btn}`}
+                  onClick={() => { void handleSubscribe(plan); }}
+                  disabled={subscribingPlanId === plan.id}
+                  className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-70 ${style.btn}`}
                 >
-                  {highlightUsersAbove !== undefined ? `Actualizar a ${plan.name}` : 'Suscribirse'}
+                  {subscribingPlanId === plan.id
+                    ? 'Iniciando...'
+                    : highlightUsersAbove !== undefined
+                    ? `Actualizar a ${plan.name}`
+                    : 'Suscribirse'}
                 </button>
               </div>
             </div>
@@ -161,9 +224,9 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
   );
 };
 
-/* ── Trial-expired blocker ─────────────────────────────────────────── */
+/* ── Subscription blocker ──────────────────────────────────────────── */
 
-const TrialExpiredBlocker = () => {
+const SubscriptionBlocker = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
 
@@ -178,13 +241,11 @@ const TrialExpiredBlocker = () => {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-500/15 border border-red-500/30 mb-5">
             <AlertTriangle className="w-8 h-8 text-red-400" />
           </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-3">
-            Tu período de prueba ha finalizado
-          </h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-3">Sin suscripción activa</h1>
           <p className="text-slate-400 text-base max-w-md mx-auto leading-relaxed">
             {isAdmin
               ? 'Elige un plan para continuar usando SendCraft. Tu equipo no puede acceder hasta que actives una suscripción.'
-              : 'El período de prueba de tu cuenta ha finalizado. Contacta a tu administrador para activar una suscripción.'
+              : 'No tienes una suscripción activa en este momento. Contacta a tu administrador para activarla.'
             }
           </p>
         </div>
@@ -353,7 +414,7 @@ const NavItemRow = ({
 /* ── Main Layout ────────────────────────────────────────────────── */
 
 export const Layout = ({ children, currentPage }: LayoutProps) => {
-  const { hasMenuAccess, subscription, user } = useAuth();
+  const { hasMenuAccess, subscription, subscriptionHasAccess, user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const closeMobile = () => setIsMobileMenuOpen(false);
@@ -421,9 +482,31 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
     },
   ].filter(item => hasMenuAccess(item.permissionKey));
 
-  const isTrialing = subscription?.status === 'trialing';
+  const normalizedStatus = String(subscription?.status ?? '').toLowerCase();
   const trialEndDate = subscription?.trial_end ? new Date(subscription.trial_end) : null;
-  const trialExpiredBlocked = isTrialing && trialEndDate !== null && trialEndDate < new Date();
+  const accessUntilSource =
+    subscription?.current_period_end ||
+    subscription?.period_end ||
+    subscription?.next_payment_date ||
+    subscription?.trial_end ||
+    null;
+  const accessUntilDate = accessUntilSource ? new Date(accessUntilSource) : null;
+  const trialActive =
+    normalizedStatus === 'trialing' &&
+    trialEndDate !== null &&
+    trialEndDate >= new Date();
+  const accessWindowActive =
+    accessUntilDate !== null &&
+    !Number.isNaN(accessUntilDate.getTime()) &&
+    accessUntilDate >= new Date();
+  const planPrice = typeof subscription?.plan_price === 'number' ? subscription.plan_price : null;
+  const subscriptionAccessGranted =
+    subscriptionHasAccess === true ||
+    normalizedStatus === 'authorized' ||
+    (normalizedStatus === 'active' && planPrice === 0) ||
+    trialActive ||
+    accessWindowActive;
+  const subscriptionBlocked = !subscriptionAccessGranted;
 
   const maxUsersFeature = subscription?.entitlements?.features?.find(f => f.code === 'max_users');
   const maxUsers = maxUsersFeature ? parseInt(maxUsersFeature.value, 10) : null;
@@ -454,8 +537,8 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       </header>
 
       <TrialBanner />
-      {trialExpiredBlocked && <TrialExpiredBlocker />}
-      {!trialExpiredBlocked && userLimitExceeded && maxUsers !== null && (
+      {subscriptionBlocked && <SubscriptionBlocker />}
+      {!subscriptionBlocked && userLimitExceeded && maxUsers !== null && (
         <UserLimitBlocker activeUsersCount={activeUsersCount} maxUsers={maxUsers} />
       )}
 

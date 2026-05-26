@@ -27,6 +27,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePlans, type Plan } from '../hooks/usePlans';
 import { configManager } from '../lib/config';
+import { buildLegacyRegisterUrl } from '../lib/subscriptionCheckout';
 
 /* ─── Data ─────────────────────────────────────────────────────── */
 const STATS = [
@@ -484,16 +485,13 @@ function formatNumber(val: string): string {
 }
 
 function buildRegisterUrl(planId: string): string {
-  const base = configManager.authUrl;
-  const appId = configManager.authAppId;
-  const apiKey = configManager.authApiKey;
-  const redirectUri = configManager.redirectUri;
-  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${planId}`;
+  return buildLegacyRegisterUrl(planId);
 }
 
 function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   const style = PLAN_STYLE[index] ?? PLAN_STYLE[1];
-  const isTrial = plan.trial_days > 0 && plan.price === 0;
+  const isFreePlan = plan.price === 0;
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   // Sort features by our preferred display order; unknown features go to the end
   const sortedFeatures = [...(plan.entitlements?.features ?? [])].sort((a, b) => {
@@ -503,8 +501,12 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   });
 
   const handleCta = () => {
-    if (!configManager.isLoaded()) return;
-    window.location.href = buildRegisterUrl(plan.id);
+    if (!configManager.isLoaded() || isRedirecting) return;
+
+    setIsRedirecting(true);
+    window.setTimeout(() => {
+      window.location.href = buildRegisterUrl(plan.id);
+    }, 140);
   };
 
   return (
@@ -524,10 +526,12 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
         </div>
 
         <div className="mb-6 flex items-baseline gap-1">
-          {isTrial ? (
+          {isFreePlan ? (
             <>
               <span className="text-3xl font-extrabold text-white">Gratis</span>
-              <span className="text-slate-400 text-sm">· {plan.trial_days} días</span>
+              {plan.trial_days > 0 && (
+                <span className="text-slate-400 text-sm">· {plan.trial_days} días</span>
+              )}
             </>
           ) : (
             <>
@@ -569,9 +573,15 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
 
         <button
           onClick={handleCta}
-          className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btnClass}`}
+          disabled={isRedirecting}
+          className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-80 disabled:cursor-not-allowed ${isRedirecting ? 'scale-100' : 'hover:scale-[1.02] active:scale-95'} ${style.btnClass}`}
         >
-          {isTrial ? 'Comenzar gratis' : 'Suscribirse'}
+          {isRedirecting ? (
+            <span className="inline-flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Iniciando...
+            </span>
+          ) : isFreePlan ? 'Comenzar gratis' : 'Suscribirse'}
         </button>
       </div>
     </div>
@@ -741,6 +751,15 @@ export const Home = () => {
   const navigate = useNavigate();
   const { plans, loading: plansLoading } = usePlans();
   const [supportOpen, setSupportOpen] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  const handleStartTrial = () => {
+    if (loginLoading) return;
+    setLoginLoading(true);
+    window.setTimeout(() => {
+      navigate('/login');
+    }, 140);
+  };
 
   return (
     <div className="min-h-screen bg-[#050d1a] text-white overflow-x-hidden">
@@ -794,10 +813,12 @@ export const Home = () => {
               <a href="#pricing" className="hover:text-white transition-colors hover:text-cyan-300">Precios</a>
             </div>
             <button
-              onClick={() => navigate('/login')}
-              className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-lg font-semibold text-sm hover:shadow-lg hover:shadow-cyan-500/40 transition-all hover:scale-105 active:scale-95"
+              onClick={handleStartTrial}
+              disabled={loginLoading}
+              className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-lg font-semibold text-sm hover:shadow-lg hover:shadow-cyan-500/40 transition-all hover:scale-105 active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Inicia prueba gratis
+              {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              <span>{loginLoading ? 'Iniciando...' : 'Inicia prueba gratis'}</span>
             </button>
           </div>
         </div>
@@ -829,11 +850,13 @@ export const Home = () => {
 
             <div className="slide-up delay-300 flex flex-col sm:flex-row gap-4 justify-center">
               <button
-                onClick={() => navigate('/login')}
+                onClick={handleStartTrial}
+                disabled={loginLoading}
                 className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-semibold text-base hover:shadow-2xl hover:shadow-cyan-500/40 transition-all hover:scale-105 active:scale-95"
               >
-                Comienza gratis hoy
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                <span>{loginLoading ? 'Iniciando...' : 'Comienza gratis hoy'}</span>
+                {!loginLoading && <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
               </button>
               <a
                 href="#features"
@@ -1085,9 +1108,9 @@ export const Home = () => {
               {
                 icon: Globe,
                 title: 'Documentación',
-                value: 'docs.sendcraft.app',
-                href: '#',
-                desc: 'Guías, API reference y tutoriales',
+                value: 'Ver documentación',
+                href: '/docs',
+                desc: 'Guías, referencia de API y tutoriales',
               },
             ].map(({ icon: Icon, title, value, href, desc, action }) => (
               <div key={title} className="card-hover group bg-white/[0.03] border border-white/8 rounded-2xl p-6 hover:border-cyan-500/20 hover:bg-white/[0.05] transition-all text-center">
@@ -1175,11 +1198,13 @@ export const Home = () => {
                 Unete a mas de 500 empresas que confian en SendCraft para sus comunicaciones criticas.
               </p>
               <button
-                onClick={() => navigate('/login')}
+                onClick={handleStartTrial}
+                disabled={loginLoading}
                 className="group inline-flex items-center gap-2 px-10 py-4 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-bold text-lg hover:shadow-2xl hover:shadow-cyan-500/50 transition-all hover:scale-105 active:scale-95"
               >
-                Comenzar prueba gratuita
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                {loginLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+                <span>{loginLoading ? 'Iniciando...' : 'Comenzar prueba gratuita'}</span>
+                {!loginLoading && <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
               </button>
               <div className="flex flex-wrap gap-8 justify-center mt-10">
                 {['14 dias gratis', 'Sin compromiso', 'Soporte incluido', 'Setup en minutos'].map((item) => (

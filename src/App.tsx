@@ -5,6 +5,7 @@ import { Landing } from './pages/Landing';
 import { Home } from './pages/Home';
 import { Callback } from './pages/Callback';
 import { AuthProcessing } from './pages/AuthProcessing';
+import { SubscriptionResult } from './pages/SubscriptionResult';
 import { Dashboard } from './pages/Dashboard';
 import { Templates } from './pages/Templates';
 import { Statistics } from './pages/Statistics';
@@ -147,7 +148,9 @@ const AppRoutes = () => {
       <Route path="/app" element={<DashboardRedirect />} />
       <Route path="/callback" element={<Callback />} />
       <Route path="/auth-processing" element={<AuthProcessing />} />
+      <Route path="/subscription/result" element={<SubscriptionResult />} />
       <Route path="/embed/marketplace" element={<MarketplaceEmbed />} />
+      <Route path="/docs" element={<Documentation publicView />} />
       <Route
         path="/dashboard"
         element={

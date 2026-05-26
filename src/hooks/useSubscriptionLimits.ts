@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { queryCount, querySelect } from '../lib/queryApi';
 
 interface LimitCheck {
   canAdd: boolean;
@@ -38,37 +38,70 @@ export const useSubscriptionLimits = () => {
   };
 
   const getAppIds = async (): Promise<string[]> => {
-    const appsQuery = supabase.from('applications').select('id');
-    const { data: apps } = await (
-      user?.tenant_id
-        ? appsQuery.eq('tenant_id', user.tenant_id)
-        : appsQuery.eq('user_id', user?.sub)
-    );
-    return apps?.map((a: { id: string }) => a.id) ?? [];
+    if (!user?.sub) return [];
+
+    const { data: apps, error } = await querySelect<{ id: string }>({
+      table: 'applications',
+      operation: 'select',
+      select: 'id',
+      filters: user.tenant_id
+        ? [{ column: 'tenant_id', op: 'eq', value: user.tenant_id }]
+        : [{ column: 'user_id', op: 'eq', value: user.sub }],
+      order: { column: 'created_at', ascending: false },
+    });
+
+    if (error) return [];
+    return apps?.map((a) => a.id) ?? [];
   };
 
   // Period window: use subscription period if available, otherwise current calendar month
   const getPeriodWindow = (): { start: string; end: string } => {
-    if (subscription?.period_start && subscription?.period_end) {
-      return { start: subscription.period_start, end: subscription.period_end };
+    const periodStart =
+      subscription?.current_period_start ||
+      subscription?.period_start ||
+      subscription?.trial_start ||
+      null;
+    const periodEnd =
+      subscription?.current_period_end ||
+      subscription?.period_end ||
+      subscription?.next_payment_date ||
+      subscription?.trial_end ||
+      null;
+
+    if (periodStart && periodEnd) {
+      return { start: periodStart, end: periodEnd };
     }
+
+    if (periodEnd) {
+      const endDate = new Date(periodEnd);
+      if (!Number.isNaN(endDate.getTime())) {
+        const fallbackStart = new Date(endDate);
+        fallbackStart.setMonth(fallbackStart.getMonth() - 1);
+        return { start: fallbackStart.toISOString(), end: periodEnd };
+      }
+    }
+
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
-    return { start, end };
+    const calendarStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const calendarEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+    return { start: calendarStart, end: calendarEnd };
   };
 
   const loadApplicationCount = async () => {
     try {
-      const query = supabase
-        .from('applications')
-        .select('*', { count: 'exact', head: true });
+      if (!user?.sub) {
+        setApplicationCount(0);
+        return;
+      }
 
-      const { count, error } = await (
-        user?.tenant_id
-          ? query.eq('tenant_id', user.tenant_id)
-          : query.eq('user_id', user?.sub)
-      );
+      const { count, error } = await queryCount({
+        table: 'applications',
+        operation: 'select',
+        select: 'id',
+        filters: user.tenant_id
+          ? [{ column: 'tenant_id', op: 'eq', value: user.tenant_id }]
+          : [{ column: 'user_id', op: 'eq', value: user.sub }],
+      });
 
       if (error) throw error;
       setApplicationCount(count ?? 0);
@@ -85,10 +118,14 @@ export const useSubscriptionLimits = () => {
         return;
       }
 
-      const { count, error } = await supabase
-        .from('communication_templates')
-        .select('*', { count: 'exact', head: true })
-        .in('application_id', appIds);
+      const { count, error } = await queryCount({
+        table: 'communication_templates',
+        operation: 'select',
+        select: 'id',
+        filters: [
+          { column: 'application_id', op: 'in', value: appIds },
+        ],
+      });
 
       if (error) throw error;
       setTemplateCount(count ?? 0);
@@ -107,13 +144,17 @@ export const useSubscriptionLimits = () => {
 
       const { start, end } = getPeriodWindow();
 
-      const { count, error } = await supabase
-        .from('email_logs')
-        .select('*', { count: 'exact', head: true })
-        .in('application_id', appIds)
-        .in('communication_type', ['email', 'email_with_pdf'])
-        .gte('created_at', start)
-        .lte('created_at', end);
+      const { count, error } = await queryCount({
+        table: 'email_logs',
+        operation: 'select',
+        select: 'id',
+        filters: [
+          { column: 'application_id', op: 'in', value: appIds },
+          { column: 'communication_type', op: 'in', value: ['email', 'email_with_pdf'] },
+          { column: 'created_at', op: 'gte', value: start },
+          { column: 'created_at', op: 'lte', value: end },
+        ],
+      });
 
       if (error) throw error;
       setEmailsThisMonth(count ?? 0);
@@ -133,13 +174,17 @@ export const useSubscriptionLimits = () => {
       const { start, end } = getPeriodWindow();
 
       // Count from email_logs (pdf_generation_logs has service-role-only RLS)
-      const { count, error } = await supabase
-        .from('email_logs')
-        .select('*', { count: 'exact', head: true })
-        .in('application_id', appIds)
-        .eq('communication_type', 'pdf_generation')
-        .gte('created_at', start)
-        .lte('created_at', end);
+      const { count, error } = await queryCount({
+        table: 'email_logs',
+        operation: 'select',
+        select: 'id',
+        filters: [
+          { column: 'application_id', op: 'in', value: appIds },
+          { column: 'communication_type', op: 'eq', value: 'pdf_generation' },
+          { column: 'created_at', op: 'gte', value: start },
+          { column: 'created_at', op: 'lte', value: end },
+        ],
+      });
 
       if (error) throw error;
       setPdfsThisMonth(count ?? 0);

@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { querySingle } from './queryApi';
 
 /**
  * Returns true when the user owns the application directly OR belongs to
@@ -10,11 +10,19 @@ export async function verifyApplicationOwnership(
   tenantId?: string | null
 ): Promise<boolean> {
   try {
-    const { data, error } = await supabase
-      .from('applications')
-      .select('id, user_id, tenant_id')
-      .eq('id', applicationId)
-      .maybeSingle();
+    const { data, error } = await querySingle<{
+      id: string;
+      user_id: string | null;
+      tenant_id: string | null;
+    }>({
+      table: 'applications',
+      operation: 'select',
+      select: 'id, user_id, tenant_id',
+      filters: [
+        { column: 'id', op: 'eq', value: applicationId },
+      ],
+      limit: 1,
+    });
 
     if (error || !data) return false;
 
