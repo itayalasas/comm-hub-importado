@@ -56,9 +56,14 @@ interface ConnectorManifest {
 
 /* ── Connector definitions ─────────────────────────────────────────── */
 
-const BASE_URL = getRuntimeConfig().functionsBaseUrlRaw || getRuntimeConfig().functionsBaseUrl || 'https://drhbcmithlrldtjlhnee.supabase.co/v1';
+const BASE_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1';
 
-const CONNECTORS: ConnectorManifest[] = [
+const getBaseUrl = () => {
+  const { functionsBaseUrlRaw, functionsBaseUrl } = getRuntimeConfig();
+  return functionsBaseUrlRaw || functionsBaseUrl || BASE_URL;
+};
+
+const buildConnectors = (BASE_URL: string): ConnectorManifest[] => [
   {
     id: 'sendcraft-email',
     name: 'SendCraft Email',
@@ -783,10 +788,10 @@ const ConnectorModal = ({
               </div>
               <div className="flex items-center gap-2 bg-slate-950/50 border border-slate-700/50 rounded-lg px-3 py-2">
                 <code className="flex-1 text-[11px] text-cyan-300 break-all">
-                  {`${BASE_URL}/connectors/${connector.id}`}
+                  {`https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors/${connector.id}`}
                 </code>
                 <button
-                  onClick={() => copy(`${BASE_URL}/connectors/${connector.id}`, 'url')}
+                  onClick={() => copy(`https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/connectors/${connector.id}`, 'url')}
                   className="flex-shrink-0 text-slate-500 hover:text-slate-300 transition-colors"
                 >
                   {copied === 'url' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -933,7 +938,6 @@ const EMBED_CODE = `<!-- SendCraft Marketplace — con fallback popup si el ifra
   function onMessage(event) {
     if (event.data && event.data.type === 'SENDCRAFT_CONNECTOR_INSTALLED') {
       var data = event.data;
-      console.log('Conector instalado:', data.connector_id);
       // data.api_key      → API Key del usuario
       // data.auth_header  → 'x-api-key'
       // data.manifest     → manifiesto completo con URLs y params
@@ -1154,15 +1158,17 @@ const EmbedSection = () => {
 
 /* ── Main page ─────────────────────────────────────────────────────── */
 
-const REGISTRY_URL = `${BASE_URL}/connectors`;
-
 export const Marketplace = () => {
   const [filter, setFilter] = useState<'all' | 'email' | 'pdf' | 'automation'>('all');
   const [selected, setSelected] = useState<ConnectorManifest | null>(null);
   const [copiedRegistry, setCopiedRegistry] = useState(false);
 
+  const baseUrl = getBaseUrl();
+  const registryUrl = `${baseUrl}/connectors`;
+  const CONNECTORS = buildConnectors(baseUrl);
+
   const copyRegistry = () => {
-    navigator.clipboard.writeText(REGISTRY_URL);
+    navigator.clipboard.writeText(registryUrl);
     setCopiedRegistry(true);
     setTimeout(() => setCopiedRegistry(false), 2000);
   };
@@ -1203,7 +1209,7 @@ export const Marketplace = () => {
             <span className="text-sm font-semibold text-white">Registry público — apuntá tu CRM a esta URL</span>
           </div>
           <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2.5">
-            <code className="flex-1 text-xs text-cyan-300 break-all">{REGISTRY_URL}</code>
+              <code className="flex-1 text-xs text-cyan-300 break-all">{registryUrl}</code>
             <button
               onClick={copyRegistry}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg text-xs font-medium transition-colors flex-shrink-0"

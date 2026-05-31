@@ -3,17 +3,13 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
   AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
-  Mail, Briefcase, AppWindow, Package, Star,
+  Mail, Briefcase, AppWindow, Package, MessageSquare, Star, FlaskConical,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
 import { UserMenu } from './UserMenu';
 import { usePlans } from '../hooks/usePlans';
-import { getRuntimeConfig } from '../lib/config';
-import {
-  startManagedSubscriptionCheckout,
-  storePendingSubscriptionCheckout,
-} from '../lib/subscriptionCheckout';
+import { configManager } from '../lib/config';
 
 interface LayoutProps {
   children: ReactNode;
@@ -53,66 +49,20 @@ const FEATURE_ORDER = [
   'priority_support',
 ];
 
+function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
+  if (plan.mercadopago?.init_point) return plan.mercadopago.init_point;
+  const base = configManager.authUrl;
+  const appId = configManager.authAppId;
+  const apiKey = configManager.authApiKey;
+  const redirectUri = configManager.redirectUri;
+  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${plan.id}`;
+}
 
 /* ── Plan card list (shared by blockers) ────────────────────────── */
 
 const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) => {
-  const { plans, loading, checkout } = usePlans();
-  const { user } = useAuth();
-  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const managedCheckout = checkout?.managed_by_authsystem === true;
+  const { plans, loading } = usePlans();
   const paidPlans = plans.filter(p => p.price > 0 || p.trial_days === 0);
-
-  const handleSubscribe = async (plan: import('../hooks/usePlans').Plan) => {
-    if (subscribingPlanId) return;
-
-    setCheckoutError(null);
-    setSubscribingPlanId(plan.id);
-
-    try {
-      const { authAppId, authApiKey } = getRuntimeConfig();
-      if (!authAppId || !authApiKey) {
-        throw new Error('No se encontraron las credenciales de la aplicación');
-      }
-
-      if (managedCheckout) {
-        const result = await startManagedSubscriptionCheckout({
-          applicationId: authAppId,
-          apiKey: authApiKey,
-          planId: plan.id,
-          returnUrl: `${window.location.origin}/subscription/result?plan_id=${encodeURIComponent(plan.id)}`,
-          email: user?.email ?? undefined,
-          tenantId: user?.tenant_id ?? undefined,
-          endpoint: checkout?.start_endpoint,
-        });
-
-        if (!result.checkout_session_id) {
-          throw new Error('No se recibió el identificador de checkout');
-        }
-
-        storePendingSubscriptionCheckout({
-          checkout_session_id: result.checkout_session_id,
-          plan_id: plan.id,
-          created_at: Date.now(),
-        });
-
-        const checkoutUrl = result.checkout_url || result.redirect_url;
-        if (!checkoutUrl) {
-          throw new Error('No se recibió la URL de checkout');
-        }
-
-        window.location.href = checkoutUrl;
-        return;
-      }
-
-      throw new Error('El checkout gestionado no está disponible para actualizar el plan.');
-    } catch (error) {
-      setCheckoutError(error instanceof Error ? error.message : 'No se pudo iniciar la suscripción');
-    } finally {
-      setSubscribingPlanId(null);
-    }
-  };
 
   if (loading) {
     return (
@@ -124,12 +74,7 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
 
   return (
     <>
-      {checkoutError && (
-        <div className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {checkoutError}
-        </div>
-      )}
-      <div className="mx-auto grid w-full max-w-[72rem] grid-cols-1 justify-center gap-5 mb-6 sm:[grid-template-columns:repeat(auto-fit,minmax(18rem,20rem))]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
         {paidPlans.map((plan, i) => {
           const styleIdx = Math.min(i + 1, 3);
           const style = PLAN_STYLE[styleIdx];
@@ -202,15 +147,10 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
                   })}
                 </ul>
                 <button
-                  onClick={() => { void handleSubscribe(plan); }}
-                  disabled={subscribingPlanId === plan.id}
-                  className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-70 ${style.btn}`}
+                  onClick={() => { window.location.href = buildSubscribeUrl(plan); }}
+                  className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btn}`}
                 >
-                  {subscribingPlanId === plan.id
-                    ? 'Iniciando...'
-                    : highlightUsersAbove !== undefined
-                    ? `Actualizar a ${plan.name}`
-                    : 'Suscribirse'}
+                  {highlightUsersAbove !== undefined ? `Actualizar a ${plan.name}` : 'Suscribirse'}
                 </button>
               </div>
             </div>
@@ -221,6 +161,25 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
         Precios en pesos uruguayos (UYU) · Límites compartidos por tenant
       </p>
     </>
+  );
+};
+
+/* ── Testing environment banner ────────────────────────────────────── */
+
+const isTestingEnvironment = () =>
+  typeof window !== 'undefined' && window.location.hostname === 'test.sendcraft.net';
+
+const TestingBanner = () => {
+  if (!isTestingEnvironment()) return null;
+  return (
+    <div className="w-full bg-gradient-to-r from-teal-600/90 to-cyan-700/90 border-b border-teal-400/40 backdrop-blur-sm">
+      <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-center gap-2">
+        <FlaskConical className="w-4 h-4 text-teal-200 flex-shrink-0" />
+        <p className="text-sm text-teal-100 font-medium">
+          Ambiente de <span className="font-bold text-white">Testing</span> — los cambios y datos de este entorno no afectan producción.
+        </p>
+      </div>
+    </div>
   );
 };
 
@@ -317,6 +276,7 @@ interface SubItem {
   icon: any;
   route: string;
   page: string;
+  permissionKey: string;
 }
 
 interface NavItem {
@@ -349,7 +309,7 @@ const NavItemRow = ({
   const [open, setOpen] = useState(isActive || !!isChildActive);
   const Icon = item.icon;
 
-  if (!item.children) {
+  if (!item.children || item.children.length === 0) {
     return (
       <Link
         to={`/${item.route}`}
@@ -414,12 +374,12 @@ const NavItemRow = ({
 /* ── Main Layout ────────────────────────────────────────────────── */
 
 export const Layout = ({ children, currentPage }: LayoutProps) => {
-  const { hasMenuAccess, subscription, subscriptionHasAccess, user } = useAuth();
+  const { hasMenuAccess, hasSubmenuAccess, subscription, subscriptionHasAccess, user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const closeMobile = () => setIsMobileMenuOpen(false);
 
-  const allNavItems: NavItem[] = [
+  const allNavItems: NavItem[] = ([
     {
       name: 'Dashboard',
       icon: LayoutDashboard,
@@ -434,7 +394,8 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'templates',
       permissionKey: 'templates',
       children: [
-        { name: 'Correos', icon: Mail, route: 'templates', page: 'templates' },
+        { name: 'Correos',   icon: Mail,           route: 'templates',          page: 'templates',           permissionKey: 'templates.correos' },
+        { name: 'WhatsApp',  icon: MessageSquare,  route: 'templates/whatsapp', page: 'templates-whatsapp',  permissionKey: 'templates.whatsapp' },
       ],
     },
     {
@@ -444,7 +405,8 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'statistics',
       permissionKey: 'statistics',
       children: [
-        { name: 'Jobs — Email', icon: Mail, route: 'statistics', page: 'statistics' },
+        { name: 'Jobs — Email', icon: Mail, route: 'statistics', page: 'statistics', permissionKey: 'statistics.jobs_email' },
+        { name: 'Jobs — WhatsApp', icon: MessageSquare, route: 'whatsapp', page: 'whatsapp', permissionKey: 'statistics.jobs_whatsapp' },
       ],
     },
     {
@@ -459,7 +421,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       icon: Zap,
       page: 'api-explorer',
       route: 'api-explorer',
-      permissionKey: 'documentation',
+      permissionKey: 'api_explorer',
     },
     {
       name: 'Marketplace',
@@ -475,12 +437,17 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'settings',
       permissionKey: 'settings',
       children: [
-        { name: 'Aplicaciones', icon: AppWindow, route: 'settings/apps', page: 'settings-apps' },
-        { name: 'Correo Electrónico', icon: Mail, route: 'settings/email', page: 'settings-email' },
-        { name: 'Acceso al Embed', icon: Package, route: 'settings/embed', page: 'settings-embed' },
+        { name: 'Aplicaciones',       icon: AppWindow,  route: 'settings/apps',  page: 'settings-apps',  permissionKey: 'settings.aplicaciones' },
+        { name: 'Correo Electrónico', icon: Mail,       route: 'settings/email', page: 'settings-email', permissionKey: 'settings.correo_electronico' },
+        { name: 'Acceso al Embed',    icon: Package,    route: 'settings/embed', page: 'settings-embed', permissionKey: 'settings.acceso_embed' },
       ],
     },
-  ].filter(item => hasMenuAccess(item.permissionKey));
+  ] as NavItem[])
+    .filter(item => hasMenuAccess(item.permissionKey))
+    .map(item => ({
+      ...item,
+      children: item.children?.filter(child => hasSubmenuAccess(child.permissionKey)),
+    }));
 
   const normalizedStatus = String(subscription?.status ?? '').toLowerCase();
   const trialEndDate = subscription?.trial_end ? new Date(subscription.trial_end) : null;
@@ -518,6 +485,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       {/* Top header — only for mobile hamburger + user menu */}
       {/* Top header — UserMenu always visible here on all screen sizes */}
       <header className="sticky top-0 z-40 border-b border-slate-700/60 bg-slate-900/80 backdrop-blur-sm">
+        <TestingBanner />
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-2">
             <button

@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
-import { configManager } from '../lib/config';
+import { PageLoader } from '../components/PageLoader';
+import { supabase } from '../lib/supabase';
+import { buildFunctionsUrl } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
-import { buildFunctionsUrl } from '../lib/config';
-import { queryMutate, querySelect, querySingle } from '../lib/queryApi';
 import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send, Check, Search } from 'lucide-react';
 
 interface Stats {
@@ -96,55 +96,103 @@ export const Statistics = () => {
   }, [searchEmail, searchDateStart, searchDateEnd, searchStatus]);
 
   useEffect(() => {
-    if (!selectedApp) return;
+    if (selectedApp) {
+      loadStats(selectedApp);
+      loadLogs(selectedApp);
+      loadPendingCommunications(selectedApp);
 
-    let cancelled = false;
+      const emailLogsChannel = supabase
+        .channel(`email_logs_${selectedApp}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'email_logs',
+            filter: `application_id=eq.${selectedApp}`,
+          },
+          (payload: any) => {
+            if (payload.eventType === 'INSERT') {
+              const newLog = payload.new as EmailLog;
+              if (!newLog.parent_log_id && newLog.communication_type !== 'pdf_generation') {
+                setLogs((prev) => [newLog, ...prev]);
+              }
+              loadStats(selectedApp);
+            } else if (payload.eventType === 'UPDATE') {
+              setLogs((prev) =>
+                prev.map((log) =>
+                  log.id === payload.new.id ? (payload.new as EmailLog) : log
+                )
+              );
+              loadStats(selectedApp);
+            } else if (payload.eventType === 'DELETE') {
+              setLogs((prev) => prev.filter((log) => log.id !== payload.old.id));
+              loadStats(selectedApp);
+            }
+          }
+        )
+        .subscribe();
 
-    const refresh = () => {
-      if (cancelled) return;
-      void loadStats(selectedApp);
-      void loadLogs(selectedApp);
-      void loadPendingCommunications(selectedApp);
-    };
+      const pendingChannel = supabase
+        .channel(`pending_communications_${selectedApp}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'pending_communications',
+            filter: `application_id=eq.${selectedApp}`,
+          },
+          (payload: any) => {
+            if (payload.eventType === 'INSERT') {
+              setPendingComms((prev) => [payload.new as PendingCommunication, ...prev]);
+              loadStats(selectedApp);
+            } else if (payload.eventType === 'UPDATE') {
+              setPendingComms((prev) =>
+                prev.map((comm) =>
+                  comm.id === payload.new.id ? (payload.new as PendingCommunication) : comm
+                )
+              );
+              loadStats(selectedApp);
+            } else if (payload.eventType === 'DELETE') {
+              setPendingComms((prev) => prev.filter((comm) => comm.id !== payload.old.id));
+              loadStats(selectedApp);
+            }
+          }
+        )
+        .subscribe();
 
-    refresh();
-
-    const intervalId = window.setInterval(refresh, 15000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
+      return () => {
+        supabase.removeChannel(emailLogsChannel);
+        supabase.removeChannel(pendingChannel);
+      };
+    }
   }, [selectedApp]);
 
   const loadApplications = async () => {
     try {
       if (!user?.sub) return;
 
-      const { data: prefs } = await querySingle<{ default_application_id: string | null }>({
-        table: 'user_preferences',
-        operation: 'select',
-        select: 'default_application_id',
-        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
-        limit: 1,
-      });
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('default_application_id')
+        .eq('user_id', user.sub)
+        .maybeSingle();
 
-      const { data, error } = await querySelect<Application>({
-        table: 'applications',
-        operation: 'select',
-        select: 'id, name, api_key',
-        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
-        order: { column: 'created_at', ascending: false },
-      });
+      const appsQuery = user.tenant_id
+        ? supabase.from('applications').select('id, name, api_key').eq('tenant_id', user.tenant_id).order('created_at', { ascending: false })
+        : supabase.from('applications').select('id, name, api_key').eq('user_id', user.sub).order('created_at', { ascending: false });
+      const { data: appsData, error: appsError } = await appsQuery;
 
-      if (error) throw error;
+      if (appsError) throw appsError;
 
-      setApplications(data || []);
+      const applicationRows = (appsData as Application[]) || [];
+      setApplications(applicationRows);
 
-      if (prefs?.default_application_id) {
-        setSelectedApp(prefs.default_application_id);
-      } else if (data && data.length > 0) {
-        setSelectedApp(data[0].id);
+      if ((prefs as any)?.default_application_id) {
+        setSelectedApp((prefs as any).default_application_id);
+      } else if (applicationRows.length > 0) {
+        setSelectedApp(applicationRows[0].id);
       }
     } catch {
       // ignore
@@ -155,33 +203,29 @@ export const Statistics = () => {
 
   const loadStats = async (appId: string) => {
     try {
-      const { data: logs, error } = await querySelect<Pick<EmailLog, 'status' | 'delivery_status' | 'opened_at' | 'clicked_at' | 'communication_type' | 'pdf_generated'>>({
-        table: 'email_logs',
-        operation: 'select',
-        select: 'status, delivery_status, opened_at, clicked_at, communication_type, pdf_generated',
-        filters: [{ column: 'application_id', op: 'eq', value: appId }],
-      });
+      const { data: logs, error } = await supabase
+        .from('email_logs')
+        .select('status, delivery_status, opened_at, clicked_at, communication_type, pdf_generated')
+        .eq('application_id', appId);
 
       if (error) throw error;
 
-      const { data: pendingData } = await querySelect<{ status: string }>({
-        table: 'pending_communications',
-        operation: 'select',
-        select: 'status',
-        filters: [
-          { column: 'application_id', op: 'eq', value: appId },
-          { column: 'status', op: 'in', value: ['waiting_data', 'processing', 'pdf_generated'] },
-        ],
-      });
+      const { data: pendingData } = await supabase
+        .from('pending_communications')
+        .select('status')
+        .eq('application_id', appId)
+        .in('status', ['waiting_data', 'processing', 'pdf_generated']);
 
-      const sent = logs?.filter((l) => l.delivery_status === 'delivered' || (l.status === 'sent' && !l.delivery_status)).length || 0;
-      const failed = logs?.filter((l) => l.status === 'failed' || l.delivery_status === 'bounced' || l.delivery_status === 'complained').length || 0;
-      const logsPending = logs?.filter((l) => l.status === 'pending' || l.delivery_status === 'delivery_delayed').length || 0;
-      const commsPending = pendingData?.length || 0;
-      const opened = logs?.filter((l) => l.opened_at !== null).length || 0;
-      const clicked = logs?.filter((l) => l.clicked_at !== null).length || 0;
-      const pdfs = logs?.filter((l) => l.communication_type === 'pdf' || l.pdf_generated === true).length || 0;
-      const emailsWithPdf = logs?.filter((l) => l.communication_type === 'email_with_pdf' || (l.communication_type === 'email' && l.pdf_generated === true)).length || 0;
+      const allLogs: any[] = (logs as any[]) || [];
+      const allPending: any[] = (pendingData as any[]) || [];
+      const sent = allLogs.filter((l: any) => l.delivery_status === 'delivered' || (l.status === 'sent' && !l.delivery_status)).length;
+      const failed = allLogs.filter((l: any) => l.status === 'failed' || l.delivery_status === 'bounced' || l.delivery_status === 'complained').length;
+      const logsPending = allLogs.filter((l: any) => l.status === 'pending' || l.delivery_status === 'delivery_delayed').length;
+      const commsPending = allPending.length;
+      const opened = allLogs.filter((l: any) => l.opened_at !== null).length;
+      const clicked = allLogs.filter((l: any) => l.clicked_at !== null).length;
+      const pdfs = allLogs.filter((l: any) => l.communication_type === 'pdf' || l.pdf_generated === true).length;
+      const emailsWithPdf = allLogs.filter((l: any) => l.communication_type === 'email_with_pdf' || (l.communication_type === 'email' && l.pdf_generated === true)).length;
 
       setStats({
         totalSent: sent,
@@ -199,21 +243,17 @@ export const Statistics = () => {
 
   const loadLogs = async (appId: string) => {
     try {
-      const { data, error } = await querySelect<EmailLog>({
-        table: 'email_logs',
-        operation: 'select',
-        select: '*',
-        filters: [
-          { column: 'application_id', op: 'eq', value: appId },
-          { column: 'parent_log_id', op: 'is', value: null },
-          { column: 'communication_type', op: 'neq', value: 'pdf_generation' },
-        ],
-        order: { column: 'created_at', ascending: false },
-        limit: 50,
-      });
+      const { data, error } = await supabase
+        .from('email_logs')
+        .select('*')
+        .eq('application_id', appId)
+        .is('parent_log_id', null)
+        .neq('communication_type', 'pdf_generation')
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (error) throw error;
-      setLogs(data || []);
+      setLogs((data as EmailLog[]) || []);
     } catch {
       // ignore
     }
@@ -221,18 +261,14 @@ export const Statistics = () => {
 
   const loadChildLogs = async (parentId: string) => {
     try {
-      const { data, error } = await querySelect<EmailLog>({
-        table: 'email_logs',
-        operation: 'select',
-        select: '*',
-        filters: [
-          { column: 'parent_log_id', op: 'eq', value: parentId },
-        ],
-        order: { column: 'created_at', ascending: true },
-      });
+      const { data, error } = await supabase
+        .from('email_logs')
+        .select('*')
+        .eq('parent_log_id', parentId)
+        .order('created_at', { ascending: true});
 
       if (error) throw error;
-      setChildLogs(prev => ({ ...prev, [parentId]: data || [] }));
+      setChildLogs(prev => ({ ...prev, [parentId]: (data as EmailLog[]) || [] }));
     } catch {
       // ignore
     }
@@ -253,20 +289,16 @@ export const Statistics = () => {
 
   const loadPendingCommunications = async (appId: string) => {
     try {
-      const { data, error } = await querySelect<PendingCommunication>({
-        table: 'pending_communications',
-        operation: 'select',
-        select: '*',
-        filters: [
-          { column: 'application_id', op: 'eq', value: appId },
-          { column: 'status', op: 'in', value: ['waiting_data', 'processing', 'pdf_generated', 'sent', 'failed'] },
-        ],
-        order: { column: 'created_at', ascending: false },
-        limit: 50,
-      });
+      const { data, error } = await supabase
+        .from('pending_communications')
+        .select('*')
+        .eq('application_id', appId)
+        .in('status', ['waiting_data', 'processing', 'pdf_generated', 'sent', 'failed'])
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (error) throw error;
-      setPendingComms(data || []);
+      setPendingComms((data as PendingCommunication[]) || []);
     } catch {
       // ignore
     }
@@ -365,11 +397,10 @@ export const Statistics = () => {
     if (!deleteConfirmPending) return;
 
     try {
-      const { error } = await queryMutate({
-        table: 'pending_communications',
-        operation: 'delete',
-        filters: [{ column: 'id', op: 'eq', value: deleteConfirmPending }],
-      });
+      const { error } = await supabase
+        .from('pending_communications')
+        .delete()
+        .eq('id', deleteConfirmPending);
 
       if (error) throw error;
 
@@ -388,11 +419,10 @@ export const Statistics = () => {
     if (!deleteConfirmLog) return;
 
     try {
-      const { error } = await queryMutate({
-        table: 'email_logs',
-        operation: 'delete',
-        filters: [{ column: 'id', op: 'eq', value: deleteConfirmLog }],
-      });
+      const { error } = await supabase
+        .from('email_logs')
+        .delete()
+        .eq('id', deleteConfirmLog);
 
       if (error) throw error;
 
@@ -435,11 +465,9 @@ export const Statistics = () => {
   const resendCommunication = async () => {
     if (!resendConfirmLog || !selectedApp) return;
 
-      setResending(true);
-        try {
-          const log = resendConfirmLog;
-      const supabaseAnonKey = configManager.supabaseAnonKey;
-
+    setResending(true);
+    try {
+      const log = resendConfirmLog;
       const currentApp = applications.find(app => app.id === selectedApp);
       if (!currentApp) {
         throw new Error('No se encontró la aplicación');
@@ -453,19 +481,16 @@ export const Statistics = () => {
         throw new Error('El log no tiene un template_id asociado');
       }
 
-      const { data: template, error: templateError } = await querySingle<{ name: string }>({
-        table: 'communication_templates',
-        operation: 'select',
-        select: 'name',
-        filters: [
-          { column: 'id', op: 'eq', value: log.template_id },
-        ],
-        limit: 1,
-      });
+      const { data: template, error: templateError } = await supabase
+        .from('communication_templates')
+        .select('name')
+        .eq('id', log.template_id)
+        .maybeSingle();
 
       if (templateError || !template) {
         throw new Error('No se pudo encontrar el template asociado');
       }
+      const templateRecord = template as any;
 
       let pdfBase64 = null;
       let pdfFilename = 'document.pdf';
@@ -478,60 +503,50 @@ export const Statistics = () => {
           pdfFilename = log.metadata?.pdf_filename || 'document.pdf';
         }
 
-      if (!pdfEmailLogId) {
-          const { data: pdfChildLog } = await querySingle<{ id: string; metadata: any }>({
-            table: 'email_logs',
-            operation: 'select',
-            select: 'id, metadata',
-            filters: [
-              { column: 'parent_log_id', op: 'eq', value: log.id },
-              { column: 'communication_type', op: 'eq', value: 'pdf_generation' },
-            ],
-            order: { column: 'created_at', ascending: false },
-            limit: 1,
-          });
+        if (!pdfEmailLogId) {
+          const { data: pdfChildLog } = await supabase
+            .from('email_logs')
+            .select('id, metadata')
+            .eq('parent_log_id', log.id)
+            .eq('communication_type', 'pdf_generation')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-          if (pdfChildLog?.id) {
-            pdfEmailLogId = pdfChildLog.id;
-            pdfFilename = pdfChildLog.metadata?.filename || pdfFilename;
+          if ((pdfChildLog as any)?.id) {
+            pdfEmailLogId = (pdfChildLog as any).id;
+            pdfFilename = (pdfChildLog as any).metadata?.filename || pdfFilename;
           }
         }
 
         if (pdfEmailLogId && !pdfBase64) {
-          const { data: pdfData } = await querySingle<{ pdf_base64: string | null; filename: string | null }>({
-            table: 'pdf_generation_logs',
-            operation: 'select',
-            select: 'pdf_base64, filename',
-            filters: [
-              { column: 'email_log_id', op: 'eq', value: pdfEmailLogId },
-            ],
-            limit: 1,
-          });
+          const { data: pdfData } = await supabase
+            .from('pdf_generation_logs')
+            .select('pdf_base64, filename')
+            .eq('email_log_id', pdfEmailLogId)
+            .maybeSingle();
 
-          if (pdfData?.pdf_base64) {
-            pdfBase64 = pdfData.pdf_base64;
-            pdfFilename = pdfData.filename || pdfFilename;
+          if ((pdfData as any)?.pdf_base64) {
+            pdfBase64 = (pdfData as any).pdf_base64;
+            pdfFilename = (pdfData as any).filename || pdfFilename;
           }
         }
       }
 
       if (!templateData || Object.keys(templateData).length === 0) {
-        const { data: pdfChildLog } = await querySingle<{ id: string; metadata: any }>({
-          table: 'email_logs',
-          operation: 'select',
-          select: 'id, metadata',
-          filters: [
-            { column: 'parent_log_id', op: 'eq', value: log.id },
-            { column: 'communication_type', op: 'eq', value: 'pdf_generation' },
-          ],
-          order: { column: 'created_at', ascending: false },
-          limit: 1,
-        });
+        const { data: pdfChildLog } = await supabase
+          .from('email_logs')
+          .select('id, metadata')
+          .eq('parent_log_id', log.id)
+          .eq('communication_type', 'pdf_generation')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        if (pdfChildLog?.metadata?.request_payload?.data) {
-          templateData = pdfChildLog.metadata.request_payload.data;
-        } else if (pdfChildLog?.metadata?.data) {
-          templateData = pdfChildLog.metadata.data;
+        if ((pdfChildLog as any)?.metadata?.request_payload?.data) {
+          templateData = (pdfChildLog as any).metadata.request_payload.data;
+        } else if ((pdfChildLog as any)?.metadata?.data) {
+          templateData = (pdfChildLog as any).metadata.data;
         }
       }
 
@@ -543,7 +558,7 @@ export const Statistics = () => {
       const payload: any = {
         recipient_email: log.recipient_email,
         subject: log.subject,
-        template_name: template.name,
+        template_name: templateRecord.name,
         application_id: selectedApp,
         data: templateData
       };
@@ -565,11 +580,10 @@ export const Statistics = () => {
       const response = await fetch(buildFunctionsUrl(endpoint), {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${supabaseAnonKey}`,
           'Content-Type': 'application/json',
-          'x-api-key': currentApp.api_key
+          'x-api-key': currentApp.api_key,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -621,30 +635,26 @@ export const Statistics = () => {
 
     const directToken = metadata.pdf_access_token || metadata?.pdf_info?.pdf_access_token;
     if (directToken) {
-        return {
-          url: buildFunctionsUrl(`view-pdf?token=${directToken}`),
-          filename,
-        };
+      return {
+        url: `${buildFunctionsUrl('view-pdf')}?token=${directToken}`,
+        filename,
+      };
     }
 
-    // For send-email-with-pdf logs: look up public_pdf_links by pdf_log_id stored in metadata
     const pdfLogId = metadata.pdf_log_id;
     if (pdfLogId) {
-      const { data: linkByPdfLog } = await querySingle<{ access_token: string; filename: string | null; created_at: string }>({
-        table: 'public_pdf_links',
-        operation: 'select',
-        select: 'access_token, filename, created_at',
-        filters: [
-          { column: 'pdf_generation_log_id', op: 'eq', value: pdfLogId },
-          { column: 'is_active', op: 'eq', value: true },
-        ],
-        order: { column: 'created_at', ascending: false },
-        limit: 1,
-      });
+      const { data: linkByPdfLog } = await supabase
+        .from('public_pdf_links')
+        .select('access_token, filename, created_at')
+        .eq('pdf_generation_log_id', pdfLogId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (linkByPdfLog?.access_token) {
+      if ((linkByPdfLog as any)?.access_token) {
         return {
-          url: buildFunctionsUrl(`view-pdf?token=${linkByPdfLog.access_token}`),
+          url: `${buildFunctionsUrl('view-pdf')}?token=${linkByPdfLog.access_token}`,
           filename: linkByPdfLog.filename || metadata.pdf_filename || filename,
         };
       }
@@ -655,24 +665,21 @@ export const Statistics = () => {
       return null;
     }
 
-    const { data: linkData, error } = await querySingle<{ access_token: string; filename: string | null; created_at: string }>({
-      table: 'public_pdf_links',
-      operation: 'select',
-      select: 'access_token, filename, created_at',
-      filters: [
-        { column: 'order_id', op: 'eq', value: orderId },
-        { column: 'is_active', op: 'eq', value: true },
-      ],
-      order: { column: 'created_at', ascending: false },
-      limit: 1,
-    });
+    const { data: linkData, error } = await supabase
+      .from('public_pdf_links')
+      .select('access_token, filename, created_at')
+      .eq('order_id', orderId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (error || !linkData?.access_token) {
+    if (error || !(linkData as any)?.access_token) {
       return null;
     }
 
     return {
-      url: buildFunctionsUrl(`view-pdf?token=${linkData.access_token}`),
+      url: `${buildFunctionsUrl('view-pdf')}?token=${linkData.access_token}`,
       filename: linkData.filename || filename,
     };
   };
@@ -742,9 +749,7 @@ export const Statistics = () => {
   if (loading) {
     return (
       <Layout currentPage="statistics">
-        <div className="text-center py-12">
-          <div className="text-slate-400">Cargando...</div>
-        </div>
+        <PageLoader />
       </Layout>
     );
   }

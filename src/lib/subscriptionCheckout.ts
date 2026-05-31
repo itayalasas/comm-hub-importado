@@ -1,6 +1,5 @@
 import { buildFunctionsUrl, getRuntimeConfig } from './config';
 
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 const PENDING_CHECKOUT_STORAGE_KEY = 'pending_subscription_checkout';
 const TEST_SUBSCRIPTION_EMAIL = 'test_user_1004704034@testuser.com';
 const CHECKOUT_REQUEST_TIMEOUT_MS = 20000;
@@ -48,7 +47,11 @@ export interface CheckoutStatusResult {
   [key: string]: any;
 }
 
-async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs = CHECKOUT_REQUEST_TIMEOUT_MS): Promise<Response> {
+async function fetchJsonWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = CHECKOUT_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
 
@@ -138,8 +141,6 @@ export async function startManagedSubscriptionCheckout({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      apikey: SUPABASE_ANON_KEY,
     },
     body: JSON.stringify(body),
   });
@@ -165,8 +166,6 @@ export async function getManagedCheckoutStatus({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      apikey: SUPABASE_ANON_KEY,
     },
     body: JSON.stringify({
       application_id: applicationId,

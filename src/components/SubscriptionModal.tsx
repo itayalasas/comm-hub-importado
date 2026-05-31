@@ -4,8 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { UpgradeModal } from './UpgradeModal';
 import { usePlans } from '../hooks/usePlans';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
-import { getRuntimeConfig } from '../lib/config';
-import { resolveCheckoutEndpoint } from '../lib/subscriptionCheckout';
+import { buildFunctionsUrl } from '../lib/config';
 import { useState } from 'react';
 
 interface SubscriptionModalProps {
@@ -53,7 +52,7 @@ function formatNumber(value: string | number, unit?: string | null): string {
 
 export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const { subscription, user, applyCheckoutStatus, subscriptionHasAccess } = useAuth();
-  const { plans, checkout } = usePlans();
+  const { plans } = usePlans();
   const { applicationCount, templateCount, emailsThisMonth, pdfsThisMonth } = useSubscriptionLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -177,27 +176,10 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
     setCancelling(true);
     setCancelError(null);
     try {
-      const { authAppId, authApiKey, supabaseAnonKey } = getRuntimeConfig();
-      const cancelEndpoint = resolveCheckoutEndpoint(
-        checkout?.cancel_endpoint || checkout?.cancel_proxy_endpoint,
-        'subscription-cancel'
-      );
-      const res = await fetch(cancelEndpoint, {
+      const res = await fetch(buildFunctionsUrl('cancel-subscription'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${supabaseAnonKey ?? ''}`,
-          apikey: supabaseAnonKey ?? '',
-        },
-        body: JSON.stringify({
-          application_id: authAppId,
-          api_key: authApiKey,
-          subscription_id: subscription.id,
-          provider_subscription_id: subscription.mp_preapproval_id ?? undefined,
-          tenant_id: user?.tenant_id ?? undefined,
-          app_user_id: user?.sub ?? undefined,
-          cancel_reason: cancelReasonText,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mp_preapproval_id: subscription.mp_preapproval_id }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || body?.success === false) {

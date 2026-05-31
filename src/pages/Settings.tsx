@@ -1,13 +1,15 @@
 ﻿import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
+import { PageLoader } from '../components/PageLoader';
 import { useAuth } from '../contexts/AuthContext';
-import { authClient } from '../lib/auth';
-import { buildFunctionsUrl, configManager, getRuntimeConfig } from '../lib/config';
-import { queryCount, queryMutate, querySelect, querySingle } from '../lib/queryApi';
+import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { UpgradeModal } from '../components/UpgradeModal';
-import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink, AlertTriangle, Loader2, X } from 'lucide-react';
+import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink, MessageSquare, X, Loader2, AlertTriangle } from 'lucide-react';
+import { configManager, getRuntimeConfig, buildFunctionsUrl } from '../lib/config';
+import { db } from '../lib/db';
+import { queryCount } from '../lib/queryApi';
 
 interface Application {
   id: string;
@@ -44,13 +46,17 @@ interface EmbedCredential {
 
 const isLocalHost = () => typeof window !== 'undefined' && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 
-const maskSecret = (value: string) => {
-  if (!value) return '(vacío)';
-  if (value.length <= 8) return '***';
-  return `${value.slice(0, 4)}...${value.slice(-4)}`;
-};
+interface WhatsAppConfig {
+  id: string;
+  application_id: string;
+  phone_number_id: string;
+  waba_id: string;
+  access_token: string;
+  display_name: string;
+  is_active: boolean;
+}
 
-export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' }) => {
+export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 'whatsapp' }) => {
   const { user } = useAuth();
   const toast = useToast();
   const { checkApplicationLimit, refreshCounts, hasFeature } = useSubscriptionLimits();
@@ -64,17 +70,16 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
   const [showDeleteAppModal, setShowDeleteAppModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [copiedKey, setCopiedKey] = useState(false);
-  const [deleteAppTarget, setDeleteAppTarget] = useState<Application | null>(null);
-  const [deleteAppSummary, setDeleteAppSummary] = useState<ApplicationDeleteSummary | null>(null);
-  const [deleteAppConfirmName, setDeleteAppConfirmName] = useState('');
-  const [deleteAppPreviewLoading, setDeleteAppPreviewLoading] = useState(false);
-  const [deleteAppLoading, setDeleteAppLoading] = useState(false);
-  const [deleteAppError, setDeleteAppError] = useState('');
   const [newAppData, setNewAppData] = useState({
     name: '',
     domain: '',
   });
+  const [deleteAppTarget, setDeleteAppTarget] = useState<Application | null>(null);
+  const [deleteAppSummary, setDeleteAppSummary] = useState<ApplicationDeleteSummary | null>(null);
+  const [deleteAppConfirmName, setDeleteAppConfirmName] = useState('');
+  const [deleteAppError, setDeleteAppError] = useState('');
+  const [deleteAppPreviewLoading, setDeleteAppPreviewLoading] = useState(false);
+  const [deleteAppLoading, setDeleteAppLoading] = useState(false);
 
   const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
 
@@ -87,6 +92,22 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
   const [newEmbedSaving, setNewEmbedSaving] = useState(false);
   const [showEmbedPass, setShowEmbedPass] = useState(false);
   const [generatedPass, setGeneratedPass] = useState('');
+
+  // ── WhatsApp config state ────────────────────────────────────────────
+  const [waConfig, setWaConfig] = useState<WhatsAppConfig | null>(null);
+  const [, setWaConfigLoading] = useState(false);
+  const [waConfigSaving, setWaConfigSaving] = useState(false);
+  const [showWaModal, setShowWaModal] = useState(false);
+  const [waForm, setWaForm] = useState({
+    phone_number_id: '',
+    waba_id: '',
+    access_token: '',
+    display_name: '',
+  });
+  const [showWaToken, setShowWaToken] = useState(false);
+
+  // ── Per-app copied key tracking ──────────────────────────────────────
+  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
 
   // Plan feature gates for email providers
   const canUseSmtp = hasFeature('configuracion_smtp');
@@ -118,26 +139,22 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     }
   }, [user, tab]);
 
+  useEffect(() => {
+    if (selectedApp && tab === 'whatsapp') {
+      loadWaConfig(selectedApp);
+    }
+  }, [selectedApp, tab]);
+
   const provisionDefaultEmail = async (appId: string) => {
     try {
       await configManager.loadConfig();
-      const token = authClient.getAccessToken() || localStorage.getItem('access_token') || '';
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const apiKey = getRuntimeConfig().apiKey || '';
-      if (!token) return;
-      if (isLocalHost()) {
-        console.groupCollapsed('[settings] provision-default-email request');
-        console.log('url:', buildFunctionsUrl('provision-default-email'));
-        console.log('body:', { application_id: appId });
-        console.log('headers:', {
-          authorization: token ? `Bearer ${maskSecret(token)}` : '(none)',
-          'x-api-key': apiKey || '(none)',
-        });
-        console.groupEnd();
-      }
       await fetch(buildFunctionsUrl('provision-default-email'), {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
           ...(apiKey ? { 'x-api-key': apiKey } : {}),
         },
@@ -192,42 +209,34 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     try {
       if (!user?.sub) return;
 
-      const { data, error } = await querySelect<Application>({
-        table: 'applications',
-        operation: 'select',
-        select: 'id, name, api_key',
-        filters: user.tenant_id
-          ? [{ column: 'tenant_id', op: 'eq', value: user.tenant_id }]
-          : [{ column: 'user_id', op: 'eq', value: user.sub }],
-        order: { column: 'created_at', ascending: false },
-      });
+      // Filter by tenant when available so all users in the same tenant share apps
+      const appsQuery = supabase
+        .from('applications')
+        .select('id, name, api_key')
+        .order('created_at', { ascending: false });
+
+      const { data, error } = await (
+        user.tenant_id
+          ? appsQuery.eq('tenant_id', user.tenant_id)
+          : appsQuery.eq('user_id', user.sub)
+      );
 
       if (error) throw error;
 
-      setApplications(data || []);
+      const apps = (data as Application[]) || [];
+      setApplications(apps);
 
-      const { data: prefs } = await querySingle<{ default_application_id: string | null }>({
-        table: 'user_preferences',
-        operation: 'select',
-        select: 'default_application_id',
-        filters: [
-          { column: 'user_id', op: 'eq', value: user.sub },
-        ],
-        limit: 1,
-      });
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('default_application_id')
+        .eq('user_id', user.sub)
+        .maybeSingle();
 
-      const defaultApplicationId = prefs?.default_application_id ?? null;
-      const hasDefaultApplication = defaultApplicationId
-        ? (data || []).some((app) => app.id === defaultApplicationId)
-        : false;
-      const resolvedDefaultApplicationId = hasDefaultApplication ? defaultApplicationId : null;
-      const nextSelectedApplicationId = resolvedDefaultApplicationId ?? data?.[0]?.id ?? null;
-
-      setDefaultApp(resolvedDefaultApplicationId);
-      setSelectedApp(nextSelectedApplicationId);
-
-      if (!nextSelectedApplicationId) {
-        setCredentials(null);
+      if (prefs?.default_application_id) {
+        setDefaultApp(prefs.default_application_id);
+        setSelectedApp(prefs.default_application_id);
+      } else if (data && data.length > 0) {
+        setSelectedApp(data[0].id);
       }
     } catch {
       // ignore
@@ -238,20 +247,16 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
 
   const loadCredentials = async (appId: string) => {
     try {
-      const { data, error } = await querySingle<EmailCredentials>({
-        table: 'email_credentials',
-        operation: 'select',
-        select: '*',
-        filters: [
-          { column: 'application_id', op: 'eq', value: appId },
-          { column: 'is_active', op: 'eq', value: true },
-        ],
-        limit: 1,
-      });
+      const { data, error } = await supabase
+        .from('email_credentials')
+        .select('*')
+        .eq('application_id', appId)
+        .eq('is_active', true)
+        .maybeSingle();
 
       if (error) throw error;
 
-      setCredentials(data);
+      setCredentials(data as any);
       if (data) {
         setFormData({
           id: data.id,
@@ -271,6 +276,54 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     }
   };
 
+  // ── WhatsApp config helpers ──────────────────────────────────────────
+
+  const loadWaConfig = async (appId: string) => {
+    setWaConfigLoading(true);
+    try {
+      const { data } = await db
+        .from('whatsapp_configs')
+        .select('*')
+        .eq('application_id', appId)
+        .maybeSingle();
+      setWaConfig((data as WhatsAppConfig) || null);
+    } finally {
+      setWaConfigLoading(false);
+    }
+  };
+
+  const saveWaConfig = async () => {
+    const targetId = selectedApp;
+    if (!targetId) return;
+    if (!waForm.phone_number_id || !waForm.waba_id || !waForm.access_token) {
+      toast.error('Phone Number ID, WABA ID y Access Token son requeridos.');
+      return;
+    }
+    setWaConfigSaving(true);
+    try {
+      if (waConfig) {
+        await db
+          .from('whatsapp_configs')
+          .update({ ...waForm, updated_at: new Date().toISOString() })
+          .eq('id', waConfig.id);
+      } else {
+        await db.from('whatsapp_configs').insert({
+          ...waForm,
+          application_id: targetId,
+          is_active: true,
+        });
+      }
+      toast.success('Configuración de WhatsApp guardada');
+      setShowWaModal(false);
+      if (selectedApp && (tab === 'whatsapp')) loadWaConfig(selectedApp);
+    } catch {
+      toast.error('Error al guardar la configuración.');
+    } finally {
+      setWaConfigSaving(false);
+    }
+  };
+
+
   // Embed credential helpers
 
   const sha256 = async (text: string): Promise<string> => {
@@ -287,14 +340,35 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     setGeneratedPass(pass);
   };
 
-    const embedFetch = (path: string, options: RequestInit = {}) => {
-      const token = authClient.getAccessToken() || '';
-      return fetch(buildFunctionsUrl(`embed-credentials${path}`), {
-        ...options,
-        credentials: 'include',
-        headers: {
+  const parseJsonResponse = async <T,>(res: Response): Promise<T | null> => {
+    const text = await res.text().catch(() => '');
+    if (!text) return null;
+
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error(text.slice(0, 200) || `HTTP ${res.status}`);
+    }
+  };
+
+  const embedFetch = async (path: string, options: RequestInit = {}) => {
+    await configManager.loadConfig();
+    const { apiKey: runtimeApiKey, apiKeyUserEmbed } = getRuntimeConfig();
+    const embedApiKey = runtimeApiKey || apiKeyUserEmbed || '';
+    const userId = user?.sub?.trim() || '';
+    if (!embedApiKey) {
+      throw new Error('Missing API key for embed credentials');
+    }
+    if (!userId) {
+      throw new Error('Missing user id for embed credentials');
+    }
+
+    return fetch(buildFunctionsUrl(`embed-credentials${path}`), {
+      ...options,
+      headers: {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        'x-api-key': embedApiKey,
+        'x-user-id': userId,
         ...options.headers,
       },
     });
@@ -304,8 +378,17 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     setEmbedLoading(true);
     try {
       const res = await embedFetch('');
-      const data = await res.json();
+      const data = await parseJsonResponse<EmbedCredential[] | { data?: EmbedCredential[] }>(res);
+      if (!res.ok) {
+        throw new Error(
+          typeof data === 'object' && data && 'error' in data && data.error
+            ? String((data as any).error)
+            : `HTTP ${res.status}`,
+        );
+      }
       setEmbedCreds(Array.isArray(data) ? data : []);
+    } catch {
+      setEmbedCreds([]);
     } finally {
       setEmbedLoading(false);
     }
@@ -328,9 +411,9 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
           label: newEmbed.label.trim() || newEmbed.username.trim(),
         }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse<{ error?: string }>(res);
       if (!res.ok) {
-        if (data.error === 'username_taken') setNewEmbedError('Ese nombre de usuario ya existe.');
+        if (data?.error === 'username_taken') setNewEmbedError('Ese nombre de usuario ya existe.');
         else setNewEmbedError('Error al guardar. Intentá de nuevo.');
         return;
       }
@@ -386,24 +469,18 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
       }
 
       if (credentials?.id) {
-        const { error } = await queryMutate({
-          table: 'email_credentials',
-          operation: 'update',
-          data: updateData,
-          filters: [{ column: 'id', op: 'eq', value: credentials.id }],
-        });
+        const { error } = await supabase
+          .from('email_credentials')
+          .update(updateData)
+          .eq('id', credentials.id);
 
         if (error) throw error;
         toast.success('Credenciales actualizadas exitosamente');
       } else {
-        const { error } = await queryMutate({
-          table: 'email_credentials',
-          operation: 'insert',
-          data: {
-            application_id: selectedApp,
-            ...updateData,
-            is_active: true,
-          },
+        const { error } = await supabase.from('email_credentials').insert({
+          application_id: selectedApp,
+          ...updateData,
+          is_active: true,
         });
 
         if (error) throw error;
@@ -461,16 +538,18 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     try {
       if (!user?.sub) return;
 
-      const { error } = await queryMutate({
-        table: 'user_preferences',
-        operation: 'upsert',
-        data: {
-          user_id: user.sub,
-          default_application_id: appId,
-          updated_at: new Date().toISOString(),
-        },
-        onConflict: 'user_id',
-      });
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert(
+          {
+            user_id: user.sub,
+            default_application_id: appId,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: 'user_id',
+          }
+        );
 
       if (error) throw error;
 
@@ -482,11 +561,11 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     }
   };
 
-  const copyApiKey = (apiKey: string) => {
+  const copyApiKey = (apiKey: string, appId?: string) => {
     navigator.clipboard.writeText(apiKey);
-    setCopiedKey(true);
-      toast.success('Clave API copiada al portapapeles');
-    setTimeout(() => setCopiedKey(false), 2000);
+    if (appId) setCopiedKeyId(appId);
+    toast.success('API Key copiada al portapapeles');
+    setTimeout(() => setCopiedKeyId((current) => (current === appId ? null : current)), 2000);
   };
 
   const generateSecureKey = () => {
@@ -518,27 +597,22 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
       const appId = crypto.randomUUID();
       const apiKey = `sk_${generateSecureKey()}`;
 
-      const { data, error } = await queryMutate<Application>({
-        table: 'applications',
-        operation: 'insert',
-        data: {
+      const { data, error } = await supabase
+        .from('applications')
+        .insert({
           user_id: user.sub,
           name: newAppData.name,
           app_id: appId,
           domain: newAppData.domain || null,
           api_key: apiKey,
           ...(user.tenant_id ? { tenant_id: user.tenant_id } : {}),
-        },
-      });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
-      const createdApp = data?.[0];
-      if (!createdApp) {
-        throw new Error('No se pudo crear la aplicación');
-      }
-
-      await setAsDefault(createdApp.id);
+      await setAsDefault(data.id);
       await refreshCounts();
 
       toast.success('Aplicación creada y marcada como favorita');
@@ -675,14 +749,12 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
     ? 'Configura el proveedor de email para cada aplicación'
     : tab === 'embed'
     ? 'Genera credenciales para proteger el acceso al Marketplace embebido'
-    : 'Gestiona tus aplicaciones y claves API';
+    : 'Gestiona tus aplicaciones y API keys';
 
   if (loading) {
     return (
       <Layout currentPage={currentPageSlug}>
-        <div className="text-center py-12">
-          <div className="text-slate-400">Cargando...</div>
-        </div>
+        <PageLoader />
       </Layout>
     );
   }
@@ -700,25 +772,25 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
             <div className="flex items-center space-x-2">
               <Key className="w-5 h-5 text-cyan-400" />
-              <h3 className="text-base sm:text-lg font-semibold text-white">Aplicaciones y claves API</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-white">Aplicaciones y API Keys</h3>
             </div>
             <button
               onClick={handleNewApplicationClick}
               className="flex items-center justify-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />
-              <span>Nueva aplicación</span>
+              <span>Nueva Aplicación</span>
             </button>
           </div>
 
           {applications.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-slate-400 mb-4">Todavía no tienes aplicaciones creadas</p>
+              <p className="text-slate-400 mb-4">No tienes aplicaciones creadas</p>
               <button
                 onClick={handleNewApplicationClick}
                 className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
               >
-                Crear la primera aplicación
+                Crear Primera Aplicación
               </button>
             </div>
           ) : (
@@ -732,7 +804,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                         : 'border-slate-700'
                     }`}
                   >
-                    <div className="flex items-start justify-between mb-3 gap-3">
+                    <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center space-x-3">
                         <h4 className="text-white font-semibold">{app.name}</h4>
                         {defaultApp === app.id && (
@@ -742,39 +814,30 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                           </span>
                         )}
                       </div>
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        {defaultApp !== app.id && (
-                          <button
-                            onClick={() => setAsDefault(app.id)}
-                            className="text-xs px-3 py-1 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors"
-                          >
-                            Definir como predeterminada
-                          </button>
-                        )}
+                      {defaultApp !== app.id && (
                         <button
-                          onClick={() => { void openDeleteApplicationModal(app); }}
-                          className="inline-flex items-center gap-1 text-xs px-3 py-1 bg-red-500/10 text-red-300 border border-red-500/20 rounded hover:bg-red-500/20 transition-colors"
+                          onClick={() => setAsDefault(app.id)}
+                          className="text-xs px-3 py-1 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Eliminar</span>
+                          Marcar como predeterminada
                         </button>
-                      </div>
+                      )}
                     </div>
 
                     <div className="space-y-2">
                       <div>
-                        <div className="text-xs text-slate-500 mb-1">Clave API</div>
+                        <div className="text-xs text-slate-500 mb-1">API Key</div>
                         <div className="flex items-center space-x-2">
                           <code className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-cyan-400 font-mono overflow-x-auto">
                             {app.api_key}
                           </code>
                           <button
-                            onClick={() => copyApiKey(app.api_key)}
+                            onClick={() => copyApiKey(app.api_key, app.id)}
                             className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition-colors"
-                            title="Copiar clave API"
+                            title="Copiar API Key"
                           >
-                            {copiedKey ? (
-                              <CheckCircle2 className="w-4 h-4 text-green-400" />
+                            {copiedKeyId === app.id ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                             ) : (
                               <Copy className="w-4 h-4" />
                             )}
@@ -782,11 +845,21 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-slate-500 mb-1">ID de la aplicación</div>
+                        <div className="text-xs text-slate-500 mb-1">ID de Aplicación</div>
                         <code className="block px-3 py-2 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-mono overflow-x-auto">
                           {app.id}
                         </code>
                       </div>
+                    </div>
+                    <div className="flex justify-end mt-4">
+                      <button
+                        onClick={() => openDeleteApplicationModal(app)}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/15 hover:text-red-200 transition-colors text-xs font-semibold"
+                        title="Eliminar aplicación"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Eliminar
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1573,6 +1646,85 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' })
               >
                 Guardar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── WhatsApp config modal ── */}
+      {showWaModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-lg overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-slate-700">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                <h2 className="text-base font-bold text-white">
+                  {waConfig ? 'Editar' : 'Configurar'} WhatsApp Business
+                </h2>
+              </div>
+              <button onClick={() => setShowWaModal(false)} className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
+                <span className="text-lg leading-none">×</span>
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Display Name</label>
+                <input
+                  type="text"
+                  value={waForm.display_name}
+                  onChange={e => setWaForm(f => ({ ...f, display_name: e.target.value }))}
+                  placeholder="Mi negocio"
+                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Phone Number ID <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={waForm.phone_number_id}
+                  onChange={e => setWaForm(f => ({ ...f, phone_number_id: e.target.value }))}
+                  placeholder="123456789012345"
+                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">WABA ID <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={waForm.waba_id}
+                  onChange={e => setWaForm(f => ({ ...f, waba_id: e.target.value }))}
+                  placeholder="123456789012345"
+                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Access Token <span className="text-red-400">*</span></label>
+                <div className="relative">
+                  <input
+                    type={showWaToken ? 'text' : 'password'}
+                    value={waForm.access_token}
+                    onChange={e => setWaForm(f => ({ ...f, access_token: e.target.value }))}
+                    placeholder="EAA…"
+                    className="w-full px-4 py-2.5 pr-10 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                  />
+                  <button type="button" onClick={() => setShowWaToken(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                    {showWaToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-600">Token permanente de usuario de sistema. No expira.</p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setShowWaModal(false)} className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors">
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveWaConfig}
+                  disabled={waConfigSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-bold transition-colors"
+                >
+                  {waConfigSaving ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

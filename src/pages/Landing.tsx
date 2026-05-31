@@ -1,83 +1,30 @@
 import { useState } from 'react';
-import { Shield, Check, ArrowRight, Mail, FileText, Zap, Star, Building2, Loader2 } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Building2, Check, FileText, Loader2, Mail, Shield, Star, Zap } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { PricingPlansSection } from '../components/PricingPlansSection';
 
-const PLANS = [
-  {
-    key: 'starter',
-    name: 'Starter',
-    tagline: 'Para emprendedores o proyectos pequeños.',
-    price: 890,
-    priceLabel: 'UYU 890',
-    color: 'from-cyan-500/15 to-teal-500/10',
-    border: 'border-cyan-500/25',
-    accent: 'text-cyan-400',
-    badge: null,
-    features: [
-      { label: 'Emails / mes',          value: '1.000' },
-      { label: 'PDFs / mes',            value: '200' },
-      { label: 'Aplicaciones',          value: '1' },
-      { label: 'Templates',             value: '10' },
-      { label: 'Máximo de usuarios',    value: '5' },
-      { label: 'Acceso API',            value: true },
-      { label: '2FA',                   value: false },
-      { label: 'Soporte prioritario',   value: false },
-    ],
-  },
-  {
-    key: 'business',
-    name: 'Business',
-    tagline: 'Para empresas que ya envían comunicaciones frecuentes.',
-    price: 1890,
-    priceLabel: 'UYU 1.890',
-    color: 'from-blue-500/20 to-cyan-500/10',
-    border: 'border-blue-400/35',
-    accent: 'text-blue-400',
-    badge: 'Más popular',
-    features: [
-      { label: 'Emails / mes',          value: '10.000' },
-      { label: 'PDFs / mes',            value: '3.000' },
-      { label: 'Aplicaciones',          value: '5' },
-      { label: 'Templates',             value: '50' },
-      { label: 'Máximo de usuarios',    value: '20' },
-      { label: 'Acceso API',            value: true },
-      { label: '2FA',                   value: true },
-      { label: 'Reportes avanzados',    value: true },
-      { label: 'Soporte prioritario',   value: false },
-    ],
-  },
-  {
-    key: 'pro',
-    name: 'Pro',
-    tagline: 'Para SaaS, agencias o empresas con varios tenants/clientes.',
-    price: 3900,
-    priceLabel: 'UYU 3.900',
-    color: 'from-emerald-500/15 to-teal-500/10',
-    border: 'border-emerald-400/30',
-    accent: 'text-emerald-400',
-    badge: 'Máximo poder',
-    features: [
-      { label: 'Emails / mes',          value: '50.000' },
-      { label: 'PDFs / mes',            value: '20.000' },
-      { label: 'Aplicaciones',          value: '20' },
-      { label: 'Templates',             value: '200' },
-      { label: 'Máximo de usuarios',    value: '10 por tenant' },
-      { label: 'Acceso API',            value: true },
-      { label: '2FA',                   value: true },
-      { label: 'Reportes avanzados',    value: true },
-      { label: 'Dominio personalizado', value: true },
-      { label: 'Soporte prioritario',   value: true },
-    ],
-  },
-];
-
 const USE_CASES = [
-  { icon: Mail,      title: 'Emails masivos',        desc: 'Campañas, notificaciones y alertas con alta entregabilidad.' },
-  { icon: FileText,  title: 'Documentos & PDFs',     desc: 'Facturas, cotizaciones y reportes generados automáticamente.' },
-  { icon: Zap,       title: 'Automatizaciones',      desc: 'Disparadores por eventos en tu sistema vía API REST.' },
-  { icon: Building2, title: 'Multi-tenant',          desc: 'Varios equipos con aislamiento y roles por tenant.' },
+  {
+    icon: Mail,
+    title: 'Emails transaccionales',
+    desc: 'Envía confirmaciones, alertas y notificaciones con templates dinámicos.',
+  },
+  {
+    icon: FileText,
+    title: 'PDF y documentos',
+    desc: 'Genera facturas, comprobantes y reportes automáticos en un solo flujo.',
+  },
+  {
+    icon: Zap,
+    title: 'Automatizaciones',
+    desc: 'Dispara procesos desde tu sistema con una API simple y consistente.',
+  },
+  {
+    icon: Building2,
+    title: 'Multi-tenant',
+    desc: 'Organiza equipos y clientes con límites compartidos por tenant.',
+  },
 ];
 
 export const Landing = () => {
@@ -86,19 +33,13 @@ export const Landing = () => {
   const [pendingAction, setPendingAction] = useState<'login' | 'register' | null>(null);
 
   const handleLogin = () => {
-    if (pendingAction) return;
     setPendingAction('login');
-    window.setTimeout(() => {
-      login();
-    }, 140);
+    login();
   };
 
   const handleRegister = () => {
-    if (pendingAction) return;
     setPendingAction('register');
-    window.setTimeout(() => {
-      register();
-    }, 140);
+    register();
   };
 
   return (
@@ -118,13 +59,9 @@ export const Landing = () => {
           background-image: linear-gradient(to right, #06b6d4 0%, #0891b2 40%, #22d3ee 60%, #06b6d4 100%);
         }
         .btn-shimmer:hover { animation: shimmer 1.6s linear infinite; }
-        .plan-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-        .plan-card:hover { transform: translateY(-4px); }
       `}</style>
 
-      {/* ── HERO ── */}
       <div className="flex min-h-screen overflow-hidden">
-        {/* LEFT */}
         <div className="w-full lg:w-1/2 relative flex flex-col justify-between p-8 sm:p-14 pb-36 lg:pb-14 overflow-hidden">
           <div className="absolute inset-0 pointer-events-none">
             <div className="glow-pulse absolute -top-32 -left-32 w-[480px] h-[480px] bg-cyan-500 rounded-full blur-[130px]" />
@@ -140,23 +77,27 @@ export const Landing = () => {
           </div>
 
           <div className="relative z-10">
-            <div className="slide-2 mb-8">
+            <div className="slide-2 mb-8 max-w-xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-300 mb-5">
+                <Star className="w-3.5 h-3.5" />
+                Planes y acceso
+              </div>
               <h1 className="text-4xl sm:text-5xl lg:text-[52px] font-extrabold leading-tight mb-5 tracking-tight">
-                Bienvenido a<br />
+                Bienvenido a <br />
                 <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
                   SendCraft
                 </span>
               </h1>
               <p className="text-slate-400 text-base sm:text-lg leading-relaxed max-w-md">
-                Gestiona emails, templates y documentos PDF desde una plataforma unificada, segura y orientada a equipos.
+                Gestiona emails, templates, PDFs y automatizaciones desde una sola plataforma.
               </p>
             </div>
 
             <div className="slide-3 space-y-3">
               {[
-                { icon: Shield,    title: 'Seguridad Avanzada',   desc: 'Autenticación empresarial con altos estándares de seguridad.' },
-                { icon: ArrowRight, title: 'Acceso Rápido',       desc: 'Inicia sesión en segundos con tu cuenta empresarial.' },
-                { icon: Check,     title: 'Gestión Unificada',    desc: 'Administra comunicaciones, templates y analítica desde un solo lugar.' },
+                { icon: Shield, title: 'Seguridad avanzada', desc: 'Autenticación empresarial con control de acceso centralizado.' },
+                { icon: ArrowRight, title: 'Acceso rápido', desc: 'Inicia sesión en segundos y entra directo al panel.' },
+                { icon: Check, title: 'Gestión unificada', desc: 'Administra comunicaciones, límites y analítica desde un lugar.' },
               ].map(({ icon: Icon, title, desc }) => (
                 <div key={title} className="flex items-start gap-4 p-4 rounded-xl border border-white/6 bg-white/[0.025] hover:bg-white/[0.045] hover:border-cyan-500/20 transition-all group">
                   <div className="flex-shrink-0 w-11 h-11 sm:w-12 sm:h-12 bg-cyan-500/10 border border-cyan-500/20 rounded-xl flex items-center justify-center group-hover:bg-cyan-500/15 transition-colors">
@@ -172,14 +113,12 @@ export const Landing = () => {
           </div>
 
           <div className="relative z-10 hidden lg:block">
-            <p className="text-slate-600 text-sm">Copyright 2024 SendCraft. Todos los derechos reservados.</p>
+            <p className="text-slate-600 text-sm">Copyright {new Date().getFullYear()} SendCraft. Todos los derechos reservados.</p>
           </div>
         </div>
 
-        {/* Divider */}
         <div className="hidden lg:block w-px bg-gradient-to-b from-transparent via-white/8 to-transparent flex-shrink-0" />
 
-        {/* RIGHT */}
         <div className="hidden lg:flex w-1/2 relative items-center justify-center p-12 overflow-hidden">
           <div className="absolute inset-0 pointer-events-none">
             <div className="glow-pulse absolute top-0 right-0 w-[400px] h-[400px] bg-cyan-500 rounded-full blur-[130px]" style={{ animationDelay: '1s' }} />
@@ -202,7 +141,7 @@ export const Landing = () => {
                 </div>
 
                 <div className="slide-2 text-center mb-8">
-                  <h2 className="text-3xl font-bold text-white mb-3">Iniciar Sesión</h2>
+                  <h2 className="text-3xl font-bold text-white mb-3">Iniciar sesión</h2>
                   <p className="text-slate-400 leading-relaxed">
                     Usa tu sistema de autenticación empresarial para acceder de forma segura.
                   </p>
@@ -215,7 +154,7 @@ export const Landing = () => {
                     className="btn-shimmer w-full group flex items-center justify-center gap-2.5 px-6 py-4 text-white rounded-xl font-bold text-lg transition-all hover:shadow-2xl hover:shadow-cyan-500/35 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-80 disabled:cursor-not-allowed"
                   >
                     {pendingAction === 'login' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
-                    <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar Sesión'}</span>
+                    <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar sesión'}</span>
                     {pendingAction === 'login' ? null : <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
                   </button>
                 </div>
@@ -271,7 +210,6 @@ export const Landing = () => {
         </div>
       </div>
 
-      {/* ── USE CASES ── */}
       <section className="bg-[#060e1c] border-t border-white/5 py-20 px-6 sm:px-14">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
@@ -296,121 +234,8 @@ export const Landing = () => {
         </div>
       </section>
 
-      {/* ── PRICING ── */}
       <PricingPlansSection />
 
-      <section className="hidden py-24 px-6 sm:px-10 relative overflow-hidden">
-        {/* Background glows */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="glow-pulse absolute top-0 left-1/4 w-[600px] h-[400px] bg-cyan-500 rounded-full blur-[160px]" style={{ animationDelay: '1s' }} />
-          <div className="glow-pulse absolute bottom-0 right-1/4 w-[500px] h-[300px] bg-teal-500 rounded-full blur-[140px]" style={{ animationDelay: '3s' }} />
-        </div>
-
-        <div className="relative max-w-6xl mx-auto">
-          <div className="text-center mb-14">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-3 py-1 rounded-full mb-4">
-              <Star className="w-3 h-3" />
-              Planes y Precios
-            </span>
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-4 leading-tight">
-              Elige el plan que se ajusta<br className="hidden sm:block" /> a tu equipo
-            </h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">
-              Todos los planes incluyen el acceso multi-tenant. Los límites son compartidos por todos los usuarios del mismo tenant.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {PLANS.map((plan) => (
-              <div
-                key={plan.key}
-                className={`plan-card relative rounded-2xl border bg-gradient-to-b ${plan.color} ${plan.border} overflow-hidden flex flex-col`}
-              >
-                {/* Popular badge */}
-                {plan.badge && (
-                  <div className="absolute top-0 right-0 left-0 flex justify-center">
-                    <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${
-                      plan.key === 'business'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-emerald-500 text-white'
-                    }`}>
-                      {plan.badge}
-                    </span>
-                  </div>
-                )}
-
-                <div className={`p-6 flex-1 flex flex-col ${plan.badge ? 'pt-9' : ''}`}>
-                  {/* Header */}
-                  <div className="mb-5">
-                    <h3 className={`text-xl font-extrabold mb-1 ${plan.accent}`}>{plan.name}</h3>
-                    <p className="text-slate-400 text-xs">{plan.tagline}</p>
-                  </div>
-
-                  {/* Price */}
-                  <div className="mb-6">
-                    {plan.price ? (
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-extrabold text-white">
-                          {plan.priceLabel}
-                        </span>
-                        <span className="text-slate-400 text-sm">/mes</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-extrabold text-white">Gratis</span>
-                        <span className="text-slate-400 text-sm">· 14 días</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Features */}
-                  <ul className="space-y-2.5 flex-1">
-                    {plan.features.map((f) => (
-                      <li key={f.label} className="flex items-center justify-between gap-2 text-sm">
-                        <span className="text-slate-300">{f.label}</span>
-                        {typeof f.value === 'boolean' ? (
-                          f.value ? (
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                              <Check className="w-3 h-3 text-emerald-400" />
-                            </span>
-                          ) : (
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center">
-                              <span className="w-2 h-px bg-slate-500 block" />
-                            </span>
-                          )
-                        ) : (
-                          <span className={`flex-shrink-0 font-bold text-xs ${plan.accent}`}>{f.value}</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* CTA */}
-                  <button
-                    onClick={() => register(plan.key)}
-                    className={`mt-6 w-full py-2.5 rounded-xl font-bold text-sm transition-all ${
-                      plan.key === 'business'
-                        ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-500/25'
-                        : plan.key === 'pro'
-                        ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/25'
-                        : 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/25'
-                    }`}
-                  >
-                    Suscribirse
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Footnote */}
-          <p className="text-center text-slate-600 text-sm mt-10">
-            Los límites son compartidos por el tenant · Solo administradores pueden cambiar el plan · Los precios son en pesos uruguayos (UYU)
-          </p>
-        </div>
-      </section>
-
-      {/* ── FOOTER ── */}
       <footer className="border-t border-white/5 py-8 px-6">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-slate-600 text-sm">© {new Date().getFullYear()} SendCraft. Todos los derechos reservados.</p>
@@ -422,7 +247,6 @@ export const Landing = () => {
         </div>
       </footer>
 
-      {/* ── MOBILE bottom bar ── */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#050d1a]/95 backdrop-blur-xl border-t border-white/8 p-4 z-50">
         <button
           onClick={handleLogin}
@@ -430,7 +254,7 @@ export const Landing = () => {
           className="btn-shimmer w-full group flex items-center justify-center gap-2.5 px-6 py-4 text-white rounded-xl font-bold text-base transition-all hover:shadow-xl hover:shadow-cyan-500/30 active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
         >
           {pendingAction === 'login' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
-          <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar Sesión'}</span>
+          <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar sesión'}</span>
           {pendingAction === 'login' ? null : <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
         </button>
         <div className="text-center mt-3">
@@ -450,3 +274,5 @@ export const Landing = () => {
     </div>
   );
 };
+
+export default Landing;

@@ -3,6 +3,16 @@ import { Book, Code, Copy, Check, ChevronDown, ChevronRight, Info, AlertCircle, 
 import { Layout } from '../components/Layout';
 import { buildFunctionsUrl, getRuntimeConfig } from '../lib/config';
 
+const getFunctionsBaseUrl = () => {
+  const { functionsBaseUrlRaw, functionsBaseUrl } = getRuntimeConfig();
+  return functionsBaseUrlRaw || functionsBaseUrl || 'https://your-project.supabase.co/v1';
+};
+
+const functionUrl = (path: string) => buildFunctionsUrl(path, getFunctionsBaseUrl());
+
+const cleanFunctionPath = (path: string) =>
+  path.replace(/^\/functions\/v1\/?/i, '').replace(/^\/+/, '/') || path;
+
 interface EndpointSection {
   id: string;
   title: string;
@@ -33,13 +43,7 @@ export default function Documentation({ publicView = false }: DocumentationProps
   const [expandedEndpoints, setExpandedEndpoints] = useState<string[]>(['send-email']);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  const functionsBaseUrl = (() => {
-    const { functionsBaseUrlRaw, functionsBaseUrl } = getRuntimeConfig();
-    return functionsBaseUrlRaw || functionsBaseUrl || '';
-  })();
-  const apiBaseUrl = functionsBaseUrl || 'https://your-project.supabase.co/v1';
-  const functionUrl = (path: string) => buildFunctionsUrl(path, apiBaseUrl);
-  const cleanFunctionPath = (path: string) => path.replace(/^\/functions\/v1/i, '') || path;
+  const functionsBaseUrl = getFunctionsBaseUrl();
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);

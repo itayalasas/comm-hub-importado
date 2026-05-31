@@ -5,10 +5,7 @@ import {
   Clock, AlertCircle, Send, ChevronDown, Users, Loader2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-
-const AUTH_API_BASE = 'https://sfqtmnncgiqkveaoqckt.supabase.co/functions/v1';
-const APPLICATION_ID = 'app_51ecb9e2-6b3';
-const API_KEY = 'ak_development_e7398219af33de15e96cd6704f76aefd';
+import { configManager } from '../lib/config';
 
 interface Role {
   id: string;
@@ -69,7 +66,7 @@ export const InvitationsModal = ({ onClose }: InvitationsModalProps) => {
       setRolesLoading(true);
       try {
         const res = await fetch(
-          `${AUTH_API_BASE}/list-roles?application_id=${APPLICATION_ID}&api_key=${API_KEY}`
+          `${configManager.authFunctionsBaseUrl}/list-roles?application_id=${configManager.authAppId}&api_key=${configManager.authApiKey}`
         );
         const json = await res.json();
         if (json.success && json.data?.roles) {
@@ -94,13 +91,13 @@ export const InvitationsModal = ({ onClose }: InvitationsModalProps) => {
     setListError('');
     try {
       const body: Record<string, string> = {
-        application_id: APPLICATION_ID,
-        api_key: API_KEY,
+        application_id: configManager.authAppId,
+        api_key: configManager.authApiKey,
         invited_by_email: user.email,
       };
       if (filterStatus) body.status = filterStatus;
 
-      const res = await fetch(`${AUTH_API_BASE}/invitations-list`, {
+      const res = await fetch(`${configManager.authFunctionsBaseUrl}/invitations-list`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -129,12 +126,12 @@ export const InvitationsModal = ({ onClose }: InvitationsModalProps) => {
     setSendError('');
     setSendSuccess('');
     try {
-      const res = await fetch(`${AUTH_API_BASE}/invitations-create`, {
+      const res = await fetch(`${configManager.authFunctionsBaseUrl}/invitations-create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          application_id: APPLICATION_ID,
-          api_key: API_KEY,
+          application_id: configManager.authAppId,
+          api_key: configManager.authApiKey,
           invited_by_email: user?.email || '',
           email: email.trim(),
           role_id: roleId,
@@ -168,12 +165,12 @@ export const InvitationsModal = ({ onClose }: InvitationsModalProps) => {
     if (!user?.email) return;
     setRevoking(invitationId);
     try {
-      const res = await fetch(`${AUTH_API_BASE}/invitations-revoke`, {
+      const res = await fetch(`${configManager.authFunctionsBaseUrl}/invitations-revoke`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          application_id: APPLICATION_ID,
-          api_key: API_KEY,
+          application_id: configManager.authAppId,
+          api_key: configManager.authApiKey,
           invited_by_email: user.email,
           invitation_id: invitationId,
         }),

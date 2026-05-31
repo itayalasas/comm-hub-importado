@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
+import { PageLoader } from '../components/PageLoader';
 import { TemplateEditor } from '../components/TemplateEditor';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { verifyApplicationOwnership } from '../lib/security';
-import { queryMutate, querySelect, querySingle } from '../lib/queryApi';
+import { queryMutate } from '../lib/queryApi';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
@@ -97,32 +99,31 @@ export const Templates = () => {
     try {
       if (!user?.sub) return;
 
-      const { data: prefs } = await querySingle<{ default_application_id: string | null }>({
-        table: 'user_preferences',
-        operation: 'select',
-        select: 'default_application_id',
-        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
-        limit: 1,
-      });
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('default_application_id')
+        .eq('user_id', user.sub)
+        .maybeSingle();
 
-      const { data, error } = await querySelect<Application>({
-        table: 'applications',
-        operation: 'select',
-        select: 'id, name',
-        filters: user.tenant_id
-          ? [{ column: 'tenant_id', op: 'eq', value: user.tenant_id }]
-          : [{ column: 'user_id', op: 'eq', value: user.sub }],
-        order: { column: 'created_at', ascending: false },
-      });
+      const appsQuery = supabase
+        .from('applications')
+        .select('id, name')
+        .order('created_at', { ascending: false });
+
+      const { data, error } = await (
+        user.tenant_id
+          ? appsQuery.eq('tenant_id', user.tenant_id)
+          : appsQuery.eq('user_id', user.sub)
+      );
 
       if (error) throw error;
 
-      setApplications(data || []);
+      setApplications((data as Application[]) || []);
 
-      if (prefs?.default_application_id) {
-        setSelectedApp(prefs.default_application_id);
-      } else if (data && data.length > 0) {
-        setSelectedApp(data[0].id);
+      if ((prefs as any)?.default_application_id) {
+        setSelectedApp((prefs as any).default_application_id);
+      } else if (data && (data as any[]).length > 0) {
+        setSelectedApp((data as any[])[0].id);
       }
     } catch {
       // ignore
@@ -140,32 +141,36 @@ export const Templates = () => {
         return;
       }
 
-      const filters = [
-        { column: 'application_id', op: 'eq', value: appId },
-        ...(searchTerm ? [{ column: 'name', op: 'ilike', value: `%${searchTerm}%` }] : []),
-      ];
+      let countQuery = supabase
+        .from('communication_templates')
+        .select('*', { count: 'exact', head: true })
+        .eq('application_id', appId);
 
-      const countQuery = await querySelect<{ id: string }>({
-        table: 'communication_templates',
-        operation: 'select',
-        select: 'id',
-        filters,
-      });
-      setTotalTemplates(countQuery.count || 0);
+      if (searchTerm) {
+        countQuery = countQuery.ilike('name', `%${searchTerm}%`);
+      }
+
+      const { count } = await countQuery;
+      setTotalTemplates(count || 0);
 
       const from = (currentPage - 1) * templatesPerPage;
-      const { data, error } = await querySelect<Template>({
-        table: 'communication_templates',
-        operation: 'select',
-        select: '*',
-        filters,
-        order: { column: 'created_at', ascending: false },
-        limit: templatesPerPage,
-        offset: from,
-      });
+      const to = from + templatesPerPage - 1;
+
+      let dataQuery = supabase
+        .from('communication_templates')
+        .select('*')
+        .eq('application_id', appId)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (searchTerm) {
+        dataQuery = dataQuery.ilike('name', `%${searchTerm}%`);
+      }
+
+      const { data, error } = await dataQuery;
 
       if (error) throw error;
-      setTemplates(data || []);
+      setTemplates((data as Template[]) || []);
     } catch {
       // ignore
     }
@@ -249,7 +254,7 @@ export const Templates = () => {
             channel: formData.channel,
             subject: formData.subject || null,
             html_content: formData.html_content,
-            variables: variables,
+            variables,
             has_attachment: formData.has_attachment,
             attachment_variable: formData.has_attachment ? formData.attachment_variable : null,
             has_logo: formData.has_logo,
@@ -276,7 +281,7 @@ export const Templates = () => {
             channel: formData.channel,
             subject: formData.subject || null,
             html_content: formData.html_content,
-            variables: variables,
+            variables,
             has_attachment: formData.has_attachment,
             attachment_variable: formData.has_attachment ? formData.attachment_variable : null,
             has_logo: formData.has_logo,
@@ -409,9 +414,7 @@ export const Templates = () => {
   if (loading) {
     return (
       <Layout currentPage="templates">
-        <div className="text-center py-12">
-          <div className="text-slate-400">Cargando...</div>
-        </div>
+        <PageLoader />
       </Layout>
     );
   }

@@ -2,10 +2,14 @@ import { useState } from 'react';
 import {
   Mail, FileText, Zap, X, CheckCircle2, Eye, EyeOff, Loader2, ShieldCheck, Lock,
 } from 'lucide-react';
+import { configManager, getRuntimeConfig } from '../lib/config';
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
-const BASE_URL = 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1';
+const getBaseUrl = () => {
+  const { functionsBaseUrlRaw, functionsBaseUrl } = getRuntimeConfig();
+  return functionsBaseUrlRaw || functionsBaseUrl || '';
+};
 
 /* ── SHA-256 helper (Web Crypto API — available in browsers) ────────── */
 
@@ -30,7 +34,7 @@ interface ConnectorDef {
   features: string[];
 }
 
-const CONNECTORS: ConnectorDef[] = [
+const buildConnectors = (BASE_URL: string): ConnectorDef[] => [
   {
     id: 'sendcraft-email',
     name: 'SendCraft Email',
@@ -190,20 +194,34 @@ const LoginScreen = ({ onLogin }: LoginProps) => {
     setLoading(true);
     setError('');
     try {
+      await configManager.loadConfig();
+      const { apiKey: platformApiKey } = getRuntimeConfig();
       const hash = await sha256(password);
-      const res = await fetch(`${BASE_URL}/verify-embed-credentials`, {
+      const res = await fetch(`${getBaseUrl()}/verify-embed-credentials`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(platformApiKey ? { 'x-api-key': platformApiKey } : {}),
+        },
         body: JSON.stringify({ username: username.trim(), password_hash: hash }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          data?.error
+            ? String(data.error)
+            : `Error ${res.status} al validar el acceso`,
+        );
+      }
       if (data.valid) {
         onLogin(data.label || username);
       } else {
-        setError('Usuario o contraseña incorrectos.');
+        setError(data?.error === 'Missing credentials'
+          ? 'Faltan credenciales para validar el acceso.'
+          : 'Usuario o contraseña incorrectos.');
       }
-    } catch {
-      setError('Error de conexión. Intentá de nuevo.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error de conexión. Intentá de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -284,7 +302,7 @@ const LoginScreen = ({ onLogin }: LoginProps) => {
 
 const validateApiKey = async (apiKey: string): Promise<{ valid: boolean; appName?: string }> => {
   try {
-    const res = await fetch(`${BASE_URL}/health-check-email`, { method: 'GET', headers: { 'x-api-key': apiKey } });
+    const res = await fetch(`${getBaseUrl()}/health-check-email`, { method: 'GET', headers: { 'x-api-key': apiKey } });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));
       return { valid: true, appName: data?.app_name || data?.name };
@@ -323,8 +341,8 @@ const ConnectModal = ({ connector, onClose, onSuccess }: { connector: ConnectorD
       description: connector.description,
       category: connector.category,
       auth: { type: 'api_key', header: connector.auth.header, value: apiKey.trim() },
-      base_url: BASE_URL,
-      registry_url: `${BASE_URL}/connectors/${connector.id}`,
+      base_url: getBaseUrl(),
+      registry_url: `${getBaseUrl()}/connectors/${connector.id}`,
       actions: connector.actions.map(a => ({ id: a.id, method: a.method, endpoint: a.endpoint, params: a.params })),
     };
     const payload = {
@@ -480,6 +498,7 @@ export const MarketplaceEmbed = () => {
   const [installed, setInstalled] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<FilterType>('all');
 
+  const CONNECTORS = buildConnectors(getBaseUrl());
   const filtered = filter === 'all' ? CONNECTORS : CONNECTORS.filter(c => c.category === filter);
 
   if (!authed) {

@@ -1,19 +1,12 @@
 import { createPortal } from 'react-dom';
-import { useState } from 'react';
 import { X, Check, Minus, TrendingUp, Loader2, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlans } from '../hooks/usePlans';
 import type { PlanFeature } from '../hooks/usePlans';
-import { getRuntimeConfig } from '../lib/config';
-import {
-  startManagedSubscriptionCheckout,
-  storePendingSubscriptionCheckout,
-} from '../lib/subscriptionCheckout';
 
 interface UpgradeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  // Legacy props kept for call-site compatibility but no longer required
   currentLimit?: number;
   featureName?: string;
   featureCode?: string;
@@ -55,73 +48,22 @@ function formatFeatureValue(f: PlanFeature): string {
 }
 
 export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
-  const { subscription, user } = useAuth();
-  const { plans, loading, checkout } = usePlans();
-  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const managedCheckout = checkout?.managed_by_authsystem === true;
+  const { subscription } = useAuth();
+  const { plans, loading } = usePlans();
 
   if (!isOpen) return null;
 
-  // Sort plans by price ascending
   const sortedPlans = [...plans].sort((a, b) => a.price - b.price);
 
-  // Identify current plan by id first, then fallback to name
-  const currentPlanId = subscription?.plan_id ?? null;
+  // Identify current plan by matching plan_name
   const currentPlanName = subscription?.plan_name?.toLowerCase().trim() ?? '';
 
-  const isCurrentPlan = (plan: { id: string; name: string }) =>
-    (currentPlanId ? plan.id === currentPlanId : false) ||
-    plan.name.toLowerCase().trim() === currentPlanName;
+  const isCurrentPlan = (planName: string) =>
+    planName.toLowerCase().trim() === currentPlanName;
 
-  const handleSelect = async (plan: typeof sortedPlans[0]) => {
-    if (subscribingPlanId) return;
-
-    setCheckoutError(null);
-    setSubscribingPlanId(plan.id);
-
-    try {
-      const { authAppId, authApiKey } = getRuntimeConfig();
-      if (!authAppId || !authApiKey) {
-        throw new Error('No se encontraron las credenciales de la aplicación');
-      }
-
-      if (managedCheckout) {
-        const result = await startManagedSubscriptionCheckout({
-          applicationId: authAppId,
-          apiKey: authApiKey,
-          planId: plan.id,
-          returnUrl: `${window.location.origin}/subscription/result?plan_id=${encodeURIComponent(plan.id)}`,
-          email: user?.email ?? undefined,
-          tenantId: user?.tenant_id ?? undefined,
-          endpoint: checkout?.start_endpoint,
-        });
-
-        if (!result.checkout_session_id) {
-          throw new Error('No se recibió el identificador de checkout');
-        }
-
-        storePendingSubscriptionCheckout({
-          checkout_session_id: result.checkout_session_id,
-          plan_id: plan.id,
-          created_at: Date.now(),
-        });
-
-        const checkoutUrl = result.checkout_url || result.redirect_url;
-        if (!checkoutUrl) {
-          throw new Error('No se recibió la URL de checkout');
-        }
-
-        window.location.href = checkoutUrl;
-        return;
-      }
-
-      throw new Error('El checkout gestionado no está disponible para este plan.');
-    } catch (error) {
-      setCheckoutError(error instanceof Error ? error.message : 'No se pudo iniciar la suscripción');
-    } finally {
-      setSubscribingPlanId(null);
-    }
+  const handleSelect = (initPoint: string | null | undefined) => {
+    if (!initPoint) return;
+    window.location.href = initPoint;
   };
 
   // Collect all unique feature codes across all plans in defined order
@@ -142,7 +84,7 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
       className="fixed inset-0 z-[300] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md"
       style={{ margin: 0, left: 0, right: 0, top: 0, bottom: 0 }}
     >
-      <div className="relative w-fit max-w-[calc(100vw-1rem)] max-h-[95vh] sm:max-h-[90vh] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
         {/* Background accents */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-cyan-500/8 via-transparent to-transparent pointer-events-none" />
 
@@ -167,11 +109,6 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
 
         {/* Content */}
         <div className="relative flex-1 overflow-y-auto px-4 sm:px-6 py-6">
-          {checkoutError && (
-            <div className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {checkoutError}
-            </div>
-          )}
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
@@ -183,7 +120,7 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="mx-auto w-max table-fixed border-collapse">
+              <table className="w-full min-w-[640px] border-collapse">
                 {/* Plan headers */}
                 <thead>
                   <tr>
@@ -191,7 +128,7 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                       <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Características</span>
                     </th>
                     {sortedPlans.map((plan) => {
-                      const isCurrent = isCurrentPlan(plan);
+                      const isCurrent = isCurrentPlan(plan.name);
                       return (
                         <th key={plan.id} className="relative w-[16rem] px-2 pb-6 text-center align-bottom overflow-visible">
                           <div className="relative pt-8 overflow-visible">
@@ -203,40 +140,33 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                                 </span>
                               </div>
                             )}
-                            <div className={`relative w-full overflow-visible rounded-2xl border px-4 pb-4 pt-11 transition-all ${
-                              isCurrent
-                                ? 'bg-cyan-500/12 border-cyan-500/45 shadow-[0_0_0_1px_rgba(34,211,238,0.15)]'
-                                : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-600'
-                            }`}>
-                              <p className={`font-extrabold text-base mb-1 ${isCurrent ? 'text-cyan-400' : 'text-white'}`}>
-                                {plan.name}
-                              </p>
-                              <div className="flex items-baseline justify-center gap-1">
-                                <span className="text-xl font-extrabold text-white">
-                                  {plan.currency} {plan.price.toLocaleString('es-UY')}
-                                </span>
-                                <span className="text-slate-400 text-xs">/mes</span>
-                              </div>
-                              {!isCurrent && (
-                                <button
-                                  onClick={() => { void handleSelect(plan); }}
-                                  disabled={subscribingPlanId === plan.id}
-                                  className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold transition-all bg-cyan-500 hover:bg-cyan-400 text-white hover:shadow-md hover:shadow-cyan-500/20 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                  {subscribingPlanId === plan.id ? (
-                                    <>
-                                      <Loader2 className="w-4 h-4 animate-spin" />
-                                      Iniciando...
-                                    </>
-                                  ) : 'Suscribirse'}
-                                </button>
-                              )}
-                              {isCurrent && (
-                                <div className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold bg-cyan-500/10 text-cyan-300 text-center border border-cyan-500/20">
-                                  Plan activo
-                                </div>
-                              )}
+                            <p className={`font-extrabold text-base mb-1 ${isCurrent ? 'text-cyan-400' : 'text-white'}`}>
+                              {plan.name}
+                            </p>
+                            <div className="flex items-baseline justify-center gap-1">
+                              <span className="text-xl font-extrabold text-white">
+                                {plan.currency} {plan.price.toLocaleString('es-UY')}
+                              </span>
+                              <span className="text-slate-400 text-xs">/mes</span>
                             </div>
+                            {!isCurrent && (
+                              <button
+                                onClick={() => handleSelect(plan.mercadopago?.init_point)}
+                                disabled={!plan.mercadopago?.init_point}
+                                className={`mt-3 w-full py-2 rounded-lg text-xs font-bold transition-all ${
+                                  plan.mercadopago?.init_point
+                                    ? 'bg-cyan-500 hover:bg-cyan-400 text-white hover:shadow-md hover:shadow-cyan-500/20'
+                                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                }`}
+                              >
+                                {plan.mercadopago?.init_point ? 'Seleccionar' : 'No disponible'}
+                              </button>
+                            )}
+                            {isCurrent && (
+                              <div className="mt-3 w-full py-2 rounded-lg text-xs font-bold bg-cyan-500/10 text-cyan-400 text-center border border-cyan-500/20">
+                                Plan activo
+                              </div>
+                            )}
                           </div>
                         </th>
                       );
@@ -244,7 +174,6 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                   </tr>
                 </thead>
 
-                {/* Feature rows */}
                 <tbody className="divide-y divide-slate-800">
                   {allCodes.map((code) => {
                     const label = FEATURE_LABEL[code] ?? code.replace(/_/g, ' ');
@@ -255,7 +184,7 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                         </td>
                         {sortedPlans.map((plan) => {
                           const feature = getFeature(plan, code);
-                          const isCurrent = isCurrentPlan(plan);
+                          const isCurrent = isCurrentPlan(plan.name);
 
                           if (!feature) {
                             return (
@@ -301,7 +230,6 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
           )}
         </div>
 
-        {/* Footer */}
         <div className="relative px-6 py-4 border-t border-slate-700/80 bg-slate-900/80 flex-shrink-0">
           <p className="text-slate-500 text-center text-xs">
             Precios en pesos uruguayos (UYU) · Los límites son compartidos por todos los usuarios del tenant

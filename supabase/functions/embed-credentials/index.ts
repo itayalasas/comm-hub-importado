@@ -4,7 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, PATCH, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, x-api-key, x-user-id",
 };
 
 const json = (data: unknown, status = 200) =>
@@ -19,7 +19,32 @@ const serializeError = (err: unknown): string => {
   try { return JSON.stringify(err); } catch { return "unknown error"; }
 };
 
-// Extract user_id from the app's JWT (external auth system — NOT Supabase auth)
+function parseTokens(raw?: string): string[] {
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(String);
+  } catch {
+    // fallback CSV
+  }
+
+  return raw.split(",").map((x) => x.trim()).filter(Boolean);
+}
+
+function getAllowedApiKeys(): string[] {
+  return [
+    Deno.env.get("API_KEY"),
+    Deno.env.get("API_KEY_USER_EMBED"),
+    ...parseTokens(Deno.env.get("API_KEYS")),
+    ...parseTokens(Deno.env.get("API_KEYS_CSV")),
+    ...parseTokens(Deno.env.get("FPM_API_KEYS")),
+    ...parseTokens(Deno.env.get("FPM_API_KEYS_CSV")),
+    ...parseTokens(Deno.env.get("FPM_AUTH_TOKENS")),
+  ].filter((key): key is string => !!key);
+}
+
+// Resolve user_id from the explicit header first, with a legacy JWT fallback.
 const getUserIdFromToken = (authHeader: string | null): string | null => {
   if (!authHeader?.startsWith("Bearer ")) return null;
   try {
@@ -44,15 +69,27 @@ const getUserIdFromToken = (authHeader: string | null): string | null => {
   }
 };
 
+const getUserIdFromHeaders = (req: Request): string | null => {
+  const explicitUserId = req.headers.get("x-user-id")?.trim();
+  if (explicitUserId) return explicitUserId;
+  return getUserIdFromToken(req.headers.get("Authorization"));
+};
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const userId = getUserIdFromToken(req.headers.get("Authorization"));
+    const apiKey = req.headers.get("x-api-key")?.trim() || "";
+    const allowedApiKeys = getAllowedApiKeys();
+    if (!apiKey || (allowedApiKeys.length > 0 && !allowedApiKeys.includes(apiKey))) {
+      return json({ error: "Invalid API key" }, 401);
+    }
+
+    const userId = getUserIdFromHeaders(req);
     if (!userId) {
-      return json({ error: "Unauthorized — could not extract user_id from token" }, 401);
+      return json({ error: "Unauthorized — missing x-user-id header" }, 401);
     }
 
     const supabase = createClient(
