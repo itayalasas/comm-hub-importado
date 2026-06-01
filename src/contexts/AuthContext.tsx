@@ -379,10 +379,278 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const isRecord = (value: unknown): value is Record<string, any> => {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+  };
+
+  const firstString = (...values: unknown[]): string => {
+    for (const value of values) {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) return trimmed;
+      }
+    }
+    return '';
+  };
+
+  const unwrapAuthPayload = (payload: any): Record<string, any> => {
+    if (!isRecord(payload)) return {};
+    return isRecord(payload.data) ? payload.data : payload;
+  };
+
+  const extractTokenCandidate = (payload: any, fallback = ''): string => {
+    if (typeof payload === 'string') {
+      const trimmed = payload.trim();
+      return trimmed || fallback;
+    }
+
+    if (!isRecord(payload)) {
+      return fallback;
+    }
+
+    const root = unwrapAuthPayload(payload);
+    return firstString(
+      root.access_token,
+      root.token,
+      root.jwt,
+      root.id_token,
+      payload.access_token,
+      payload.token,
+      payload.jwt,
+      payload.id_token,
+      payload.data?.access_token,
+      payload.data?.token,
+      payload.data?.jwt,
+      payload.data?.id_token,
+      fallback,
+    );
+  };
+
+  const extractAuthState = (payload: any) => {
+    const root = unwrapAuthPayload(payload);
+    const claims = isRecord(root.claims) ? root.claims : null;
+    const user = isRecord(root.user) ? root.user : null;
+    const application = isRecord(root.application) ? root.application : null;
+    const tenant = isRecord(root.tenant) ? root.tenant : null;
+
+    const subscriptionSource =
+      root.subscription ??
+      user?.subscription ??
+      claims?.subscription ??
+      null;
+
+    const availablePlansSource =
+      root.available_plans ??
+      user?.available_plans ??
+      claims?.available_plans ??
+      null;
+
+    const hasAccess =
+      typeof root.has_access === 'boolean'
+        ? root.has_access
+        : typeof user?.has_access === 'boolean'
+          ? user.has_access
+          : typeof claims?.has_access === 'boolean'
+            ? claims.has_access
+            : null;
+
+    const refreshToken = firstString(
+      payload?.refresh_token,
+      payload?.data?.refresh_token,
+      root.refresh_token,
+      root.refreshToken,
+    );
+
+    return {
+      root,
+      claims,
+      user,
+      application,
+      tenant,
+      subscriptionSource,
+      availablePlansSource,
+      hasAccess,
+      refreshToken: refreshToken || null,
+    };
+  };
+
+  const buildUserInfo = (
+    authState: ReturnType<typeof extractAuthState>,
+    decodedToken: Record<string, any> | null,
+  ): User => {
+    const root = authState.root || {};
+    const claims = authState.claims || {};
+    const user = authState.user || {};
+    const application = authState.application || {};
+    const fallback = decodedToken || {};
+    const primary = claims || user || root || fallback;
+    const secondary = user || claims || root || fallback;
+
+    return {
+      sub: String(primary.sub || secondary.id || secondary.sub || secondary.user_id || 'unknown'),
+      name: String(primary.name || secondary.name || secondary.username || 'Usuario'),
+      email: String(primary.email || secondary.email || ''),
+      picture: primary.picture || secondary.picture || secondary.avatar,
+      role: primary.role || secondary.role,
+      permissions: primary.permissions || secondary.permissions || fallback.permissions || {},
+      permissions_hierarchy: primary.permissions_hierarchy || secondary.permissions_hierarchy || fallback.permissions_hierarchy || undefined,
+      tenant_id: primary.tenant_id || secondary.tenant_id || fallback.tenant_id || authState.tenant?.id || application.tenant_id || undefined,
+      tenant_name: primary.tenant_name || secondary.tenant_name || fallback.tenant_name || authState.tenant?.name || authState.tenant?.organization_name || application.name || application.organization_name || undefined,
+      active_users_count: secondary.active_users_count !== undefined
+        ? Number(secondary.active_users_count)
+        : primary.active_users_count !== undefined
+        ? Number(primary.active_users_count)
+        : fallback.active_users_count !== undefined
+        ? Number(fallback.active_users_count)
+        : undefined,
+    };
+  };
+
+  const postJson = async (url: string, body: Record<string, unknown>, timeoutMs = 20000): Promise<any> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      const rawText = await response.text();
+      let parsed: any = {};
+
+      if (rawText) {
+        try {
+          parsed = JSON.parse(rawText);
+        } catch {
+          parsed = rawText;
+        }
+      }
+
+      if (!response.ok) {
+        const message = typeof parsed === 'string'
+          ? parsed
+          : parsed?.error || parsed?.message || response.statusText || `HTTP ${response.status}`;
+        throw new Error(message);
+      }
+
+      return parsed;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
+  const exchangeCodeForToken = async (code: string): Promise<{ response: any; token: string; refreshToken: string | null }> => {
+    if (!configManager.authValidaToken) {
+      throw new Error('AUTH_VALIDA_TOKEN no está configurada.');
+    }
+
+    const response = await postJson(configManager.authValidaToken, {
+      code,
+      application_id: configManager.authAppId,
+    });
+
+    const token = extractTokenCandidate(response);
+    if (!token) {
+      throw new Error('La validación inicial no devolvió un token.');
+    }
+
+    return {
+      response,
+      token,
+      refreshToken: firstString(
+        response?.refresh_token,
+        response?.data?.refresh_token,
+        response?.data?.data?.refresh_token,
+      ) || null,
+    };
+  };
+
+  const validateTokenWithApi = async (token: string): Promise<any> => {
+    if (!configManager.authTokenValida) {
+      return null;
+    }
+
+    return postJson(configManager.authTokenValida, {
+      token,
+      application_id: configManager.authAppId,
+      api_key: configManager.authApiKey,
+    });
+  };
+
   const handleCallback = async (tokenOrCode: string) => {
     try {
       await configManager.loadConfig();
       logRuntimeConfig('login');
+
+      {
+        const isJwt = tokenOrCode.startsWith('eyJ');
+        let exchangeResponse: any = null;
+        let validationResponse: any = null;
+        let accessToken = tokenOrCode;
+        let refreshToken: string | null = null;
+
+        if (!isJwt) {
+          const exchangeResult = await exchangeCodeForToken(tokenOrCode);
+          exchangeResponse = exchangeResult.response;
+          accessToken = exchangeResult.token;
+          refreshToken = exchangeResult.refreshToken;
+        }
+
+        if (configManager.authTokenValida) {
+          validationResponse = await validateTokenWithApi(accessToken);
+          const validatedToken = extractTokenCandidate(validationResponse);
+          if (validatedToken) {
+            accessToken = validatedToken;
+          }
+        }
+
+        const authPayload = validationResponse ?? exchangeResponse ?? {};
+        const authState = extractAuthState(authPayload);
+        const decodedToken = decodeJWT(accessToken);
+
+        if (authState.root && authState.root.valid === false) {
+          throw new Error(firstString(authState.root.error, authState.root.message, 'Token inválido') || 'Token inválido');
+        }
+
+        const refreshTokenCandidate = refreshToken || authState.refreshToken;
+        if (refreshTokenCandidate) {
+          localStorage.setItem('refresh_token', refreshTokenCandidate);
+        }
+
+        if (authState.subscriptionSource) {
+          const normalizedSubscription = normalizeSubscription(authState.subscriptionSource);
+          if (normalizedSubscription) {
+            localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
+            setSubscription(normalizedSubscription);
+          }
+        }
+
+        if (Array.isArray(authState.availablePlansSource)) {
+          const normalizedPlans = normalizeAvailablePlans(authState.availablePlansSource);
+          localStorage.setItem('available_plans', JSON.stringify(normalizedPlans));
+          setAvailablePlans(normalizedPlans);
+        }
+
+        if (typeof authState.hasAccess === 'boolean') {
+          localStorage.setItem('subscription_has_access', JSON.stringify(authState.hasAccess));
+          setSubscriptionHasAccess(authState.hasAccess);
+        }
+
+        if (!accessToken) {
+          throw new Error('No access token available');
+        }
+
+        localStorage.setItem('access_token', accessToken);
+        authClient.setAccessToken(accessToken);
+
+        const userInfo = buildUserInfo(authState, decodedToken);
+        localStorage.setItem('user', JSON.stringify(userInfo));
+        setUser(userInfo);
+        return;
+      }
 
       let accessToken = tokenOrCode;
       let authResponse = null;
@@ -468,7 +736,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
 
       // Persist access token so the session survives browser refreshes.
-      localStorage.setItem('access_token', accessToken);
+      localStorage.setItem('access_token', accessToken || '');
       authClient.setAccessToken(accessToken);
 
       let decodedToken = decodeJWT(accessToken);
@@ -622,6 +890,71 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       // Prefer in-memory access token; if absent, try refresh via cookie
       await configManager.loadConfig();
+
+      {
+        let accessToken = authClient.getAccessToken();
+        if (!accessToken) {
+          accessToken = await authClient.refreshAccessToken(configManager.functionsBaseUrl);
+        }
+        if (!accessToken) return;
+
+        let validationResponse: any = null;
+        if (configManager.authTokenValida) {
+          validationResponse = await validateTokenWithApi(accessToken);
+          const validatedToken = extractTokenCandidate(validationResponse);
+          if (validatedToken) {
+            accessToken = validatedToken;
+          }
+        } else if (configManager.authValidaToken) {
+          validationResponse = await postJson(configManager.authValidaToken, {
+            code: accessToken,
+            application_id: configManager.authAppId,
+          });
+        }
+
+        const decodedToken = decodeJWT(accessToken);
+        const authState = extractAuthState(validationResponse ?? {});
+
+        if (authState.root && authState.root.valid === false) {
+          return;
+        }
+
+        const rawSub = authState.subscriptionSource ?? decodedToken?.subscription;
+        const rawHasAccess =
+          typeof authState.hasAccess === 'boolean'
+            ? authState.hasAccess
+            : typeof decodedToken?.has_access === 'boolean'
+            ? decodedToken.has_access
+            : undefined;
+        const rawPlans = authState.availablePlansSource ?? decodedToken?.available_plans;
+
+        if (rawSub) {
+          const normalized = normalizeSubscription(rawSub);
+          if (normalized) {
+            localStorage.setItem('subscription', JSON.stringify(normalized));
+            setSubscription(normalized);
+          }
+        } else {
+          localStorage.removeItem('subscription');
+          setSubscription(null);
+        }
+
+        if (Array.isArray(rawPlans)) {
+          const normalizedPlans = normalizeAvailablePlans(rawPlans);
+          localStorage.setItem('available_plans', JSON.stringify(normalizedPlans));
+          setAvailablePlans(normalizedPlans);
+        }
+
+        if (typeof rawHasAccess === 'boolean') {
+          localStorage.setItem('subscription_has_access', JSON.stringify(rawHasAccess));
+          setSubscriptionHasAccess(rawHasAccess);
+        }
+
+        localStorage.setItem('access_token', accessToken);
+        authClient.setAccessToken(accessToken);
+        return;
+      }
+
       let accessToken = authClient.getAccessToken();
       if (!accessToken) {
         accessToken = await authClient.refreshAccessToken(configManager.functionsBaseUrl);
@@ -667,7 +1000,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setSubscriptionHasAccess(rawHasAccess);
       }
 
-      localStorage.setItem('access_token', accessToken);
+      localStorage.setItem('access_token', accessToken || '');
     } catch {
       // Silently fail — caller decides what to do next
     }

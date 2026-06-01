@@ -107,6 +107,8 @@ function readFallbackEnv(key: string): string {
       return env.VITE_REDIRECT_URI || '';
     case 'AUTH_VALIDA_TOKEN':
       return env.AUTH_VALIDA_TOKEN || 'https://sfqtmnncgiqkveaoqckt.supabase.co/v1/auth-exchange-code';
+    case 'AUTH_TOKEN_VALIDA':
+      return env.AUTH_TOKEN_VALIDA || '';
     case 'URL_HEALTH_CHECK_API':
       return env.URL_HEALTH_CHECK_API || '';
     case 'VALIDATION_API_BASE_URL':
@@ -142,6 +144,7 @@ function buildFallbackConfig(): EnvConfig {
       VITE_AUTH_URL: readFallbackEnv('VITE_AUTH_URL'),
       VITE_REDIRECT_URI: readFallbackEnv('VITE_REDIRECT_URI'),
       AUTH_VALIDA_TOKEN: readFallbackEnv('AUTH_VALIDA_TOKEN'),
+      AUTH_TOKEN_VALIDA: readFallbackEnv('AUTH_TOKEN_VALIDA'),
       URL_HEALTH_CHECK_API: readFallbackEnv('URL_HEALTH_CHECK_API'),
       VALIDATION_API_BASE_URL: readFallbackEnv('VALIDATION_API_BASE_URL'),
       CANCEL_SUBSCRIPTION_URL: readFallbackEnv('CANCEL_SUBSCRIPTION_URL'),
@@ -211,6 +214,7 @@ class ConfigManager {
             VITE_AUTH_URL: remoteVariables.VITE_AUTH_URL || fallbackConfig.variables.VITE_AUTH_URL,
             VITE_REDIRECT_URI: remoteVariables.VITE_REDIRECT_URI || fallbackConfig.variables.VITE_REDIRECT_URI,
             AUTH_VALIDA_TOKEN: remoteVariables.AUTH_VALIDA_TOKEN || fallbackConfig.variables.AUTH_VALIDA_TOKEN,
+            AUTH_TOKEN_VALIDA: remoteVariables.AUTH_TOKEN_VALIDA || fallbackConfig.variables.AUTH_TOKEN_VALIDA,
             URL_HEALTH_CHECK_API: remoteVariables.URL_HEALTH_CHECK_API || fallbackConfig.variables.URL_HEALTH_CHECK_API,
             VALIDATION_API_BASE_URL: remoteVariables.VALIDATION_API_BASE_URL || fallbackConfig.variables.VALIDATION_API_BASE_URL,
             CANCEL_SUBSCRIPTION_URL: remoteVariables.CANCEL_SUBSCRIPTION_URL || fallbackConfig.variables.CANCEL_SUBSCRIPTION_URL,
@@ -285,6 +289,10 @@ class ConfigManager {
     return this.getVariable('AUTH_VALIDA_TOKEN');
   }
 
+  get authTokenValida(): string {
+    return this.getVariable('AUTH_TOKEN_VALIDA');
+  }
+
   get apiUrl(): string {
     const base = this.getVariable('VITE_QUERY_API_URL') || `${this.functionsBaseUrl}/query`;
     return base;
@@ -345,6 +353,7 @@ export function getRuntimeConfig() {
     authUrl: snapshot.variables.VITE_AUTH_URL || '',
     redirectUri: snapshot.variables.VITE_REDIRECT_URI || '',
     authValidaToken: snapshot.variables.AUTH_VALIDA_TOKEN || '',
+    authTokenValida: snapshot.variables.AUTH_TOKEN_VALIDA || '',
   };
 }
 
