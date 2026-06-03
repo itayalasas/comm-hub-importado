@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Check, Minus, Loader2, Star } from 'lucide-react';
-import { usePlans, type Plan } from '../hooks/usePlans';
+import { sortPlansByOrder, usePlans, type Plan } from '../hooks/usePlans';
 import { configManager } from '../lib/config';
 import { buildLegacyRegisterUrl } from '../lib/subscriptionCheckout';
 
@@ -48,7 +48,13 @@ function buildRegisterUrl(planId: string): string {
 function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   const style = PLAN_STYLE[index] ?? PLAN_STYLE[1];
   const isFreePlan = plan.price === 0;
+  const isDefaultPlan = plan.is_default === true;
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const cardHighlightClass = isDefaultPlan
+    ? 'ring-1 ring-cyan-400/40 shadow-lg shadow-cyan-500/10'
+    : style.highlight
+    ? 'ring-1 ring-blue-400/30'
+    : '';
 
   const sortedFeatures = [...(plan.entitlements?.features ?? [])].sort((a, b) => {
     const ia = FEATURE_ORDER.indexOf(a.code);
@@ -66,7 +72,16 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   };
 
   return (
-    <div className={`relative rounded-2xl border ${style.borderClass} ${style.bgClass} flex flex-col overflow-hidden card-hover ${style.highlight ? 'ring-1 ring-blue-400/30' : ''}`}>
+    <div className={`relative rounded-2xl border ${style.borderClass} ${style.bgClass} flex flex-col overflow-hidden card-hover ${cardHighlightClass}`}>
+      {isDefaultPlan && (
+        <div className="absolute top-4 right-4 z-10">
+          <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200 shadow-lg shadow-cyan-500/15 backdrop-blur">
+            <Star className="w-3 h-3 fill-current" />
+            Predeterminado
+          </span>
+        </div>
+      )}
+
       {style.badge && (
         <div className="absolute top-0 left-0 right-0 flex justify-center">
           <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${index === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
@@ -146,6 +161,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
 
 export function PricingPlansSection() {
   const { plans, loading } = usePlans();
+  const orderedPlans = sortPlansByOrder(plans);
 
   return (
     <section id="pricing" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
@@ -174,7 +190,7 @@ export function PricingPlansSection() {
             plans.length === 3 ? 'grid-cols-1 sm:grid-cols-3 max-w-5xl mx-auto' :
             'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4'
           }`}>
-            {plans.map((plan, index) => (
+            {orderedPlans.map((plan, index) => (
               <PlanCard key={plan.id} plan={plan} index={index} />
             ))}
           </div>

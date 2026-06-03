@@ -434,6 +434,83 @@ export const Dashboard = () => {
 
   const showChannelTabs = hasWhatsApp;
 
+  const ServiceStatusPanel = () => {
+    const overall = services.some(s => s.status === 'down')
+      ? { icon: XCircle, label: 'Fuera de Servicio', text: 'text-red-400' }
+      : services.some(s => s.status === 'degraded')
+      ? { icon: Activity, label: 'Degradado', text: 'text-amber-400' }
+      : services.some(s => s.status === 'unconfigured')
+      ? { icon: Zap, label: 'Config. Pendiente', text: 'text-slate-400' }
+      : { icon: Zap, label: 'Operacional', text: 'text-emerald-400' };
+
+    const cards = services.length ? services : [
+      { name: 'API', status: 'down', responseTime: 0, message: 'Sin respuesta' },
+      { name: 'Base de Datos', status: 'down', responseTime: 0, message: 'Sin respuesta' },
+      { name: 'Email Service', status: 'down', responseTime: 0, message: 'Sin respuesta' },
+      { name: 'PDF Generator', status: 'down', responseTime: 0, message: 'Sin respuesta' },
+    ] as ServiceStatus[];
+
+    return (
+      <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-cyan-400" />
+            <h2 className="text-base font-semibold text-white">Estado de Servicios</h2>
+          </div>
+          <div className={`flex items-center gap-1.5 text-xs ${overall.text}`}>
+            <overall.icon className="w-3.5 h-3.5" />
+            <span className="font-medium">{overall.label}</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {cards.map((svc, i) => {
+            const dotColor = svc.status === 'operational'
+              ? 'bg-emerald-500'
+              : svc.status === 'degraded'
+              ? 'bg-amber-500'
+              : svc.status === 'unconfigured'
+              ? 'bg-slate-500'
+              : 'bg-red-500';
+            const textColor = svc.status === 'operational'
+              ? 'text-emerald-400'
+              : svc.status === 'degraded'
+              ? 'text-amber-400'
+              : svc.status === 'unconfigured'
+              ? 'text-slate-400'
+              : 'text-red-400';
+            const borderColor = svc.status === 'operational'
+              ? 'border-emerald-500/20'
+              : svc.status === 'degraded'
+              ? 'border-amber-500/20'
+              : svc.status === 'unconfigured'
+              ? 'border-slate-600/40'
+              : 'border-red-500/20';
+            const label = svc.status === 'operational'
+              ? 'Operacional'
+              : svc.status === 'degraded'
+              ? 'Degradado'
+              : svc.status === 'unconfigured'
+              ? 'No config.'
+              : 'Caído';
+
+            return (
+              <div key={i} className={`bg-slate-900/50 rounded-lg border ${borderColor} px-4 py-3 flex items-center gap-3`}>
+                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotColor} ${svc.status === 'operational' ? 'animate-pulse' : ''}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-white truncate">{svc.name}</div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={`text-[10px] font-medium ${textColor}`}>{svc.message || label}</span>
+                    {svc.responseTime > 0 && <span className="text-[10px] text-slate-600">{svc.responseTime}ms</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (<Layout currentPage="dashboard"><PageLoader /></Layout>);
   }
@@ -446,8 +523,8 @@ export const Dashboard = () => {
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-12 text-center">
             <Mail className="w-16 h-16 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">No tienes aplicaciones</h3>
-            <p className="text-slate-400 mb-6">Crea tu primera aplicación en Configuración para empezar a ver estadísticas</p>
           </div>
+          <ServiceStatusPanel />
         </div>
       </Layout>
     );

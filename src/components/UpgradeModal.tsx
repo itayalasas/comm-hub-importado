@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { X, Check, Minus, TrendingUp, Loader2, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { usePlans } from '../hooks/usePlans';
+import { sortPlansByOrder, usePlans } from '../hooks/usePlans';
 import type { PlanFeature } from '../hooks/usePlans';
 
 interface UpgradeModalProps {
@@ -53,7 +53,7 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
 
   if (!isOpen) return null;
 
-  const sortedPlans = [...plans].sort((a, b) => a.price - b.price);
+  const sortedPlans = sortPlansByOrder(plans);
 
   // Identify current plan by matching plan_name
   const currentPlanName = subscription?.plan_name?.toLowerCase().trim() ?? '';
@@ -129,9 +129,18 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                     </th>
                     {sortedPlans.map((plan) => {
                       const isCurrent = isCurrentPlan(plan.name);
+                      const isDefaultPlan = plan.is_default === true;
                       return (
                         <th key={plan.id} className="relative w-[16rem] px-2 pb-6 text-center align-bottom overflow-visible">
-                          <div className="relative pt-8 overflow-visible">
+                          <div className={`relative pt-8 overflow-visible rounded-2xl ${isDefaultPlan ? 'bg-cyan-500/5 ring-1 ring-cyan-400/20' : ''}`}>
+                            {isDefaultPlan && (
+                              <div className="pointer-events-none absolute right-2 top-2 z-30">
+                                <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-200 shadow-lg shadow-cyan-500/15 backdrop-blur">
+                                  <Star className="w-2.5 h-2.5 fill-current" />
+                                  Predeterminado
+                                </span>
+                              </div>
+                            )}
                             {isCurrent && (
                               <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2">
                                 <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-500 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-[0_12px_28px_rgba(34,211,238,0.35)] ring-1 ring-white/25 backdrop-blur">

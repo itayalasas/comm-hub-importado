@@ -8,7 +8,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
 import { UserMenu } from './UserMenu';
-import { usePlans } from '../hooks/usePlans';
+import { sortPlansByOrder, usePlans } from '../hooks/usePlans';
 import { configManager } from '../lib/config';
 
 interface LayoutProps {
@@ -62,7 +62,7 @@ function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
 
 const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) => {
   const { plans, loading } = usePlans();
-  const paidPlans = plans.filter(p => p.price > 0 || p.trial_days === 0);
+  const paidPlans = sortPlansByOrder(plans.filter(p => p.price > 0 || p.trial_days === 0));
 
   if (loading) {
     return (
@@ -78,6 +78,7 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
         {paidPlans.map((plan, i) => {
           const styleIdx = Math.min(i + 1, 3);
           const style = PLAN_STYLE[styleIdx];
+          const isDefaultPlan = plan.is_default === true;
           const sortedFeatures = [...(plan.entitlements?.features ?? [])].sort((a, b) => {
             const ia = FEATURE_ORDER.indexOf(a.code);
             const ib = FEATURE_ORDER.indexOf(b.code);
@@ -87,14 +88,29 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
           const planMaxUsers = plan.entitlements?.features?.find(f => f.code === 'max_users');
           const planUserLimit = planMaxUsers ? parseInt(planMaxUsers.value, 10) : null;
           const coversNeeds = highlightUsersAbove === undefined || planUserLimit === null || planUserLimit > highlightUsersAbove;
+          const cardHighlightClass =
+            highlightUsersAbove !== undefined && coversNeeds
+              ? 'ring-1 ring-cyan-500/30'
+              : isDefaultPlan
+              ? 'ring-1 ring-cyan-400/40 shadow-lg shadow-cyan-500/10'
+              : '';
 
           return (
             <div
               key={plan.id}
-              className={`relative mx-auto w-full max-w-[20rem] rounded-2xl border ${style.border} ${style.bg} flex flex-col overflow-hidden transition-transform hover:-translate-y-1 duration-200 ${
+              className={`relative mx-auto w-full max-w-[20rem] rounded-2xl border ${style.border} ${style.bg} flex flex-col overflow-hidden transition-transform hover:-translate-y-1 duration-200 ${cardHighlightClass} ${
                 highlightUsersAbove !== undefined && !coversNeeds ? 'opacity-60' : ''
-              } ${highlightUsersAbove !== undefined && coversNeeds ? 'ring-1 ring-cyan-500/30' : ''}`}
+              }`}
             >
+              {isDefaultPlan && (
+                <div className="absolute top-4 right-4 z-10">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200 shadow-lg shadow-cyan-500/15 backdrop-blur">
+                    <Star className="w-3 h-3 fill-current" />
+                    Predeterminado
+                  </span>
+                </div>
+              )}
+
               {style.badge && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
                   <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-cyan-500/30 ring-1 ring-white/20 backdrop-blur ${

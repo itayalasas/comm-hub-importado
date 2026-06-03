@@ -22,10 +22,11 @@ import {
   MousePointer,
   Eye,
   X,
+  Star,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePlans, type Plan } from '../hooks/usePlans';
+import { sortPlansByOrder, usePlans, type Plan } from '../hooks/usePlans';
 import { configManager } from '../lib/config';
 import { buildLegacyRegisterUrl } from '../lib/subscriptionCheckout';
 
@@ -491,7 +492,13 @@ function buildRegisterUrl(planId: string): string {
 function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   const style = PLAN_STYLE[index] ?? PLAN_STYLE[1];
   const isFreePlan = plan.price === 0;
+  const isDefaultPlan = plan.is_default === true;
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const cardHighlightClass = isDefaultPlan
+    ? 'ring-1 ring-cyan-400/40 shadow-lg shadow-cyan-500/10'
+    : style.highlight
+    ? 'ring-1 ring-blue-400/30'
+    : '';
 
   // Sort features by our preferred display order; unknown features go to the end
   const sortedFeatures = [...(plan.entitlements?.features ?? [])].sort((a, b) => {
@@ -510,7 +517,16 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   };
 
   return (
-    <div className={`relative rounded-2xl border ${style.borderClass} ${style.bgClass} flex flex-col overflow-hidden card-hover ${style.highlight ? 'ring-1 ring-blue-400/30' : ''}`}>
+    <div className={`relative rounded-2xl border ${style.borderClass} ${style.bgClass} flex flex-col overflow-hidden card-hover ${cardHighlightClass}`}>
+      {isDefaultPlan && (
+        <div className="absolute top-4 right-4 z-10">
+          <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200 shadow-lg shadow-cyan-500/15 backdrop-blur">
+            <Star className="w-3 h-3 fill-current" />
+            Predeterminado
+          </span>
+        </div>
+      )}
+
       {style.badge && (
         <div className="absolute top-0 left-0 right-0 flex justify-center">
           <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${index === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
@@ -750,6 +766,7 @@ function SupportModal({ onClose }: { onClose: () => void }) {
 export const Home = () => {
   const navigate = useNavigate();
   const { plans, loading: plansLoading } = usePlans();
+  const orderedPlans = sortPlansByOrder(plans);
   const [supportOpen, setSupportOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -1161,7 +1178,7 @@ export const Home = () => {
               plans.length === 3 ? 'grid-cols-1 sm:grid-cols-3 max-w-5xl mx-auto' :
               'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4'
             }`}>
-              {plans.map((plan, i) => (
+              {orderedPlans.map((plan, i) => (
                 <PlanCard key={plan.id} plan={plan} index={i} />
               ))}
             </div>

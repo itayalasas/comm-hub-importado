@@ -42,6 +42,8 @@ export interface Plan {
     status: string | null;
   } | null;
   is_active?: boolean;
+  is_default?: boolean;
+  sort_order?: number | string | null;
 }
 
 export interface CheckoutMeta {
@@ -60,6 +62,49 @@ interface PlansResult {
   checkout: CheckoutMeta | null;
 }
 
+const FALLBACK_SORT_ORDER = Number.MAX_SAFE_INTEGER;
+
+function getPlanSortOrder(plan: Plan): number {
+  const rawOrder = plan.sort_order;
+
+  if (typeof rawOrder === 'number' && Number.isFinite(rawOrder)) {
+    return rawOrder;
+  }
+
+  if (typeof rawOrder === 'string') {
+    const parsed = Number(rawOrder);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return FALLBACK_SORT_ORDER;
+}
+
+export function sortPlansByOrder(plans: Plan[]): Plan[] {
+  return [...plans].sort((a, b) => {
+    const orderA = getPlanSortOrder(a);
+    const orderB = getPlanSortOrder(b);
+
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+
+    const defaultA = a.is_default === true;
+    const defaultB = b.is_default === true;
+
+    if (defaultA !== defaultB) {
+      return defaultA ? -1 : 1;
+    }
+
+    if (a.price !== b.price) {
+      return a.price - b.price;
+    }
+
+    return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+  });
+}
+
 let cachedPlans: Plan[] | null = null;
 let cachedCheckout: CheckoutMeta | null = null;
 
@@ -76,7 +121,7 @@ export const usePlans = (): PlansResult => {
       try {
         if (cachedPlans !== null && cachedCheckout !== null) {
           if (!cancelled) {
-            setPlans(cachedPlans);
+            setPlans(sortPlansByOrder(cachedPlans));
             setCheckout(cachedCheckout);
             setLoading(false);
           }
@@ -113,8 +158,10 @@ export const usePlans = (): PlansResult => {
         const responseData = json?.data ?? json ?? {};
         const availablePlans = responseData.available_plans ?? responseData.plans ?? [];
         const checkoutMeta = responseData.checkout ?? null;
-        const fetchedPlans: Plan[] = (Array.isArray(availablePlans) ? availablePlans : []).filter(
-          (plan: Plan) => plan.is_active !== false,
+        const fetchedPlans = sortPlansByOrder(
+          (Array.isArray(availablePlans) ? availablePlans : []).filter(
+            (plan: Plan) => plan.is_active !== false,
+          ),
         );
 
         if (!cancelled) {
