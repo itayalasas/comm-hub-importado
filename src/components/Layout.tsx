@@ -8,8 +8,10 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
 import { UserMenu } from './UserMenu';
-import { sortPlansByOrder, usePlans } from '../hooks/usePlans';
-import { configManager } from '../lib/config';
+import { useToast } from './Toast';
+import { resolveManagedCheckoutEndpoint, resolvePlanCheckoutUrl, sortPlansByOrder, usePlans } from '../hooks/usePlans';
+import { getRuntimeConfig, configManager } from '../lib/config';
+import { startManagedSubscriptionCheckout, storePendingSubscriptionCheckout } from '../lib/subscriptionCheckout';
 
 interface LayoutProps {
   children: ReactNode;
@@ -49,20 +51,70 @@ const FEATURE_ORDER = [
   'priority_support',
 ];
 
-function buildSubscribeUrl(plan: import('../hooks/usePlans').Plan): string {
-  if (plan.mercadopago?.init_point) return plan.mercadopago.init_point;
-  const base = configManager.authUrl;
-  const appId = configManager.authAppId;
-  const apiKey = configManager.authApiKey;
-  const redirectUri = configManager.redirectUri;
-  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${plan.id}`;
-}
-
 /* ── Plan card list (shared by blockers) ────────────────────────── */
 
 const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) => {
-  const { plans, loading } = usePlans();
+  const { user } = useAuth();
+  const toast = useToast();
+  const { plans, loading, checkout } = usePlans();
+  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
   const paidPlans = sortPlansByOrder(plans.filter(p => p.price > 0 || p.trial_days === 0));
+
+  const handleSubscribe = async (plan: import('../hooks/usePlans').Plan) => {
+    const directCheckoutUrl = resolvePlanCheckoutUrl(plan);
+    if (directCheckoutUrl) {
+      window.location.href = directCheckoutUrl;
+      return;
+    }
+
+    if (subscribingPlanId) return;
+
+    setSubscribingPlanId(plan.id);
+    try {
+      await configManager.loadConfig();
+      const { authAppId, authApiKey } = getRuntimeConfig();
+      if (!authAppId || !authApiKey) {
+        throw new Error('No se encontraron las credenciales de suscripción.');
+      }
+
+      const returnUrl = `${window.location.origin}/subscription/result`;
+      const result = await startManagedSubscriptionCheckout({
+        applicationId: authAppId,
+        apiKey: authApiKey,
+        planId: plan.id,
+        returnUrl,
+        email: user?.email || undefined,
+        tenantId: user?.tenant_id,
+        endpoint: resolveManagedCheckoutEndpoint(checkout, 'start'),
+      });
+
+      if (result.checkout_session_id) {
+        storePendingSubscriptionCheckout({
+          checkout_session_id: result.checkout_session_id,
+          plan_id: plan.id,
+          created_at: Date.now(),
+        });
+      }
+
+      const targetUrl = result.checkout_url || result.redirect_url;
+      if (targetUrl) {
+        window.location.href = targetUrl;
+        return;
+      }
+
+      if (result.checkout_session_id) {
+        window.location.href = `${returnUrl}?checkout_session_id=${encodeURIComponent(result.checkout_session_id)}`;
+        return;
+      }
+
+      throw new Error('No se recibió una URL de pago.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No pudimos iniciar el checkout.';
+      toast.error(message);
+    } finally {
+      setSubscribingPlanId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -79,6 +131,13 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
           const styleIdx = Math.min(i + 1, 3);
           const style = PLAN_STYLE[styleIdx];
           const isDefaultPlan = plan.is_default === true;
+          const badgeLabel = isDefaultPlan ? 'Predeterminado' : style.badge;
+          const badgeClassName = isDefaultPlan
+            ? 'border border-cyan-400/30 bg-cyan-500/15 text-cyan-200 shadow-lg shadow-cyan-500/15'
+            : styleIdx === 2
+            ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-white shadow-lg shadow-cyan-500/30 ring-1 ring-white/20'
+            : 'bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-lg shadow-cyan-500/30 ring-1 ring-white/20';
+          const isSubmitting = subscribingPlanId === plan.id;
           const sortedFeatures = [...(plan.entitlements?.features ?? [])].sort((a, b) => {
             const ia = FEATURE_ORDER.indexOf(a.code);
             const ib = FEATURE_ORDER.indexOf(b.code);
@@ -102,28 +161,17 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
                 highlightUsersAbove !== undefined && !coversNeeds ? 'opacity-60' : ''
               }`}
             >
-              {isDefaultPlan && (
-                <div className="absolute top-4 right-4 z-10">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200 shadow-lg shadow-cyan-500/15 backdrop-blur">
-                    <Star className="w-3 h-3 fill-current" />
-                    Predeterminado
-                  </span>
-                </div>
-              )}
-
-              {style.badge && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-                  <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-cyan-500/30 ring-1 ring-white/20 backdrop-blur ${
-                    styleIdx === 2 ? 'bg-gradient-to-r from-blue-500 to-cyan-400' : 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                  }`}>
-                    <Star className="w-3 h-3 fill-current" />
-                    {style.badge}
-                  </span>
-                </div>
-              )}
-              <div className={`p-5 flex flex-col flex-1 ${style.badge ? 'pt-8' : ''}`}>
+              <div className="p-5 flex flex-col flex-1">
                 <div className="mb-4">
-                  <h3 className={`text-lg font-extrabold mb-0.5 ${style.accent}`}>{plan.name}</h3>
+                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                    <h3 className={`text-lg font-extrabold ${style.accent}`}>{plan.name}</h3>
+                    {badgeLabel && (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] backdrop-blur ${badgeClassName}`}>
+                        <Star className="w-3 h-3 fill-current" />
+                        {badgeLabel}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-slate-500 text-xs">{plan.description}</p>
                 </div>
                 <div className="mb-4 flex items-baseline gap-1">
@@ -163,10 +211,16 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
                   })}
                 </ul>
                 <button
-                  onClick={() => { window.location.href = buildSubscribeUrl(plan); }}
-                  className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-95 ${style.btn}`}
+                  onClick={() => { void handleSubscribe(plan); }}
+                  disabled={isSubmitting || subscribingPlanId !== null}
+                  className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-80 disabled:cursor-not-allowed ${isSubmitting ? 'scale-100' : 'hover:scale-[1.02] active:scale-95'} ${style.btn}`}
                 >
-                  {highlightUsersAbove !== undefined ? `Actualizar a ${plan.name}` : 'Suscribirse'}
+                  {isSubmitting ? (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Iniciando...
+                    </span>
+                  ) : highlightUsersAbove !== undefined ? `Actualizar a ${plan.name}` : 'Ir al pago'}
                 </button>
               </div>
             </div>

@@ -48,7 +48,9 @@ export interface Plan {
 
 export interface CheckoutMeta {
   managed_by_authsystem: boolean;
+  start_proxy_endpoint?: string;
   start_endpoint: string;
+  status_proxy_endpoint?: string;
   status_endpoint: string;
   cancel_endpoint?: string;
   cancel_proxy_endpoint?: string;
@@ -103,6 +105,36 @@ export function sortPlansByOrder(plans: Plan[]): Plan[] {
 
     return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
   });
+}
+
+export function resolvePlanCheckoutUrl(plan: Pick<Plan, 'checkout_url' | 'subscribe_url' | 'mp_init_point' | 'mercadopago'>): string | null {
+  const candidates = [
+    plan.mercadopago?.init_point,
+    plan.mp_init_point,
+    plan.subscribe_url,
+    plan.checkout_url,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
+export function resolveManagedCheckoutEndpoint(
+  checkout: Pick<CheckoutMeta, 'start_proxy_endpoint' | 'start_endpoint' | 'status_proxy_endpoint' | 'status_endpoint'> | null | undefined,
+  type: 'start' | 'status',
+): string | undefined {
+  if (!checkout) return undefined;
+
+  if (type === 'start') {
+    return checkout.start_proxy_endpoint || checkout.start_endpoint;
+  }
+
+  return checkout.status_proxy_endpoint || checkout.status_endpoint;
 }
 
 let cachedPlans: Plan[] | null = null;

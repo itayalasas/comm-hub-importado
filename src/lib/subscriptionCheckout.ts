@@ -65,6 +65,42 @@ async function fetchJsonWithTimeout(
   }
 }
 
+function normalizeManagedCheckoutPath(endpoint: string, fallbackPath: string): string {
+  const cleanedPath = endpoint
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '');
+
+  if (fallbackPath === 'subscription-start-checkout') {
+    const legacyStartPaths = new Set([
+      'api/application/subscription/start-checkout',
+      'functions/v1/subscription-start-checkout',
+      'subscription-start-checkout',
+      'start-checkout',
+    ]);
+
+    if (legacyStartPaths.has(cleanedPath)) {
+      return 'subscription-start-checkout';
+    }
+  }
+
+  if (fallbackPath === 'subscription-checkout-status') {
+    const legacyStatusPaths = new Set([
+      'api/application/subscription/session',
+      'api/application/subscription/check-out-status',
+      'functions/v1/subscription-checkout-status',
+      'subscription-checkout-status',
+      'checkout-status',
+      'session',
+    ]);
+
+    if (legacyStatusPaths.has(cleanedPath)) {
+      return 'subscription-checkout-status';
+    }
+  }
+
+  return cleanedPath;
+}
+
 export function resolveCheckoutEndpoint(endpoint: string | undefined, fallbackPath: string): string {
   const runtime = getRuntimeConfig();
   const baseUrl = (runtime.functionsBaseUrlRaw || runtime.supabaseUrl || '').trim().replace(/\/+$/, '');
@@ -72,9 +108,23 @@ export function resolveCheckoutEndpoint(endpoint: string | undefined, fallbackPa
     throw new Error('Missing functions base URL');
   }
 
-  if (endpoint && /^https?:\/\//i.test(endpoint)) return endpoint;
+  if (endpoint && /^https?:\/\//i.test(endpoint)) {
+    try {
+      const url = new URL(endpoint);
+      const normalizedPath = normalizeManagedCheckoutPath(url.pathname, fallbackPath);
+      if (normalizedPath !== url.pathname.replace(/^\/+/, '').replace(/\/+$/, '')) {
+        return `${url.origin}/${normalizedPath}`;
+      }
+    } catch {
+      // If the URL cannot be parsed, keep the original value.
+    }
+
+    return endpoint;
+  }
+
   const rawPath = endpoint ?? fallbackPath;
-  return buildFunctionsUrl(rawPath, baseUrl);
+  const normalizedPath = normalizeManagedCheckoutPath(rawPath, fallbackPath);
+  return buildFunctionsUrl(normalizedPath, baseUrl);
 }
 
 export function storePendingSubscriptionCheckout(value: PendingSubscriptionCheckout): void {
@@ -122,12 +172,13 @@ export async function startManagedSubscriptionCheckout({
   endpoint,
 }: StartManagedCheckoutArgs): Promise<StartManagedCheckoutResult> {
   const url = resolveCheckoutEndpoint(endpoint, 'subscription-start-checkout');
+  const checkoutEmail = email?.trim() || TEST_SUBSCRIPTION_EMAIL;
   const body = {
     application_id: applicationId,
     api_key: apiKey,
     plan_id: planId,
     return_url: returnUrl,
-    email: TEST_SUBSCRIPTION_EMAIL,
+    email: checkoutEmail,
     tenant_id: tenantId,
   };
 

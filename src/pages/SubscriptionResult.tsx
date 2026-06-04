@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CheckCircle, Clock, Loader2, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { usePlans, invalidatePlansCache } from '../hooks/usePlans';
+import { invalidatePlansCache, resolveManagedCheckoutEndpoint, usePlans } from '../hooks/usePlans';
 import { getRuntimeConfig } from '../lib/config';
 import {
   clearPendingSubscriptionCheckout,
@@ -46,7 +46,7 @@ export const SubscriptionResult = () => {
           applicationId: authAppId,
           apiKey: authApiKey,
           checkoutSessionId,
-          endpoint: checkout?.status_endpoint,
+          endpoint: resolveManagedCheckoutEndpoint(checkout, 'status'),
         });
 
         if (cancelled) return;

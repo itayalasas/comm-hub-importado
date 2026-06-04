@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Check, Minus, TrendingUp, Loader2, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { sortPlansByOrder, usePlans } from '../hooks/usePlans';
-import type { PlanFeature } from '../hooks/usePlans';
+import { resolveManagedCheckoutEndpoint, resolvePlanCheckoutUrl, sortPlansByOrder, usePlans } from '../hooks/usePlans';
+import { useToast } from './Toast';
+import { configManager, getRuntimeConfig } from '../lib/config';
+import { startManagedSubscriptionCheckout, storePendingSubscriptionCheckout } from '../lib/subscriptionCheckout';
+import type { Plan, PlanFeature } from '../hooks/usePlans';
 
 interface UpgradeModalProps {
   isOpen: boolean;
@@ -48,8 +52,10 @@ function formatFeatureValue(f: PlanFeature): string {
 }
 
 export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
-  const { subscription } = useAuth();
-  const { plans, loading } = usePlans();
+  const { subscription, user } = useAuth();
+  const toast = useToast();
+  const { plans, loading, checkout } = usePlans();
+  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -64,6 +70,62 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
   const handleSelect = (initPoint: string | null | undefined) => {
     if (!initPoint) return;
     window.location.href = initPoint;
+  };
+
+  const handlePlanSelect = async (plan: Plan) => {
+    const directCheckoutUrl = resolvePlanCheckoutUrl(plan);
+    if (directCheckoutUrl) {
+      handleSelect(directCheckoutUrl);
+      return;
+    }
+
+    if (subscribingPlanId) return;
+
+    setSubscribingPlanId(plan.id);
+    try {
+      await configManager.loadConfig();
+      const { authAppId, authApiKey } = getRuntimeConfig();
+      if (!authAppId || !authApiKey) {
+        throw new Error('No se encontraron las credenciales de suscripción.');
+      }
+
+      const returnUrl = `${window.location.origin}/subscription/result`;
+      const result = await startManagedSubscriptionCheckout({
+        applicationId: authAppId,
+        apiKey: authApiKey,
+        planId: plan.id,
+        returnUrl,
+        email: user?.email || undefined,
+        tenantId: user?.tenant_id,
+        endpoint: resolveManagedCheckoutEndpoint(checkout, 'start'),
+      });
+
+      if (result.checkout_session_id) {
+        storePendingSubscriptionCheckout({
+          checkout_session_id: result.checkout_session_id,
+          plan_id: plan.id,
+          created_at: Date.now(),
+        });
+      }
+
+      const targetUrl = result.checkout_url || result.redirect_url;
+      if (targetUrl) {
+        window.location.href = targetUrl;
+        return;
+      }
+
+      if (result.checkout_session_id) {
+        window.location.href = `${returnUrl}?checkout_session_id=${encodeURIComponent(result.checkout_session_id)}`;
+        return;
+      }
+
+      throw new Error('No se recibió una URL de pago.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No pudimos iniciar el checkout.';
+      toast.error(message);
+    } finally {
+      setSubscribingPlanId(null);
+    }
   };
 
   // Collect all unique feature codes across all plans in defined order
@@ -130,17 +192,11 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                     {sortedPlans.map((plan) => {
                       const isCurrent = isCurrentPlan(plan.name);
                       const isDefaultPlan = plan.is_default === true;
+                      const badgeLabel = isDefaultPlan ? 'Predeterminado' : null;
+                      const isSubmitting = subscribingPlanId === plan.id;
                       return (
                         <th key={plan.id} className="relative w-[16rem] px-2 pb-6 text-center align-bottom overflow-visible">
                           <div className={`relative pt-8 overflow-visible rounded-2xl ${isDefaultPlan ? 'bg-cyan-500/5 ring-1 ring-cyan-400/20' : ''}`}>
-                            {isDefaultPlan && (
-                              <div className="pointer-events-none absolute right-2 top-2 z-30">
-                                <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-200 shadow-lg shadow-cyan-500/15 backdrop-blur">
-                                  <Star className="w-2.5 h-2.5 fill-current" />
-                                  Predeterminado
-                                </span>
-                              </div>
-                            )}
                             {isCurrent && (
                               <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2">
                                 <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-500 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-[0_12px_28px_rgba(34,211,238,0.35)] ring-1 ring-white/25 backdrop-blur">
@@ -149,9 +205,17 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                                 </span>
                               </div>
                             )}
-                            <p className={`font-extrabold text-base mb-1 ${isCurrent ? 'text-cyan-400' : 'text-white'}`}>
-                              {plan.name}
-                            </p>
+                            <div className="flex items-center justify-center gap-2 flex-wrap mb-1">
+                              <p className={`font-extrabold text-base ${isCurrent ? 'text-cyan-400' : 'text-white'}`}>
+                                {plan.name}
+                              </p>
+                              {badgeLabel && (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/15 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-cyan-200 shadow-lg shadow-cyan-500/15 backdrop-blur">
+                                  <Star className="w-2.5 h-2.5 fill-current" />
+                                  {badgeLabel}
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-baseline justify-center gap-1">
                               <span className="text-xl font-extrabold text-white">
                                 {plan.currency} {plan.price.toLocaleString('es-UY')}
@@ -160,15 +224,15 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                             </div>
                             {!isCurrent && (
                               <button
-                                onClick={() => handleSelect(plan.mercadopago?.init_point)}
-                                disabled={!plan.mercadopago?.init_point}
+                                onClick={() => { void handlePlanSelect(plan); }}
+                                disabled={isSubmitting || subscribingPlanId !== null}
                                 className={`mt-3 w-full py-2 rounded-lg text-xs font-bold transition-all ${
-                                  plan.mercadopago?.init_point
-                                    ? 'bg-cyan-500 hover:bg-cyan-400 text-white hover:shadow-md hover:shadow-cyan-500/20'
-                                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                  isSubmitting
+                                    ? 'bg-cyan-500 text-white opacity-90'
+                                    : 'bg-cyan-500 hover:bg-cyan-400 text-white hover:shadow-md hover:shadow-cyan-500/20'
                                 }`}
                               >
-                                {plan.mercadopago?.init_point ? 'Seleccionar' : 'No disponible'}
+                                {isSubmitting ? 'Iniciando...' : 'Seleccionar'}
                               </button>
                             )}
                             {isCurrent && (

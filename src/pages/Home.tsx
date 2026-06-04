@@ -493,6 +493,12 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   const style = PLAN_STYLE[index] ?? PLAN_STYLE[1];
   const isFreePlan = plan.price === 0;
   const isDefaultPlan = plan.is_default === true;
+  const badgeLabel = isDefaultPlan ? 'Predeterminado' : style.badge;
+  const badgeClassName = isDefaultPlan
+    ? 'border border-cyan-400/30 bg-cyan-500/15 text-cyan-200 shadow-lg shadow-cyan-500/15'
+    : index === 2
+    ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-white shadow-lg shadow-cyan-500/30 ring-1 ring-white/20'
+    : 'bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-lg shadow-cyan-500/30 ring-1 ring-white/20';
   const [isRedirecting, setIsRedirecting] = useState(false);
   const cardHighlightClass = isDefaultPlan
     ? 'ring-1 ring-cyan-400/40 shadow-lg shadow-cyan-500/10'
@@ -518,26 +524,17 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
 
   return (
     <div className={`relative rounded-2xl border ${style.borderClass} ${style.bgClass} flex flex-col overflow-hidden card-hover ${cardHighlightClass}`}>
-      {isDefaultPlan && (
-        <div className="absolute top-4 right-4 z-10">
-          <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200 shadow-lg shadow-cyan-500/15 backdrop-blur">
-            <Star className="w-3 h-3 fill-current" />
-            Predeterminado
-          </span>
-        </div>
-      )}
-
-      {style.badge && (
-        <div className="absolute top-0 left-0 right-0 flex justify-center">
-          <span className={`text-xs font-bold px-4 py-1 rounded-b-lg ${index === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
-            {style.badge}
-          </span>
-        </div>
-      )}
-
-      <div className={`p-6 flex flex-col flex-1 ${style.badge ? 'pt-10' : ''}`}>
+      <div className="p-6 flex flex-col flex-1">
         <div className="mb-5">
-          <h3 className={`text-xl font-extrabold mb-1 ${style.accentClass}`}>{plan.name}</h3>
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <h3 className={`text-xl font-extrabold ${style.accentClass}`}>{plan.name}</h3>
+            {badgeLabel && (
+              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] backdrop-blur ${badgeClassName}`}>
+                <Star className="w-3 h-3 fill-current" />
+                {badgeLabel}
+              </span>
+            )}
+          </div>
           <p className="text-slate-500 text-xs">{plan.description}</p>
         </div>
 
