@@ -15,7 +15,7 @@ type ResultState = 'loading' | 'success' | 'pending' | 'error';
 export const SubscriptionResult = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { refreshSubscription } = useAuth();
+  const { refreshSubscription, applyCheckoutStatus } = useAuth();
   const { checkout } = usePlans();
 
   const [state, setState] = useState<ResultState>('loading');
@@ -53,7 +53,8 @@ export const SubscriptionResult = () => {
 
         clearPendingSubscriptionCheckout();
         invalidatePlansCache();
-        await refreshSubscription();
+        await refreshSubscription().catch(() => null);
+        applyCheckoutStatus(result);
 
         const sub = result.subscription;
         const status = String(result.status ?? sub?.status ?? '').toLowerCase();
@@ -83,7 +84,7 @@ export const SubscriptionResult = () => {
     return () => {
       cancelled = true;
     };
-  }, [checkout?.status_endpoint, refreshSubscription, searchParams]);
+  }, [applyCheckoutStatus, checkout?.status_endpoint, refreshSubscription, searchParams]);
 
   const goToDashboard = () => navigate('/dashboard', { replace: true });
 

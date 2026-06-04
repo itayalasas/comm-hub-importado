@@ -85,6 +85,7 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
         returnUrl,
         email: user?.email || undefined,
         tenantId: user?.tenant_id,
+        appUserId: user?.sub,
         endpoint: resolveManagedCheckoutEndpoint(checkout, 'start'),
       });
 

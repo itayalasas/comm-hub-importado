@@ -23,6 +23,7 @@ export interface StartManagedCheckoutArgs {
   returnUrl: string;
   email?: string;
   tenantId?: string;
+  appUserId?: string;
   endpoint?: string;
 }
 
@@ -169,6 +170,7 @@ export async function startManagedSubscriptionCheckout({
   returnUrl,
   email,
   tenantId,
+  appUserId,
   endpoint,
 }: StartManagedCheckoutArgs): Promise<StartManagedCheckoutResult> {
   const url = resolveCheckoutEndpoint(endpoint, 'subscription-start-checkout');
@@ -180,6 +182,7 @@ export async function startManagedSubscriptionCheckout({
     return_url: returnUrl,
     email: checkoutEmail,
     tenant_id: tenantId,
+    app_user_id: appUserId,
   };
 
   console.log('[subscription-start-checkout] request', {
