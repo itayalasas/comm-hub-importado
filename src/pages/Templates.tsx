@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { PageLoader } from '../components/PageLoader';
 import { TemplateEditor } from '../components/TemplateEditor';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { verifyApplicationOwnership } from '../lib/security';
-import { queryMutate } from '../lib/queryApi';
+import { queryMutate, querySelect } from '../lib/queryApi';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
+import { loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
 import { Plus, CreditCard as Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X, Download, Upload } from 'lucide-react';
 
 interface Application {
@@ -99,31 +99,25 @@ export const Templates = () => {
     try {
       if (!user?.sub) return;
 
-      const { data: prefs } = await supabase
-        .from('user_preferences')
-        .select('default_application_id')
-        .eq('user_id', user.sub)
-        .maybeSingle();
+      const { data: prefs, error: prefsError } = await querySelect<{ default_application_id: string | null }>({
+        table: 'user_preferences',
+        operation: 'select',
+        select: 'default_application_id',
+        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
+        limit: 1,
+      });
 
-      const appsQuery = supabase
-        .from('applications')
-        .select('id, name')
-        .order('created_at', { ascending: false });
+      if (prefsError) throw prefsError;
 
-      const { data, error } = await (
-        user.tenant_id
-          ? appsQuery.eq('tenant_id', user.tenant_id)
-          : appsQuery.eq('user_id', user.sub)
-      );
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
+      const appList = rows.map(({ id, name }) => ({ id, name }));
+      setApplications(appList);
 
-      if (error) throw error;
-
-      setApplications((data as Application[]) || []);
-
-      if ((prefs as any)?.default_application_id) {
-        setSelectedApp((prefs as any).default_application_id);
-      } else if (data && (data as any[]).length > 0) {
-        setSelectedApp((data as any[])[0].id);
+      const defaultApplicationId = prefs?.[0]?.default_application_id || null;
+      if (defaultApplicationId) {
+        setSelectedApp(defaultApplicationId);
+      } else if (appList.length > 0) {
+        setSelectedApp(appList[0].id);
       }
     } catch {
       // ignore
@@ -141,36 +135,40 @@ export const Templates = () => {
         return;
       }
 
-      let countQuery = supabase
-        .from('communication_templates')
-        .select('*', { count: 'exact', head: true })
-        .eq('application_id', appId);
-
-      if (searchTerm) {
-        countQuery = countQuery.ilike('name', `%${searchTerm}%`);
-      }
-
-      const { count } = await countQuery;
+      const countResult = await querySelect<{ id: string }>({
+        table: 'communication_templates',
+        operation: 'select',
+        select: 'id',
+        filters: [{ column: 'application_id', op: 'eq', value: appId }],
+        ...(searchTerm ? { filters: [{ column: 'application_id', op: 'eq', value: appId }, { column: 'name', op: 'ilike', value: `%${searchTerm}%` }] } : {}),
+      });
+      if (countResult.error) throw countResult.error;
+      const count = countResult.count ?? countResult.data?.length ?? 0;
       setTotalTemplates(count || 0);
 
       const from = (currentPage - 1) * templatesPerPage;
-      const to = from + templatesPerPage - 1;
 
-      let dataQuery = supabase
-        .from('communication_templates')
-        .select('*')
-        .eq('application_id', appId)
-        .order('created_at', { ascending: false })
-        .range(from, to);
+      const dataResult = await querySelect<Template>({
+        table: 'communication_templates',
+        operation: 'select',
+        select: '*',
+        filters: searchTerm
+          ? [
+              { column: 'application_id', op: 'eq', value: appId },
+              { column: 'name', op: 'ilike', value: `%${searchTerm}%` },
+            ]
+          : [{ column: 'application_id', op: 'eq', value: appId }],
+        order: { column: 'created_at', ascending: false },
+        offset: from,
+        limit: templatesPerPage,
+      });
 
-      if (searchTerm) {
-        dataQuery = dataQuery.ilike('name', `%${searchTerm}%`);
-      }
-
-      const { data, error } = await dataQuery;
-
-      if (error) throw error;
-      setTemplates((data as Template[]) || []);
+      if (dataResult.error) throw dataResult.error;
+      const normalizedTemplates = ((dataResult.data as Template[]) || []).map((template) => ({
+        ...template,
+        variables: normalizeTemplateVariables(template.variables),
+      }));
+      setTemplates(normalizedTemplates);
     } catch {
       // ignore
     }
@@ -186,8 +184,30 @@ export const Templates = () => {
     return Array.from(vars);
   };
 
+  const normalizeTemplateVariables = (variables: any): string[] => {
+    if (Array.isArray(variables)) {
+      return variables.map(String).filter(Boolean);
+    }
+
+    if (variables && typeof variables === 'object') {
+      return Object.keys(variables).filter(Boolean);
+    }
+
+    return [];
+  };
+
+  const buildTemplateVariables = (variables: string[]): Record<string, boolean> => {
+    return variables.reduce<Record<string, boolean>>((acc, variable) => {
+      if (variable) {
+        acc[variable] = true;
+      }
+      return acc;
+    }, {});
+  };
+
   const openEditor = (template?: Template) => {
     if (template) {
+      const normalizedVariables = normalizeTemplateVariables(template.variables);
       setEditingTemplate(template);
       setFormData({
         name: template.name,
@@ -195,7 +215,7 @@ export const Templates = () => {
         channel: template.channel,
         subject: template.subject || '',
         html_content: template.html_content,
-        variables: template.variables || [],
+        variables: normalizedVariables,
         has_attachment: template.has_attachment || false,
         attachment_variable: template.attachment_variable || '',
         has_logo: template.has_logo || false,
@@ -243,18 +263,19 @@ export const Templates = () => {
 
     try {
       const variables = extractVariables(formData.html_content);
+      const variablesPayload = buildTemplateVariables(variables);
 
       if (editingTemplate) {
         const { error } = await queryMutate({
           table: 'communication_templates',
           operation: 'update',
-          data: {
+          update: {
             name: formData.name,
             description: formData.description || null,
             channel: formData.channel,
             subject: formData.subject || null,
             html_content: formData.html_content,
-            variables,
+            variables: variablesPayload,
             has_attachment: formData.has_attachment,
             attachment_variable: formData.has_attachment ? formData.attachment_variable : null,
             has_logo: formData.has_logo,
@@ -262,6 +283,7 @@ export const Templates = () => {
             has_qr: formData.has_qr,
             qr_variable: formData.has_qr ? formData.qr_variable : null,
             template_type: formData.template_type,
+            generates_pdf: formData.template_type === 'pdf',
             pdf_template_id: formData.pdf_template_id || null,
             pdf_filename_pattern: formData.template_type === 'pdf' ? formData.pdf_filename_pattern : null,
             updated_at: new Date().toISOString(),
@@ -281,7 +303,7 @@ export const Templates = () => {
             channel: formData.channel,
             subject: formData.subject || null,
             html_content: formData.html_content,
-            variables,
+            variables: variablesPayload,
             has_attachment: formData.has_attachment,
             attachment_variable: formData.has_attachment ? formData.attachment_variable : null,
             has_logo: formData.has_logo,
@@ -289,6 +311,7 @@ export const Templates = () => {
             has_qr: formData.has_qr,
             qr_variable: formData.has_qr ? formData.qr_variable : null,
             template_type: formData.template_type,
+            generates_pdf: formData.template_type === 'pdf',
             pdf_template_id: formData.pdf_template_id || null,
             pdf_filename_pattern: formData.template_type === 'pdf' ? formData.pdf_filename_pattern : null,
           },
@@ -299,8 +322,8 @@ export const Templates = () => {
 
       setShowEditor(false);
       loadTemplates(selectedApp);
-    } catch {
-      // ignore
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al guardar el template');
     }
   };
 

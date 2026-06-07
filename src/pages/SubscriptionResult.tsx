@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CheckCircle, Clock, Loader2, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { invalidatePlansCache, resolveManagedCheckoutEndpoint, usePlans } from '../hooks/usePlans';
-import { getRuntimeConfig } from '../lib/config';
+import { configManager, getRuntimeConfig } from '../lib/config';
 import {
   clearPendingSubscriptionCheckout,
   getManagedCheckoutStatus,
@@ -37,6 +37,7 @@ export const SubscriptionResult = () => {
           return;
         }
 
+        await configManager.loadConfig();
         const { authAppId, authApiKey } = getRuntimeConfig();
         if (!authAppId || !authApiKey) {
           throw new Error('No se encontraron las credenciales de la aplicación.');

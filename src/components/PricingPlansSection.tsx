@@ -69,12 +69,18 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   });
 
   const handleCta = () => {
-    if (!configManager.isLoaded() || isRedirecting) return;
+    if (isRedirecting) return;
 
     setIsRedirecting(true);
-    window.setTimeout(() => {
-      window.location.href = buildRegisterUrl(plan.id);
-    }, 140);
+    void (async () => {
+      try {
+        await configManager.loadConfig();
+        window.location.href = buildRegisterUrl(plan.id);
+      } catch (error) {
+        console.error(error);
+        setIsRedirecting(false);
+      }
+    })();
   };
 
   return (

@@ -9,7 +9,8 @@ import { UpgradeModal } from '../components/UpgradeModal';
 import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink, MessageSquare, X, Loader2, AlertTriangle } from 'lucide-react';
 import { configManager, getRuntimeConfig, buildFunctionsUrl } from '../lib/config';
 import { db } from '../lib/db';
-import { queryCount } from '../lib/queryApi';
+import { queryCount, queryMutate, querySelect } from '../lib/queryApi';
+import { createOwnedApplication, loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
 
 interface Application {
   id: string;
@@ -209,34 +210,25 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     try {
       if (!user?.sub) return;
 
-      // Filter by tenant when available so all users in the same tenant share apps
-      const appsQuery = supabase
-        .from('applications')
-        .select('id, name, api_key')
-        .order('created_at', { ascending: false });
+      const apps = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
+      setApplications(apps);
 
-      const { data, error } = await (
-        user.tenant_id
-          ? appsQuery.eq('tenant_id', user.tenant_id)
-          : appsQuery.eq('user_id', user.sub)
-      );
+      const { data: prefs, error } = await querySelect<{ default_application_id: string | null }>({
+        table: 'user_preferences',
+        operation: 'select',
+        select: 'default_application_id',
+        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
+        limit: 1,
+      });
 
       if (error) throw error;
 
-      const apps = (data as Application[]) || [];
-      setApplications(apps);
-
-      const { data: prefs } = await supabase
-        .from('user_preferences')
-        .select('default_application_id')
-        .eq('user_id', user.sub)
-        .maybeSingle();
-
-      if (prefs?.default_application_id) {
-        setDefaultApp(prefs.default_application_id);
-        setSelectedApp(prefs.default_application_id);
-      } else if (data && data.length > 0) {
-        setSelectedApp(data[0].id);
+      const defaultApplicationId = prefs?.[0]?.default_application_id || null;
+      if (defaultApplicationId) {
+        setDefaultApp(defaultApplicationId);
+        setSelectedApp(defaultApplicationId);
+      } else if (apps.length > 0) {
+        setSelectedApp(apps[0].id);
       }
     } catch {
       // ignore
@@ -538,18 +530,16 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     try {
       if (!user?.sub) return;
 
-      const { error } = await supabase
-        .from('user_preferences')
-        .upsert(
-          {
-            user_id: user.sub,
-            default_application_id: appId,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: 'user_id',
-          }
-        );
+      const { error } = await queryMutate({
+        table: 'user_preferences',
+        operation: 'upsert',
+        data: {
+          user_id: user.sub,
+          default_application_id: appId,
+          updated_at: new Date().toISOString(),
+        },
+        onConflict: 'user_id',
+      });
 
       if (error) throw error;
 
@@ -568,12 +558,6 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     setTimeout(() => setCopiedKeyId((current) => (current === appId ? null : current)), 2000);
   };
 
-  const generateSecureKey = () => {
-    const array = new Uint8Array(32);
-    crypto.getRandomValues(array);
-    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-  };
-
   const handleNewApplicationClick = () => {
     const limitCheck = checkApplicationLimit();
 
@@ -587,6 +571,13 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
   const createApplication = async () => {
     if (!newAppData.name || !user?.sub) return;
 
+    const normalizedNewName = normalizeApplicationName(newAppData.name);
+    const duplicateApp = applications.some((app) => normalizeApplicationName(app.name) === normalizedNewName);
+    if (duplicateApp) {
+      toast.error('Ya existe una aplicacion con ese nombre');
+      return;
+    }
+
     const limitCheck = checkApplicationLimit();
     if (limitCheck.limitReached) {
       setShowUpgradeModal(true);
@@ -594,33 +585,23 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     }
 
     try {
-      const appId = crypto.randomUUID();
-      const apiKey = `sk_${generateSecureKey()}`;
+      const createdApp = await createOwnedApplication({
+        ownerId: user.sub,
+        tenantId: user.tenant_id,
+        name: newAppData.name,
+        domain: newAppData.domain,
+        environment: 'development',
+      });
 
-      const { data, error } = await supabase
-        .from('applications')
-        .insert({
-          user_id: user.sub,
-          name: newAppData.name,
-          app_id: appId,
-          domain: newAppData.domain || null,
-          api_key: apiKey,
-          ...(user.tenant_id ? { tenant_id: user.tenant_id } : {}),
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      await setAsDefault(data.id);
+      await setAsDefault(createdApp.id);
       await refreshCounts();
 
       toast.success('Aplicación creada y marcada como favorita');
       setShowNewAppModal(false);
       setNewAppData({ name: '', domain: '' });
-      loadApplications();
-    } catch {
-      toast.error('Error al crear la aplicación');
+      await loadApplications();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al crear la aplicación');
     }
   };
 

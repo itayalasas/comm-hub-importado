@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { querySelect } from '../lib/queryApi';
 import { buildFunctionsUrl, configManager } from '../lib/config';
+import { loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
 import {
   Mail, FileText, CheckCircle2, XCircle, TrendingUp,
   Activity, Server, Zap, Eye, AlertTriangle,
@@ -188,15 +189,24 @@ export const Dashboard = () => {
   const loadApplications = async () => {
     try {
       if (!user?.sub) return;
-      const { data: prefs } = await supabase
-        .from('user_preferences').select('default_application_id')
-        .eq('user_id', user.sub).maybeSingle();
-      const appsQuery = supabase.from('applications').select('id, name').order('created_at', { ascending: false });
-      const { data, error } = await (user.tenant_id ? appsQuery.eq('tenant_id', user.tenant_id) : appsQuery.eq('user_id', user.sub));
-      if (error) throw error;
-      setApplications((data as Application[]) || []);
-      if ((prefs as any)?.default_application_id) setSelectedApp((prefs as any).default_application_id);
-      else if (data && (data as any[]).length > 0) setSelectedApp((data as any[])[0].id);
+
+      const { data: prefs, error: prefsError } = await querySelect<{ default_application_id: string | null }>({
+        table: 'user_preferences',
+        operation: 'select',
+        select: 'default_application_id',
+        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
+        limit: 1,
+      });
+
+      if (prefsError) throw prefsError;
+
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
+      const appList = rows.map(({ id, name }) => ({ id, name }));
+      setApplications(appList);
+
+      const defaultApplicationId = prefs?.[0]?.default_application_id || null;
+      if (defaultApplicationId) setSelectedApp(defaultApplicationId);
+      else if (appList.length > 0) setSelectedApp(appList[0].id);
     } catch { } finally { setLoading(false); }
   };
 

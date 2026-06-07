@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { queryCount } from '../lib/queryApi';
+import { queryCount, querySelect } from '../lib/queryApi';
 
 interface LimitCheck {
   canAdd: boolean;
@@ -41,12 +41,20 @@ export const useSubscriptionLimits = () => {
   const getAppIds = async (): Promise<string[]> => {
     if (!user?.sub) return [];
 
-    const appsQuery = supabase.from('applications').select('id');
-    const { data: apps } = await (
-      user?.tenant_id
-        ? appsQuery.eq('tenant_id', user.tenant_id)
-        : appsQuery.eq('user_id', user.sub)
-    );
+    const { data: apps, error } = await querySelect<{ id: string }>({
+      table: 'applications',
+      operation: 'select',
+      select: 'id',
+      filters: user.tenant_id
+        ? [{ column: 'tenant_id', op: 'eq', value: user.tenant_id }]
+        : [{ column: 'user_id', op: 'eq', value: user.sub }],
+      order: { column: 'created_at', ascending: false },
+    });
+
+    if (error) {
+      return [];
+    }
+
     return apps?.map((a: { id: string }) => a.id) ?? [];
   };
 

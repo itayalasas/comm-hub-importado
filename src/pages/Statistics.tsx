@@ -6,6 +6,8 @@ import { buildFunctionsUrl } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send, Check, Search } from 'lucide-react';
+import { loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
+import { querySelect } from '../lib/queryApi';
 
 interface Stats {
   totalSent: number;
@@ -97,74 +99,17 @@ export const Statistics = () => {
 
   useEffect(() => {
     if (selectedApp) {
-      loadStats(selectedApp);
-      loadLogs(selectedApp);
-      loadPendingCommunications(selectedApp);
+      const refresh = () => {
+        loadStats(selectedApp);
+        loadLogs(selectedApp);
+        loadPendingCommunications(selectedApp);
+      };
 
-      const emailLogsChannel = supabase
-        .channel(`email_logs_${selectedApp}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'email_logs',
-            filter: `application_id=eq.${selectedApp}`,
-          },
-          (payload: any) => {
-            if (payload.eventType === 'INSERT') {
-              const newLog = payload.new as EmailLog;
-              if (!newLog.parent_log_id && newLog.communication_type !== 'pdf_generation') {
-                setLogs((prev) => [newLog, ...prev]);
-              }
-              loadStats(selectedApp);
-            } else if (payload.eventType === 'UPDATE') {
-              setLogs((prev) =>
-                prev.map((log) =>
-                  log.id === payload.new.id ? (payload.new as EmailLog) : log
-                )
-              );
-              loadStats(selectedApp);
-            } else if (payload.eventType === 'DELETE') {
-              setLogs((prev) => prev.filter((log) => log.id !== payload.old.id));
-              loadStats(selectedApp);
-            }
-          }
-        )
-        .subscribe();
-
-      const pendingChannel = supabase
-        .channel(`pending_communications_${selectedApp}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'pending_communications',
-            filter: `application_id=eq.${selectedApp}`,
-          },
-          (payload: any) => {
-            if (payload.eventType === 'INSERT') {
-              setPendingComms((prev) => [payload.new as PendingCommunication, ...prev]);
-              loadStats(selectedApp);
-            } else if (payload.eventType === 'UPDATE') {
-              setPendingComms((prev) =>
-                prev.map((comm) =>
-                  comm.id === payload.new.id ? (payload.new as PendingCommunication) : comm
-                )
-              );
-              loadStats(selectedApp);
-            } else if (payload.eventType === 'DELETE') {
-              setPendingComms((prev) => prev.filter((comm) => comm.id !== payload.old.id));
-              loadStats(selectedApp);
-            }
-          }
-        )
-        .subscribe();
+      refresh();
+      const intervalId = window.setInterval(refresh, 30000);
 
       return () => {
-        supabase.removeChannel(emailLogsChannel);
-        supabase.removeChannel(pendingChannel);
+        window.clearInterval(intervalId);
       };
     }
   }, [selectedApp]);
@@ -173,24 +118,22 @@ export const Statistics = () => {
     try {
       if (!user?.sub) return;
 
-      const { data: prefs } = await supabase
-        .from('user_preferences')
-        .select('default_application_id')
-        .eq('user_id', user.sub)
-        .maybeSingle();
+      const { data: prefs, error: prefsError } = await querySelect<{ default_application_id: string | null }>({
+        table: 'user_preferences',
+        operation: 'select',
+        select: 'default_application_id',
+        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
+        limit: 1,
+      });
 
-      const appsQuery = user.tenant_id
-        ? supabase.from('applications').select('id, name, api_key').eq('tenant_id', user.tenant_id).order('created_at', { ascending: false })
-        : supabase.from('applications').select('id, name, api_key').eq('user_id', user.sub).order('created_at', { ascending: false });
-      const { data: appsData, error: appsError } = await appsQuery;
+      if (prefsError) throw prefsError;
 
-      if (appsError) throw appsError;
-
-      const applicationRows = (appsData as Application[]) || [];
+      const applicationRows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
       setApplications(applicationRows);
 
-      if ((prefs as any)?.default_application_id) {
-        setSelectedApp((prefs as any).default_application_id);
+      const defaultApplicationId = prefs?.[0]?.default_application_id || null;
+      if (defaultApplicationId) {
+        setSelectedApp(defaultApplicationId);
       } else if (applicationRows.length > 0) {
         setSelectedApp(applicationRows[0].id);
       }
@@ -218,9 +161,22 @@ export const Statistics = () => {
 
       const allLogs: any[] = (logs as any[]) || [];
       const allPending: any[] = (pendingData as any[]) || [];
-      const sent = allLogs.filter((l: any) => l.delivery_status === 'delivered' || (l.status === 'sent' && !l.delivery_status)).length;
-      const failed = allLogs.filter((l: any) => l.status === 'failed' || l.delivery_status === 'bounced' || l.delivery_status === 'complained').length;
-      const logsPending = allLogs.filter((l: any) => l.status === 'pending' || l.delivery_status === 'delivery_delayed').length;
+      const normalize = (value: unknown) => String(value || '').toLowerCase();
+      const sent = allLogs.filter((l: any) => {
+        const status = normalize(l.status);
+        const deliveryStatus = normalize(l.delivery_status);
+        return status === 'sent' || deliveryStatus === 'sent' || deliveryStatus === 'delivered' || deliveryStatus === 'read';
+      }).length;
+      const failed = allLogs.filter((l: any) => {
+        const status = normalize(l.status);
+        const deliveryStatus = normalize(l.delivery_status);
+        return status === 'failed' || deliveryStatus === 'bounced' || deliveryStatus === 'complained';
+      }).length;
+      const logsPending = allLogs.filter((l: any) => {
+        const status = normalize(l.status);
+        const deliveryStatus = normalize(l.delivery_status);
+        return status === 'pending' || deliveryStatus === 'delivery_delayed';
+      }).length;
       const commsPending = allPending.length;
       const opened = allLogs.filter((l: any) => l.opened_at !== null).length;
       const clicked = allLogs.filter((l: any) => l.clicked_at !== null).length;

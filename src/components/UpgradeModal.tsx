@@ -193,7 +193,7 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
                     {sortedPlans.map((plan) => {
                       const isCurrent = isCurrentPlan(plan.name);
                       const isDefaultPlan = plan.is_default === true;
-                      const badgeLabel = isDefaultPlan ? 'Predeterminado' : null;
+                      const badgeLabel = isDefaultPlan && !isCurrent ? 'Predeterminado' : null;
                       const isSubmitting = subscribingPlanId === plan.id;
                       return (
                         <th key={plan.id} className="relative w-[16rem] px-2 pb-6 text-center align-bottom overflow-visible">

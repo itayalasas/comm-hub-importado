@@ -32,14 +32,24 @@ export const Landing = () => {
   const navigate = useNavigate();
   const [pendingAction, setPendingAction] = useState<'login' | 'register' | null>(null);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setPendingAction('login');
-    login();
+    try {
+      await login();
+    } catch (error) {
+      console.error(error);
+      setPendingAction(null);
+    }
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     setPendingAction('register');
-    register();
+    try {
+      await register();
+    } catch (error) {
+      console.error(error);
+      setPendingAction(null);
+    }
   };
 
   return (

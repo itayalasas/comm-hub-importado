@@ -157,10 +157,11 @@ export function clearPendingSubscriptionCheckout(): void {
 
 export function buildLegacyRegisterUrl(planId: string): string {
   const { authUrl, authAppId, authApiKey, redirectUri } = getRuntimeConfig();
-  const base = authUrl;
-  const appId = authAppId;
-  const apiKey = authApiKey;
-  return `${base}/register-tenant?app_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${apiKey}&plan_id=${planId}`;
+  if (!authUrl || !authAppId || !authApiKey || !redirectUri) {
+    throw new Error('No se pudo cargar la configuración de autenticación.');
+  }
+
+  return `${authUrl}/register-tenant?app_id=${authAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${authApiKey}&plan_id=${planId}`;
 }
 
 export async function startManagedSubscriptionCheckout({

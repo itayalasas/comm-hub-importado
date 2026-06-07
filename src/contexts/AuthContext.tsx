@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { configManager, logRuntimeConfig } from '../lib/config';
+import { configManager, getRuntimeConfig, logRuntimeConfig } from '../lib/config';
 import { authClient } from '../lib/auth';
 
 type MenuPermission = 'create' | 'read' | 'update' | 'delete';
@@ -93,8 +93,8 @@ interface AuthContextType {
   subscription: Subscription | null;
   subscriptionHasAccess: boolean | null;
   availablePlans: AvailablePlan[];
-  login: () => void;
-  register: (planId?: string) => void;
+  login: () => Promise<void>;
+  register: (planId?: string) => Promise<void>;
   logout: () => void;
   handleCallback: (tokenOrCode: string) => Promise<void>;
   hasPermission: (menu: string, permission: MenuPermission) => boolean;
@@ -318,26 +318,40 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
   }, []);
 
-  const login = () => {
-    const authUrl = `${configManager.authUrl}/login?` +
-      `app_id=${configManager.authAppId}&` +
-      `redirect_uri=${encodeURIComponent(configManager.redirectUri)}&` +
-      `api_key=${configManager.authApiKey}`;
+  const login = async () => {
+    await configManager.loadConfig();
+    const { authUrl, authAppId, authApiKey, redirectUri } = getRuntimeConfig();
 
-    window.location.href = authUrl;
-  };
-
-  const register = (planId?: string) => {
-    let authUrl = `${configManager.authUrl}/register-tenant?` +
-      `app_id=${configManager.authAppId}&` +
-      `redirect_uri=${encodeURIComponent(configManager.redirectUri)}&` +
-      `api_key=${configManager.authApiKey}`;
-
-    if (planId) {
-      authUrl += `&plan_id=${planId}`;
+    if (!authUrl || !authAppId || !authApiKey || !redirectUri) {
+      throw new Error('No se pudo cargar la configuración de autenticación.');
     }
 
-    window.location.href = authUrl;
+    const authUrlFinal = `${authUrl}/login?` +
+      `app_id=${authAppId}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `api_key=${authApiKey}`;
+
+    window.location.href = authUrlFinal;
+  };
+
+  const register = async (planId?: string) => {
+    await configManager.loadConfig();
+    const { authUrl, authAppId, authApiKey, redirectUri } = getRuntimeConfig();
+
+    if (!authUrl || !authAppId || !authApiKey || !redirectUri) {
+      throw new Error('No se pudo cargar la configuración de autenticación.');
+    }
+
+    let authUrlFinal = `${authUrl}/register-tenant?` +
+      `app_id=${authAppId}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `api_key=${authApiKey}`;
+
+    if (planId) {
+      authUrlFinal += `&plan_id=${planId}`;
+    }
+
+    window.location.href = authUrlFinal;
   };
 
   const logout = async () => {

@@ -1,8 +1,8 @@
-import { supabase } from './supabase';
+import { db } from './db';
 
 /**
- * Returns true when the user owns the application directly OR belongs to
- * the same tenant as the application. Tenant members share all applications.
+ * Returns true when the user owns the application directly or belongs to the
+ * same tenant as the application.
  */
 export async function verifyApplicationOwnership(
   applicationId: string,
@@ -10,9 +10,9 @@ export async function verifyApplicationOwnership(
   tenantId?: string | null
 ): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('applications')
-      .select('id, user_id, tenant_id')
+      .select('user_id, tenant_id')
       .eq('id', applicationId)
       .maybeSingle();
 

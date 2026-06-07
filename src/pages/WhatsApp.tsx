@@ -4,6 +4,7 @@ import { db } from '../lib/db';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
+import { loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
 import {
   MessageSquare, CheckCircle, XCircle, Clock, Send, Trash2,
   RefreshCw, AlertCircle, Eye, Search, Smartphone,
@@ -119,13 +120,11 @@ export const WhatsApp = () => {
         .eq('user_id', user.sub)
         .maybeSingle();
 
-      const q = db.from('applications').select('id, name, api_key').order('created_at', { ascending: false });
-      const { data } = await (user.tenant_id ? q.eq('tenant_id', user.tenant_id) : q.eq('user_id', user.sub));
-
-      setApplications((data as Application[]) || []);
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
+      setApplications(rows);
       const defaultId = (prefs as any)?.default_application_id;
       if (defaultId) setSelectedApp(defaultId);
-      else if (data && (data as any[]).length > 0) setSelectedApp((data as any[])[0].id);
+      else if (rows.length > 0) setSelectedApp(rows[0].id);
     } catch {
       // ignore
     }

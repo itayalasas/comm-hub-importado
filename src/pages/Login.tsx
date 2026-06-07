@@ -8,20 +8,26 @@ export const Login = () => {
   const navigate = useNavigate();
   const [pendingAction, setPendingAction] = useState<'login' | 'register' | null>(null);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (pendingAction) return;
     setPendingAction('login');
-    window.setTimeout(() => {
-      login();
-    }, 140);
+    try {
+      await login();
+    } catch (error) {
+      console.error(error);
+      setPendingAction(null);
+    }
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (pendingAction) return;
     setPendingAction('register');
-    window.setTimeout(() => {
-      register();
-    }, 140);
+    try {
+      await register();
+    } catch (error) {
+      console.error(error);
+      setPendingAction(null);
+    }
   };
 
   return (
