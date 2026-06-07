@@ -306,6 +306,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
       }
 
+      if (storedUser || storedToken) {
+        try {
+          await refreshSubscription();
+        } catch {
+          // Keep the bootstrap state if the sync request fails.
+        }
+      }
+
       if (!cancelled) {
         setIsLoading(false);
       }
@@ -556,6 +564,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const syncSubscriptionAccess = (value: boolean | null | undefined) => {
+    if (typeof value === 'boolean') {
+      localStorage.setItem('subscription_has_access', JSON.stringify(value));
+      setSubscriptionHasAccess(value);
+      return;
+    }
+
+    localStorage.removeItem('subscription_has_access');
+    setSubscriptionHasAccess(null);
+  };
+
   const exchangeCodeForToken = async (code: string): Promise<{ response: any; token: string; refreshToken: string | null }> => {
     if (!configManager.authValidaToken) {
       throw new Error('AUTH_VALIDA_TOKEN no está configurada.');
@@ -649,8 +668,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
 
         if (typeof authState.hasAccess === 'boolean') {
-          localStorage.setItem('subscription_has_access', JSON.stringify(authState.hasAccess));
-          setSubscriptionHasAccess(authState.hasAccess);
+          syncSubscriptionAccess(authState.hasAccess);
+        } else {
+          syncSubscriptionAccess(null);
         }
 
         if (!accessToken) {
@@ -728,8 +748,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             ? authResponse.data.has_access
             : undefined;
         if (typeof earlyHasAccess === 'boolean') {
-          localStorage.setItem('subscription_has_access', JSON.stringify(earlyHasAccess));
-          setSubscriptionHasAccess(earlyHasAccess);
+          syncSubscriptionAccess(earlyHasAccess);
+        } else {
+          syncSubscriptionAccess(null);
         }
 
         // Save available_plans from exchange response
@@ -789,8 +810,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             ? decodedToken.has_access
             : undefined;
         if (typeof authHasAccess === 'boolean') {
-          localStorage.setItem('subscription_has_access', JSON.stringify(authHasAccess));
-          setSubscriptionHasAccess(authHasAccess);
+          syncSubscriptionAccess(authHasAccess);
+        } else {
+          syncSubscriptionAccess(null);
         }
       } else if (decodedToken) {
         const rawSub =
@@ -960,8 +982,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
 
         if (typeof rawHasAccess === 'boolean') {
-          localStorage.setItem('subscription_has_access', JSON.stringify(rawHasAccess));
-          setSubscriptionHasAccess(rawHasAccess);
+          syncSubscriptionAccess(rawHasAccess);
+        } else {
+          syncSubscriptionAccess(null);
         }
 
         localStorage.setItem('access_token', accessToken);
@@ -1010,8 +1033,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
 
       if (typeof rawHasAccess === 'boolean') {
-        localStorage.setItem('subscription_has_access', JSON.stringify(rawHasAccess));
-        setSubscriptionHasAccess(rawHasAccess);
+        syncSubscriptionAccess(rawHasAccess);
+      } else {
+        syncSubscriptionAccess(null);
       }
 
       localStorage.setItem('access_token', accessToken || '');
@@ -1040,8 +1064,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
 
     if (typeof status.has_access === 'boolean') {
-      localStorage.setItem('subscription_has_access', JSON.stringify(status.has_access));
-      setSubscriptionHasAccess(status.has_access);
+      syncSubscriptionAccess(status.has_access);
+    } else {
+      syncSubscriptionAccess(null);
     }
   };
 

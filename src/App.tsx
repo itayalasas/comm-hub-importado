@@ -114,8 +114,34 @@ const ProtectedRoute = ({ children, requiredMenu }: { children: React.ReactNode;
   return <>{children}</>;
 };
 
+const getDefaultAuthenticatedPath = (hasMenuAccess: (menu: string) => boolean) => {
+  const menuPriority = ['dashboard', 'templates', 'statistics', 'documentation', 'marketplace', 'settings'];
+
+  for (const menu of menuPriority) {
+    if (hasMenuAccess(menu)) {
+      return `/${menu}`;
+    }
+  }
+
+  return '/dashboard';
+};
+
+const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuth, isLoading, hasMenuAccess } = useAuth();
+
+  if (isLoading) {
+    return <AppLoader />;
+  }
+
+  if (isAuth) {
+    return <Navigate to={getDefaultAuthenticatedPath(hasMenuAccess)} replace />;
+  }
+
+  return <>{children}</>;
+};
+
 const DashboardRedirect = () => {
-  const { isAuth, isLoading, user, hasMenuAccess } = useAuth();
+  const { isAuth, isLoading, hasMenuAccess } = useAuth();
 
   if (isLoading) {
     return <AppLoader />;
@@ -125,26 +151,28 @@ const DashboardRedirect = () => {
     return <Navigate to="/login" replace />;
   }
 
-  if (isAuth && user) {
-    const menuPriority = ['dashboard', 'templates', 'statistics', 'documentation', 'marketplace', 'settings'];
-
-    for (const menu of menuPriority) {
-      if (hasMenuAccess(menu)) {
-        return <Navigate to={`/${menu}`} replace />;
-      }
-    }
-
-    return <Navigate to="/login" replace />;
-  }
-
-  return <Navigate to="/login" replace />;
+  return <Navigate to={getDefaultAuthenticatedPath(hasMenuAccess)} replace />;
 };
 
 const AppRoutes = () => {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/login" element={<Landing />} />
+      <Route
+        path="/"
+        element={
+          <PublicRoute>
+            <Home />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/login"
+        element={
+          <PublicRoute>
+            <Landing />
+          </PublicRoute>
+        }
+      />
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/app" element={<DashboardRedirect />} />
@@ -247,6 +275,14 @@ const AppRoutes = () => {
           <ProtectedRoute requiredMenu="templates">
             <WhatsAppTemplates />
           </ProtectedRoute>
+        }
+      />
+      <Route
+        path="*"
+        element={
+          <PublicRoute>
+            <Navigate to="/" replace />
+          </PublicRoute>
         }
       />
     </Routes>
