@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { Seo } from '../components/Seo';
 
 export const Callback = () => {
   const { handleCallback } = useAuth();
@@ -105,6 +106,14 @@ export const Callback = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <Seo
+        title="Callback de autenticacion"
+        description="Procesando callback de autenticacion de SendCraft."
+        path="/callback"
+        canonicalUrl="https://sendcraft.net/callback"
+        noIndex
+      />
+
       <div className="text-center">
         {error ? (
           <div className="text-red-400 text-lg">{error}</div>

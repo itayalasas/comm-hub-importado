@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Procesando autenticación...</title>
+  <meta name="robots" content="noindex,nofollow">
+  <title>Procesando autenticacion...</title>
   <style>
     body {
       margin: 0;
@@ -37,11 +38,10 @@
 <body>
   <div class="loader">
     <div class="spinner"></div>
-    <p>Procesando autenticación...</p>
+    <p>Procesando autenticacion...</p>
   </div>
 
   <script>
-    // Immediately capture the full URL before any redirects
     const fullUrl = window.location.href;
 
     console.log('=== CALLBACK HTML HANDLER ===');
@@ -52,7 +52,6 @@
     let code = null;
     let error = null;
 
-    // First check hash parameters (priority, as OAuth providers often use hash)
     if (window.location.hash) {
       console.log('Hash present:', window.location.hash);
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -65,7 +64,6 @@
       console.log('Hash params - Error:', error ? 'YES' : 'NO');
     }
 
-    // If nothing in hash, check query parameters
     if (!token && !code && !error && window.location.search) {
       console.log('Search present:', window.location.search);
       const urlObj = new URL(fullUrl);
@@ -86,7 +84,6 @@
       console.log('Auth value found:', authValue);
       console.log('Storing in sessionStorage and redirecting...');
 
-      // Store auth data in sessionStorage
       sessionStorage.setItem('authCallback', JSON.stringify({
         token: token,
         code: code,
@@ -94,7 +91,6 @@
       }));
 
       console.log('Redirecting to /auth-processing');
-      // Redirect to a different route to avoid loop
       window.location.href = '/auth-processing';
     } else {
       console.error('No token, code, or error found in URL');

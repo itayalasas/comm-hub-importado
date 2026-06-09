@@ -18,6 +18,13 @@ import { Marketplace } from './pages/Marketplace';
 import { MarketplaceEmbed } from './pages/MarketplaceEmbed';
 import { WhatsApp } from './pages/WhatsApp';
 import { WhatsAppTemplates } from './pages/WhatsAppTemplates';
+import { EmailMarketing } from './pages/EmailMarketing';
+import { EmailTransaccional } from './pages/EmailTransaccional';
+import { ApiEmail } from './pages/ApiEmail';
+import { Smtp } from './pages/Smtp';
+import { AlternativaMailchimp } from './pages/AlternativaMailchimp';
+import { AlternativaSendgrid } from './pages/AlternativaSendgrid';
+import { Precios } from './pages/Precios';
 
 
 const AppLoader = () => (
@@ -175,6 +182,13 @@ const AppRoutes = () => {
       />
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
+      <Route path="/precios" element={<Precios />} />
+      <Route path="/email-marketing" element={<EmailMarketing />} />
+      <Route path="/email-transaccional" element={<EmailTransaccional />} />
+      <Route path="/api-email" element={<ApiEmail />} />
+      <Route path="/smtp" element={<Smtp />} />
+      <Route path="/alternativa-mailchimp" element={<AlternativaMailchimp />} />
+      <Route path="/alternativa-sendgrid" element={<AlternativaSendgrid />} />
       <Route path="/app" element={<DashboardRedirect />} />
       <Route path="/callback" element={<Callback />} />
       <Route path="/auth-processing" element={<AuthProcessing />} />

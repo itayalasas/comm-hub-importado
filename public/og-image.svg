@@ -1,0 +1,49 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="60" x2="1080" y2="570" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#071A2E"/>
+      <stop offset="1" stop-color="#06121F"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="130" y1="120" x2="1060" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE" stop-opacity="0.9"/>
+      <stop offset="0.55" stop-color="#06B6D4" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#10B981" stop-opacity="0.45"/>
+    </linearGradient>
+    <filter id="blur" x="-40" y="-40" width="1280" height="710" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="80"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" rx="48" fill="url(#bg)"/>
+  <circle cx="240" cy="170" r="160" fill="#06B6D4" fill-opacity="0.24" filter="url(#blur)"/>
+  <circle cx="980" cy="470" r="180" fill="#0EA5E9" fill-opacity="0.18" filter="url(#blur)"/>
+  <circle cx="760" cy="170" r="120" fill="#10B981" fill-opacity="0.12" filter="url(#blur)"/>
+  <rect x="70" y="70" width="1060" height="490" rx="36" stroke="url(#accent)" stroke-opacity="0.35"/>
+
+  <g opacity="0.2">
+    <path d="M120 150H1080" stroke="#7DD3FC"/>
+    <path d="M120 480H1080" stroke="#7DD3FC"/>
+    <path d="M180 110V520" stroke="#7DD3FC"/>
+    <path d="M1020 110V520" stroke="#7DD3FC"/>
+  </g>
+
+  <g transform="translate(110 120)">
+    <rect x="0" y="0" width="72" height="72" rx="18" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.18)"/>
+    <path d="M16 24L36 38.5L56 24" stroke="#E0F2FE" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 26V48C16 50.2 17.8 52 20 52H52C54.2 52 56 50.2 56 48V26" stroke="#E0F2FE" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+
+  <text x="110" y="240" fill="#E0F2FE" font-family="Inter, Arial, sans-serif" font-size="76" font-weight="800">SendCraft</text>
+  <text x="110" y="310" fill="#7DD3FC" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="600">Email marketing y correos transaccionales</text>
+  <text x="110" y="370" fill="#CBD5E1" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="400">API, SMTP, automatizaciones y entregabilidad en una sola plataforma.</text>
+
+  <g transform="translate(110 430)">
+    <rect width="210" height="54" rx="27" fill="rgba(34,211,238,0.14)" stroke="rgba(34,211,238,0.28)"/>
+    <text x="28" y="35" fill="#BAE6FD" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="600">Plataforma SaaS</text>
+  </g>
+
+  <g transform="translate(350 430)">
+    <rect width="300" height="54" rx="27" fill="rgba(16,185,129,0.14)" stroke="rgba(16,185,129,0.28)"/>
+    <text x="28" y="35" fill="#D1FAE5" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="600">SEO-ready y lista para crecer</text>
+  </g>
+</svg>

@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+
+Disallow: /app
+Disallow: /auth-processing
+Disallow: /callback
+Disallow: /dashboard
+Disallow: /embed/
+Disallow: /login
+Disallow: /documentation
+Disallow: /settings
+Disallow: /statistics
+Disallow: /subscription/
+Disallow: /templates
+Disallow: /whatsapp
+
+Sitemap: https://sendcraft.net/sitemap.xml

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { Seo } from '../components/Seo';
 
 export const AuthProcessing = () => {
   const { handleCallback } = useAuth();
@@ -83,6 +84,13 @@ export const AuthProcessing = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <Seo
+        title="Procesando autenticacion"
+        description="Procesando el acceso a SendCraft."
+        path="/auth-processing"
+        canonicalUrl="https://sendcraft.net/auth-processing"
+        noIndex
+      />
       <div className="text-center">
         {error ? (
           <div className="text-red-400 text-lg">{error}</div>

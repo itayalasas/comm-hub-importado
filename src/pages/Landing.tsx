@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Building2, Check, FileText, Loader2, Mail, Shield, Star, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PricingPlansSection } from '../components/PricingPlansSection';
+import { Seo } from '../components/Seo';
 
 const USE_CASES = [
   {
@@ -54,6 +55,14 @@ export const Landing = () => {
 
   return (
     <div className="min-h-screen bg-[#050d1a] text-white overflow-x-hidden">
+      <Seo
+        title="Iniciar sesion"
+        description="Accede a SendCraft con tu sistema de autenticacion empresarial."
+        path="/login"
+        canonicalUrl="https://sendcraft.net/login"
+        noIndex
+      />
+
       <style>{`
         @keyframes glow-pulse { 0%,100% { opacity:0.07; } 50% { opacity:0.13; } }
         @keyframes slide-up { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }

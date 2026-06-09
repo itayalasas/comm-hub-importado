@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Book, Code, Copy, Check, ChevronDown, ChevronRight, Info, AlertCircle, Mail, FileText, Zap, Globe, CheckCircle2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { buildFunctionsUrl, getRuntimeConfig } from '../lib/config';
+import { Seo } from '../components/Seo';
 
 const getFunctionsBaseUrl = () => {
   const { functionsBaseUrlRaw, functionsBaseUrl } = getRuntimeConfig();
@@ -1831,6 +1832,18 @@ Content-Type: application/json`}
         publicView ? 'min-h-[calc(100vh-7rem)]' : '-mt-8 -mx-8 h-[calc(100vh-8rem)]'
       }`}
     >
+      <Seo
+        title={publicView ? 'Documentacion de API' : 'Documentacion interna'}
+        description={
+          publicView
+            ? 'Guia de endpoints, conectores y ejemplos de integracion para SendCraft.'
+            : 'Referencia interna de endpoints y conectores de SendCraft.'
+        }
+        path="/docs"
+        canonicalUrl="https://sendcraft.net/docs"
+        noIndex={!publicView}
+        keywords={publicView ? ['documentacion api', 'api sendcraft', 'conectores email'] : undefined}
+      />
       <aside className="w-64 bg-slate-800/30 border-r border-slate-700 overflow-y-auto">
         <div className="p-4">
           <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">

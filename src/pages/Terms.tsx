@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Mail, FileText, Shield, AlertCircle, RefreshCw, Scale } from 'lucide-react';
+import { Seo } from '../components/Seo';
 
 const LAST_UPDATED = '5 de mayo de 2026';
 const COMPANY = 'SendCraft';
@@ -10,6 +11,14 @@ export const Terms = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#020c1b] via-[#071428] to-[#020c1b] text-slate-300">
+      <Seo
+        title="Terminos de servicio"
+        description="Terminos de servicio de SendCraft."
+        path="/terms"
+        canonicalUrl="https://sendcraft.net/terms"
+        noIndex
+      />
+
       {/* Header */}
       <header className="sticky top-0 z-10 bg-[#020c1b]/80 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">

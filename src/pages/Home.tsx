@@ -25,10 +25,11 @@ import {
   Star,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { sortPlansByOrder, usePlans, type Plan } from '../hooks/usePlans';
 import { configManager } from '../lib/config';
 import { buildLegacyRegisterUrl } from '../lib/subscriptionCheckout';
+import { Seo } from '../components/Seo';
 
 /* ─── Data ─────────────────────────────────────────────────────── */
 const STATS = [
@@ -783,6 +784,30 @@ export const Home = () => {
 
   return (
     <div className="min-h-screen bg-[#050d1a] text-white overflow-x-hidden">
+      <Seo
+        title="Plataforma de email marketing y correos transaccionales"
+        description="SendCraft centraliza email marketing, correos transaccionales, SMTP, API y PDF en una sola plataforma para equipos y SaaS."
+        path="/"
+        canonicalUrl="https://sendcraft.net/"
+        keywords={[
+          'email marketing',
+          'correos transaccionales',
+          'api email',
+          'smtp',
+          'plataforma de email marketing',
+        ]}
+        structuredData={{
+          '@context': 'https://schema.org',
+          '@type': 'SoftwareApplication',
+          name: 'SendCraft',
+          applicationCategory: 'BusinessApplication',
+          operatingSystem: 'Web',
+          description:
+            'Plataforma de email marketing y correos transaccionales con API, SMTP, automatizaciones y PDFs.',
+          url: 'https://sendcraft.net/',
+        }}
+      />
+
       {/* Global CSS animations */}
       <style>{`
         @keyframes float { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-12px); } }
@@ -850,22 +875,22 @@ export const Home = () => {
           <div className="text-center mb-14">
             <div className="slide-up inline-flex items-center gap-2 px-4 py-1.5 mb-6 rounded-full border border-cyan-400/25 bg-cyan-400/8 text-cyan-300 text-xs font-semibold tracking-widest uppercase">
               <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              Plataforma de Comunicaciones Empresariales
+              Plataforma de email marketing y correos transaccionales
             </div>
 
             <h1 className="slide-up delay-100 text-5xl md:text-6xl lg:text-[72px] font-extrabold mb-6 leading-[1.06] tracking-tight">
-              Comunicaciones que
+              Email marketing y correos transaccionales
               <br />
               <span className="relative inline-block">
                 <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-teal-400 bg-clip-text text-transparent">
-                  impulsan tu negocio
+                  que impulsan tu negocio
                 </span>
                 <span className="absolute bottom-1 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
               </span>
             </h1>
 
             <p className="slide-up delay-200 text-lg md:text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-              SendCraft centraliza emails, templates, PDFs y analitica en una sola plataforma. Automatiza, rastrea y optimiza cada comunicacion empresarial desde un dashboard intuitivo.
+              SendCraft centraliza email marketing, correos transaccionales, SMTP, API, templates y PDFs en una sola plataforma. Automatiza, rastrea y optimiza cada comunicacion empresarial desde un dashboard intuitivo.
             </p>
 
             <div className="slide-up delay-300 flex flex-col sm:flex-row gap-4 justify-center">
@@ -1158,6 +1183,68 @@ export const Home = () => {
       </section>
 
       {/* ── PRICING ───────────────────────────────────────────────── */}
+      <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Mas contenido</div>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Todo lo que necesitas para elegir el flujo correcto
+            </h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Cada seccion profundiza en un caso distinto: email marketing, transaccional, API, SMTP, comparativas y precios.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {[
+              {
+                to: '/email-marketing',
+                title: 'Email marketing',
+                desc: 'Campanas, automatizaciones y segmentacion para equipos que quieren crecer.',
+              },
+              {
+                to: '/email-transaccional',
+                title: 'Email transaccional',
+                desc: 'Confirmaciones, alertas, facturas y PDF con trazabilidad.',
+              },
+              {
+                to: '/api-email',
+                title: 'API para email',
+                desc: 'Integra tu backend con una API simple y clara.',
+              },
+              {
+                to: '/smtp',
+                title: 'SMTP',
+                desc: 'Compatibilidad inmediata para sistemas y librerias existentes.',
+              },
+              {
+                to: '/alternativa-mailchimp',
+                title: 'Alternativa a Mailchimp',
+                desc: 'Comparativa para evaluar una migracion con mas claridad.',
+              },
+              {
+                to: '/alternativa-sendgrid',
+                title: 'Alternativa a SendGrid',
+                desc: 'Una comparativa para entender cuando conviene cambiar de enfoque.',
+              },
+            ].map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="group card-hover bg-white/[0.03] border border-white/8 rounded-2xl p-6 hover:border-cyan-500/20 hover:bg-white/[0.05] transition-all"
+              >
+                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold text-cyan-300 mb-4">
+                  <ChevronRight className="w-3.5 h-3.5" />
+                  Explorar
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-cyan-300 transition-colors">{item.title}</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">{item.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section id="pricing" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-14">
