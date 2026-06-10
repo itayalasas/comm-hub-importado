@@ -81,8 +81,14 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-async function loadOwnedApplicationRows(ownerId: string, tenantId?: string | null): Promise<OwnedApplicationRow[]> {
-  const filters = tenantId
+async function loadOwnedApplicationRows(
+  ownerId: string,
+  tenantId?: string | null,
+  includeAll = false,
+): Promise<OwnedApplicationRow[]> {
+  const filters = includeAll
+    ? []
+    : tenantId
     ? [{ column: 'tenant_id', op: 'eq', value: tenantId }]
     : [{ column: 'user_id', op: 'eq', value: ownerId }];
 
@@ -90,7 +96,7 @@ async function loadOwnedApplicationRows(ownerId: string, tenantId?: string | nul
     table: 'applications',
     operation: 'select',
     select: 'id, name, app_id, domain, api_key, created_at',
-    filters,
+    ...(filters.length > 0 ? { filters } : {}),
     order: { column: 'created_at', ascending: false },
   });
 
@@ -101,8 +107,12 @@ async function loadOwnedApplicationRows(ownerId: string, tenantId?: string | nul
   return appsResult.data || [];
 }
 
-export async function loadOwnedApplicationsWithKeys(ownerId: string, tenantId?: string | null): Promise<ApplicationSummary[]> {
-  const apps = await loadOwnedApplicationRows(ownerId, tenantId);
+export async function loadOwnedApplicationsWithKeys(
+  ownerId: string,
+  tenantId?: string | null,
+  includeAll = false,
+): Promise<ApplicationSummary[]> {
+  const apps = await loadOwnedApplicationRows(ownerId, tenantId, includeAll);
 
   return apps.map((app) => ({
     id: app.id,

@@ -39,7 +39,7 @@ interface Template {
 }
 
 export const Templates = () => {
-  const { user } = useAuth();
+  const { user, isSystemAdmin } = useAuth();
   const toast = useToast();
   const { canCreate, canUpdate, canDelete } = usePermissions('templates');
   const { checkTemplateLimit } = useSubscriptionLimits();
@@ -79,7 +79,7 @@ export const Templates = () => {
     if (user) {
       loadApplications();
     }
-  }, [user]);
+  }, [user, isSystemAdmin]);
 
   useEffect(() => {
     if (selectedApp) {
@@ -109,7 +109,7 @@ export const Templates = () => {
 
       if (prefsError) throw prefsError;
 
-      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
       const appList = rows.map(({ id, name }) => ({ id, name }));
       setApplications(appList);
 
@@ -130,7 +130,7 @@ export const Templates = () => {
     try {
       if (!user?.sub) return;
 
-      const isOwner = await verifyApplicationOwnership(appId, user.sub, user.tenant_id);
+      const isOwner = isSystemAdmin ? true : await verifyApplicationOwnership(appId, user.sub, user.tenant_id);
       if (!isOwner) {
         return;
       }

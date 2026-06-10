@@ -10,8 +10,6 @@ import {
   Bell,
   FileText,
   TrendingUp,
-  Users,
-  Clock,
   ChevronRight,
   Check,
   Minus,
@@ -32,13 +30,6 @@ import { buildLegacyRegisterUrl } from '../lib/subscriptionCheckout';
 import { Seo } from '../components/Seo';
 
 /* ─── Data ─────────────────────────────────────────────────────── */
-const STATS = [
-  { value: '99.9%', label: 'Uptime garantizado', icon: Activity },
-  { value: '10M+', label: 'Emails enviados', icon: Send },
-  { value: '500+', label: 'Empresas activas', icon: Users },
-  { value: '<2s', label: 'Tiempo de entrega', icon: Clock },
-];
-
 const FEATURES = [
   { icon: Mail, title: 'Gestión de emails', description: 'Envía y rastrea emails transaccionales y de marketing con seguimiento en tiempo real de entregas, aperturas y clics.', color: 'cyan' },
   { icon: Zap, title: 'Templates dinámicos', description: 'Crea y personaliza templates con variables dinámicas y preview en tiempo real para distintos tipos de comunicación.', color: 'blue' },
@@ -955,22 +946,7 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* ── STATS ─────────────────────────────────────────────────── */}
-      <section className="relative z-10 py-14 px-4 sm:px-6 lg:px-8 border-y border-white/5">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-            {STATS.map(({ value, label, icon: Icon }, i) => (
-              <div key={label} className={`text-center group slide-up delay-${(i + 1) * 100}`}>
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 mb-3 group-hover:bg-cyan-500/20 group-hover:scale-110 transition-all">
-                  <Icon className="w-5 h-5 text-cyan-400" />
-                </div>
-                <div className="text-3xl font-extrabold text-white mb-1">{value}</div>
-                <div className="text-sm text-slate-500">{label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      
 
       {/* ── HOW IT WORKS ──────────────────────────────────────────── */}
       <section id="how" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">

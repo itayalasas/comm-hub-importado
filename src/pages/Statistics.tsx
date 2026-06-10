@@ -62,7 +62,7 @@ interface PendingCommunication {
 }
 
 export const Statistics = () => {
-  const { user } = useAuth();
+  const { user, isSystemAdmin } = useAuth();
   const toast = useToast();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
@@ -91,7 +91,7 @@ export const Statistics = () => {
     if (user) {
       loadApplications();
     }
-  }, [user]);
+  }, [user, isSystemAdmin]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -128,7 +128,7 @@ export const Statistics = () => {
 
       if (prefsError) throw prefsError;
 
-      const applicationRows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
+      const applicationRows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
       setApplications(applicationRows);
 
       const defaultApplicationId = prefs?.[0]?.default_application_id || null;

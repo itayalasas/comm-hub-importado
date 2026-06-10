@@ -6,13 +6,13 @@ import { SubscriptionModal } from './SubscriptionModal';
 import { InvitationsModal } from './InvitationsModal';
 
 export const UserMenu = () => {
-  const { user, logout, subscription, subscriptionHasAccess } = useAuth();
+  const { user, logout, subscription, subscriptionHasAccess, isSystemAdmin } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showInvitationsModal, setShowInvitationsModal] = useState(false);
 
-  const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
+  const isAdmin = isSystemAdmin || user?.role === 'administrador' || user?.role === 'admin';
   const menuRef = useRef<HTMLDivElement>(null);
   const normalizedStatus = String(subscription?.status ?? '').toLowerCase();
   const trialEnd = subscription?.trial_end ? new Date(subscription.trial_end) : null;
@@ -34,7 +34,9 @@ export const UserMenu = () => {
   const isCancellationExpired = isCancellationScheduled && !accessWindowActive;
   const isFreeActivePlan =
     normalizedStatus === 'active' && typeof subscription?.plan_price === 'number' && subscription.plan_price === 0;
-  const subscriptionLabel = trialActive
+  const subscriptionLabel = isSystemAdmin
+    ? 'Administrador'
+    : trialActive
     ? 'En prueba'
     : isCancellationPending
     ? 'Cancelada'
@@ -57,6 +59,8 @@ export const UserMenu = () => {
       ? 'bg-amber-500/10 text-amber-300'
       : isCancellationExpired
       ? 'bg-red-500/10 text-red-400'
+      : isSystemAdmin
+      ? 'bg-cyan-500/10 text-cyan-300'
       : subscriptionHasAccess === true || normalizedStatus === 'authorized' || isFreeActivePlan || accessWindowActive || normalizedStatus === 'active'
       ? 'bg-green-500/10 text-green-400'
       : trialActive

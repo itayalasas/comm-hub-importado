@@ -257,8 +257,8 @@ const TestingBanner = () => {
 /* ── Subscription blocker ──────────────────────────────────────────── */
 
 const SubscriptionBlocker = () => {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
+  const { user, isSystemAdmin } = useAuth();
+  const isAdmin = isSystemAdmin || user?.role === 'administrador' || user?.role === 'admin';
 
   return (
     <div className="fixed inset-0 z-[999] bg-[#050d1a]/98 backdrop-blur-sm flex flex-col items-center justify-center px-4 py-8 overflow-y-auto">
@@ -294,8 +294,8 @@ const SubscriptionBlocker = () => {
 /* ── User limit blocker ─────────────────────────────────────────── */
 
 const UserLimitBlocker = ({ activeUsersCount, maxUsers }: { activeUsersCount: number; maxUsers: number }) => {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
+  const { user, isSystemAdmin } = useAuth();
+  const isAdmin = isSystemAdmin || user?.role === 'administrador' || user?.role === 'admin';
 
   return (
     <div className="fixed inset-0 z-[999] bg-[#050d1a]/98 backdrop-blur-sm flex flex-col items-center justify-center px-4 py-8 overflow-y-auto">
@@ -445,7 +445,7 @@ const NavItemRow = ({
 /* ── Main Layout ────────────────────────────────────────────────── */
 
 export const Layout = ({ children, currentPage }: LayoutProps) => {
-  const { hasMenuAccess, hasSubmenuAccess, subscription, subscriptionHasAccess, user } = useAuth();
+  const { hasMenuAccess, hasSubmenuAccess, subscription, subscriptionHasAccess, user, isSystemAdmin } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const closeMobile = () => setIsMobileMenuOpen(false);
@@ -540,6 +540,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
   const planPrice = typeof subscription?.plan_price === 'number' ? subscription.plan_price : null;
   const subscriptionAccessGranted =
     subscriptionHasAccess === true ||
+    isSystemAdmin ||
     normalizedStatus === 'authorized' ||
     (normalizedStatus === 'active' && planPrice === 0) ||
     trialActive ||

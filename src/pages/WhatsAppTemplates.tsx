@@ -87,7 +87,7 @@ const SAMPLE_BODY = 'Hola {{1}},\n\nTu reserva para {{2}} quedó confirmada.\n\n
 /* ── Component ─────────────────────────────────────────────────── */
 
 export const WhatsAppTemplates = () => {
-  const { user } = useAuth();
+  const { user, isSystemAdmin } = useAuth();
   const toast = useToast();
   const { canCreate, canUpdate, canDelete } = usePermissions('templates.whatsapp');
 
@@ -125,7 +125,7 @@ export const WhatsAppTemplates = () => {
   /* ── Load ── */
   useEffect(() => {
     if (user) loadApplications();
-  }, [user]);
+  }, [user, isSystemAdmin]);
 
   useEffect(() => {
     if (selectedApp) {
@@ -144,7 +144,7 @@ export const WhatsAppTemplates = () => {
         .eq('user_id', user.sub)
         .maybeSingle();
 
-      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
       setApplications(rows);
       const defaultId = (prefs as any)?.default_application_id;
       if (defaultId) setSelectedApp(defaultId);

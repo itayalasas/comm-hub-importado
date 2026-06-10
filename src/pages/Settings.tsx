@@ -58,7 +58,7 @@ interface WhatsAppConfig {
 }
 
 export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 'whatsapp' }) => {
-  const { user } = useAuth();
+  const { user, isSystemAdmin } = useAuth();
   const toast = useToast();
   const { checkApplicationLimit, refreshCounts, hasFeature } = useSubscriptionLimits();
   const [applications, setApplications] = useState<Application[]>([]);
@@ -82,7 +82,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
   const [deleteAppPreviewLoading, setDeleteAppPreviewLoading] = useState(false);
   const [deleteAppLoading, setDeleteAppLoading] = useState(false);
 
-  const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
+  const isAdmin = isSystemAdmin || user?.role === 'administrador' || user?.role === 'admin';
 
   // Embed credentials state
   const [embedCreds, setEmbedCreds] = useState<EmbedCredential[]>([]);
@@ -132,7 +132,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     if (user) {
       loadApplications();
     }
-  }, [user]);
+  }, [user, isSystemAdmin]);
 
   useEffect(() => {
     if (user && tab === 'embed') {
@@ -210,7 +210,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     try {
       if (!user?.sub) return;
 
-      const apps = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
+      const apps = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
       setApplications(apps);
 
       const { data: prefs, error } = await querySelect<{ default_application_id: string | null }>({

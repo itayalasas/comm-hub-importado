@@ -51,7 +51,7 @@ function formatNumber(value: string | number, unit?: string | null): string {
 }
 
 export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
-  const { subscription, user, applyCheckoutStatus, subscriptionHasAccess } = useAuth();
+  const { subscription, user, applyCheckoutStatus, subscriptionHasAccess, isSystemAdmin } = useAuth();
   const { plans } = usePlans();
   const { applicationCount, templateCount, emailsThisMonth, pdfsThisMonth } = useSubscriptionLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -63,7 +63,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const [cancelReason, setCancelReason] = useState<string>('');
   const [cancelReasonDetails, setCancelReasonDetails] = useState('');
 
-  const isAdmin = user?.role === 'administrador' || user?.role === 'admin';
+  const isAdmin = isSystemAdmin || user?.role === 'administrador' || user?.role === 'admin';
   const activeUsersCount = user?.active_users_count ?? 0;
 
   const features = subscription?.entitlements?.features ?? [];
@@ -276,7 +276,37 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
         </div>
 
         <div className="p-6 space-y-5">
-          {!subscription ? (
+          {isSystemAdmin ? (
+            <div className="text-center py-10 space-y-5">
+              <div className="w-16 h-16 rounded-2xl bg-cyan-500/15 border border-cyan-500/25 mx-auto flex items-center justify-center">
+                <Check className="w-8 h-8 text-cyan-300" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white mb-2">Acceso de administrador del sistema</h3>
+                <p className="text-slate-400 text-sm leading-relaxed max-w-md mx-auto">
+                  Esta cuenta tiene acceso completo sin validación de suscripción. Podés administrar la plataforma, revisar configuraciones y operar todas las secciones habilitadas.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 text-left">
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-1">Usuario</p>
+                  <p className="text-sm text-white font-medium break-all">{user?.email || 'administrador@sendcraft.net'}</p>
+                </div>
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-1">Estado</p>
+                  <p className="text-sm text-cyan-300 font-medium">Acceso total</p>
+                </div>
+              </div>
+
+              <button
+                onClick={onClose}
+                className="px-6 py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors font-semibold"
+              >
+                Cerrar
+              </button>
+            </div>
+          ) : !subscription ? (
             <div className="text-center py-12">
               <CreditCard className="w-14 h-14 text-slate-600 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-white mb-2">Sin suscripción activa</h3>

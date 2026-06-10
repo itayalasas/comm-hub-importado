@@ -11,7 +11,7 @@ interface LimitCheck {
 }
 
 export const useSubscriptionLimits = () => {
-  const { user, subscription } = useAuth();
+  const { user, subscription, isSystemAdmin } = useAuth();
   const [applicationCount, setApplicationCount] = useState<number>(0);
   const [templateCount, setTemplateCount] = useState<number>(0);
   const [emailsThisMonth, setEmailsThisMonth] = useState<number>(0);
@@ -19,12 +19,31 @@ export const useSubscriptionLimits = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (isSystemAdmin) {
+      setApplicationCount(0);
+      setTemplateCount(0);
+      setEmailsThisMonth(0);
+      setPdfsThisMonth(0);
+      setIsLoading(false);
+      return;
+    }
+
     if (user) {
       loadCounts();
+    } else {
+      setIsLoading(false);
     }
-  }, [user]);
+  }, [user, isSystemAdmin]);
 
   const loadCounts = async () => {
+    if (isSystemAdmin) {
+      setApplicationCount(0);
+      setTemplateCount(0);
+      setEmailsThisMonth(0);
+      setPdfsThisMonth(0);
+      return;
+    }
+
     try {
       setIsLoading(true);
       await Promise.all([
@@ -186,6 +205,8 @@ export const useSubscriptionLimits = () => {
   };
 
   const getFeatureLimit = (featureCode: string): number | null => {
+    if (isSystemAdmin) return Infinity;
+
     if (!subscription?.entitlements?.features) return null;
 
     const feature = subscription.entitlements.features.find(
@@ -202,6 +223,8 @@ export const useSubscriptionLimits = () => {
   };
 
   const hasFeature = (featureCode: string): boolean => {
+    if (isSystemAdmin) return true;
+
     if (!subscription?.entitlements?.features) return false;
 
     const feature = subscription.entitlements.features.find(
@@ -218,6 +241,10 @@ export const useSubscriptionLimits = () => {
   };
 
   const checkApplicationLimit = (): LimitCheck => {
+    if (isSystemAdmin) {
+      return { canAdd: true, currentCount: applicationCount, maxLimit: Infinity, limitReached: false };
+    }
+
     const maxLimit = getFeatureLimit('max_applications');
     if (maxLimit === null) {
       return { canAdd: true, currentCount: applicationCount, maxLimit: Infinity, limitReached: false };
@@ -227,6 +254,10 @@ export const useSubscriptionLimits = () => {
   };
 
   const checkTemplateLimit = (): LimitCheck => {
+    if (isSystemAdmin) {
+      return { canAdd: true, currentCount: templateCount, maxLimit: Infinity, limitReached: false };
+    }
+
     const maxLimit = getFeatureLimit('templates');
     if (maxLimit === null) {
       return { canAdd: true, currentCount: templateCount, maxLimit: Infinity, limitReached: false };
@@ -236,6 +267,10 @@ export const useSubscriptionLimits = () => {
   };
 
   const checkFeatureLimit = (featureCode: string, currentCount: number): LimitCheck => {
+    if (isSystemAdmin) {
+      return { canAdd: true, currentCount, maxLimit: Infinity, limitReached: false };
+    }
+
     const maxLimit = getFeatureLimit(featureCode);
     if (maxLimit === null) {
       return { canAdd: true, currentCount, maxLimit: Infinity, limitReached: false };

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { configManager, getRuntimeConfig, logRuntimeConfig } from '../lib/config';
 import { authClient } from '../lib/auth';
+import { isSystemAdminEmail, isSystemAdminUser } from '../lib/systemAdmin';
 
 type MenuPermission = 'create' | 'read' | 'update' | 'delete';
 
@@ -90,6 +91,7 @@ interface AuthContextType {
   user: User | null;
   isAuth: boolean;
   isLoading: boolean;
+  isSystemAdmin: boolean;
   subscription: Subscription | null;
   subscriptionHasAccess: boolean | null;
   availablePlans: AvailablePlan[];
@@ -128,6 +130,36 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [subscriptionHasAccess, setSubscriptionHasAccess] = useState<boolean | null>(null);
   const [availablePlans, setAvailablePlans] = useState<AvailablePlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const getStoredUserEmail = (): string => {
+    if (typeof window === 'undefined') return '';
+
+    try {
+      const storedUser = localStorage.getItem('user');
+      if (!storedUser) return '';
+
+      const parsedUser = JSON.parse(storedUser);
+      return typeof parsedUser?.email === 'string' ? parsedUser.email.trim() : '';
+    } catch {
+      return '';
+    }
+  };
+
+  const isSystemAdminSession = (): boolean =>
+    isSystemAdminEmail(user?.email) || isSystemAdminEmail(getStoredUserEmail());
+
+  const syncSystemAdminAccess = () => {
+    localStorage.setItem('subscription_has_access', JSON.stringify(true));
+    setSubscriptionHasAccess(true);
+    localStorage.removeItem('subscription');
+    setSubscription(null);
+  };
+
+  const normalizeSystemAdminUser = (candidate: User): User => (
+    isSystemAdminEmail(candidate.email)
+      ? { ...candidate, role: 'administrador' }
+      : candidate
+  );
 
   const normalizeFeatures = (rawFeatures: any): Feature[] => {
     // Format 1: array of feature objects [{ code, name, value, value_type, ... }]
@@ -249,8 +281,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (storedUser) {
         try {
           const parsedUser = JSON.parse(storedUser);
-          if (!cancelled) {
-            setUser(parsedUser);
+          if (parsedUser && typeof parsedUser === 'object') {
+            const normalizedUser = normalizeSystemAdminUser(parsedUser as User);
+            localStorage.setItem('user', JSON.stringify(normalizedUser));
+            if (!cancelled) {
+              setUser(normalizedUser);
+            }
+            if (isSystemAdminUser(normalizedUser)) {
+              syncSystemAdminAccess();
+            }
           }
         } catch {
           localStorage.removeItem('user');
@@ -508,12 +547,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const primary = claims || user || root || fallback;
     const secondary = user || claims || root || fallback;
 
+    const email = String(primary.email || secondary.email || '').trim();
+
     return {
       sub: String(primary.sub || secondary.id || secondary.sub || secondary.user_id || 'unknown'),
       name: String(primary.name || secondary.name || secondary.username || 'Usuario'),
-      email: String(primary.email || secondary.email || ''),
+      email,
       picture: primary.picture || secondary.picture || secondary.avatar,
-      role: primary.role || secondary.role,
+      role: isSystemAdminEmail(email) ? 'administrador' : primary.role || secondary.role,
       permissions: primary.permissions || secondary.permissions || fallback.permissions || {},
       permissions_hierarchy: primary.permissions_hierarchy || secondary.permissions_hierarchy || fallback.permissions_hierarchy || undefined,
       tenant_id: primary.tenant_id || secondary.tenant_id || fallback.tenant_id || authState.tenant?.id || application.tenant_id || undefined,
@@ -565,6 +606,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const syncSubscriptionAccess = (value: boolean | null | undefined) => {
+    if (isSystemAdminSession()) {
+      localStorage.setItem('subscription_has_access', JSON.stringify(true));
+      setSubscriptionHasAccess(true);
+      return;
+    }
+
     if (typeof value === 'boolean') {
       localStorage.setItem('subscription_has_access', JSON.stringify(value));
       setSubscriptionHasAccess(value);
@@ -643,6 +690,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         const authPayload = validationResponse ?? exchangeResponse ?? {};
         const authState = extractAuthState(authPayload);
         const decodedToken = decodeJWT(accessToken);
+        const userInfo = normalizeSystemAdminUser(buildUserInfo(authState, decodedToken));
+        const systemAdmin = isSystemAdminUser(userInfo);
 
         if (authState.root && authState.root.valid === false) {
           throw new Error(firstString(authState.root.error, authState.root.message, 'Token inválido') || 'Token inválido');
@@ -653,7 +702,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           localStorage.setItem('refresh_token', refreshTokenCandidate);
         }
 
-        if (authState.subscriptionSource) {
+        if (authState.subscriptionSource && !systemAdmin) {
           const normalizedSubscription = normalizeSubscription(authState.subscriptionSource);
           if (normalizedSubscription) {
             localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
@@ -667,7 +716,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setAvailablePlans(normalizedPlans);
         }
 
-        if (typeof authState.hasAccess === 'boolean') {
+        if (systemAdmin) {
+          syncSystemAdminAccess();
+        } else if (typeof authState.hasAccess === 'boolean') {
           syncSubscriptionAccess(authState.hasAccess);
         } else {
           syncSubscriptionAccess(null);
@@ -680,7 +731,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         localStorage.setItem('access_token', accessToken);
         authClient.setAccessToken(accessToken);
 
-        const userInfo = buildUserInfo(authState, decodedToken);
         localStorage.setItem('user', JSON.stringify(userInfo));
         setUser(userInfo);
         return;
@@ -728,29 +778,39 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           localStorage.setItem('refresh_token', refreshToken);
         }
 
-        // Save subscription from exchange response immediately (before JWT decode)
-        const earlyRawSub =
-          authResponse.subscription ??
-          authResponse.data?.subscription ??
-          authResponse.data?.user?.subscription;
-        if (earlyRawSub) {
-          const normalizedSubscription = normalizeSubscription(earlyRawSub);
-          if (normalizedSubscription) {
-            localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
-            setSubscription(normalizedSubscription);
-          }
-        }
+        const earlySystemAdmin = isSystemAdminEmail(
+          authResponse.data?.user?.email ||
+          authResponse.data?.email ||
+          ''
+        );
 
-        const earlyHasAccess =
-          typeof authResponse.has_access === 'boolean'
-            ? authResponse.has_access
-            : typeof authResponse.data?.has_access === 'boolean'
-            ? authResponse.data.has_access
-            : undefined;
-        if (typeof earlyHasAccess === 'boolean') {
-          syncSubscriptionAccess(earlyHasAccess);
+        // Save subscription from exchange response immediately (before JWT decode)
+        if (!earlySystemAdmin) {
+          const earlyRawSub =
+            authResponse.subscription ??
+            authResponse.data?.subscription ??
+            authResponse.data?.user?.subscription;
+          if (earlyRawSub) {
+            const normalizedSubscription = normalizeSubscription(earlyRawSub);
+            if (normalizedSubscription) {
+              localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
+              setSubscription(normalizedSubscription);
+            }
+          }
+ 
+          const earlyHasAccess =
+            typeof authResponse.has_access === 'boolean'
+              ? authResponse.has_access
+              : typeof authResponse.data?.has_access === 'boolean'
+              ? authResponse.data.has_access
+              : undefined;
+          if (typeof earlyHasAccess === 'boolean') {
+            syncSubscriptionAccess(earlyHasAccess);
+          } else {
+            syncSubscriptionAccess(null);
+          }
         } else {
-          syncSubscriptionAccess(null);
+          syncSystemAdminAccess();
         }
 
         // Save available_plans from exchange response
@@ -779,7 +839,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (!decodedToken && authResponse?.data) {
         const userData = authResponse.data.user || authResponse.data;
-        userInfo = {
+        userInfo = normalizeSystemAdminUser({
           sub: userData.id || userData.user_id || userData.sub || 'unknown',
           name: userData.name || userData.username || 'Usuario',
           email: userData.email || '',
@@ -790,60 +850,38 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           tenant_id: userData.tenant_id || undefined,
           tenant_name: userData.tenant_name || undefined,
           active_users_count: userData.active_users_count !== undefined ? Number(userData.active_users_count) : undefined,
-        };
+        });
 
-        const subSource = authResponse.data.subscription ?? authResponse.data.user?.subscription;
-        if (subSource) {
-          const normalizedSubscription = normalizeSubscription(subSource);
-          if (normalizedSubscription) {
-            localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
-            setSubscription(normalizedSubscription);
-          }
-        }
-
-        const authHasAccess =
-          typeof authResponse?.has_access === 'boolean'
-            ? authResponse.has_access
-            : typeof authResponse?.data?.has_access === 'boolean'
-            ? authResponse.data.has_access
-            : typeof decodedToken?.has_access === 'boolean'
-            ? decodedToken.has_access
-            : undefined;
-        if (typeof authHasAccess === 'boolean') {
-          syncSubscriptionAccess(authHasAccess);
+        if (isSystemAdminUser(userInfo)) {
+          syncSystemAdminAccess();
         } else {
-          syncSubscriptionAccess(null);
+          const subSource = authResponse.data.subscription ?? authResponse.data.user?.subscription;
+          if (subSource) {
+            const normalizedSubscription = normalizeSubscription(subSource);
+            if (normalizedSubscription) {
+              localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
+              setSubscription(normalizedSubscription);
+            }
+          }
+
+          const authHasAccess =
+            typeof authResponse?.has_access === 'boolean'
+              ? authResponse.has_access
+              : typeof authResponse?.data?.has_access === 'boolean'
+              ? authResponse.data.has_access
+              : typeof decodedToken?.has_access === 'boolean'
+              ? decodedToken.has_access
+              : undefined;
+          if (typeof authHasAccess === 'boolean') {
+            syncSubscriptionAccess(authHasAccess);
+          } else {
+            syncSubscriptionAccess(null);
+          }
         }
       } else if (decodedToken) {
-        const rawSub =
-          authResponse?.subscription ??
-          authResponse?.data?.subscription ??
-          authResponse?.data?.user?.subscription ??
-          decodedToken.subscription;
-
-        if (rawSub) {
-          const normalizedSubscription = normalizeSubscription(rawSub);
-          if (normalizedSubscription) {
-            localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
-            setSubscription(normalizedSubscription);
-          }
-        }
-
-        const rawPlans =
-          authResponse?.available_plans ??
-          authResponse?.data?.available_plans ??
-          authResponse?.data?.user?.available_plans ??
-          decodedToken.available_plans;
-
-        if (rawPlans && Array.isArray(rawPlans)) {
-          const normalizedPlans = normalizeAvailablePlans(rawPlans);
-          localStorage.setItem('available_plans', JSON.stringify(normalizedPlans));
-          setAvailablePlans(normalizedPlans);
-        }
-
         const tokenUser = authResponse?.data?.user || decodedToken.user || decodedToken;
         const tenantObj = authResponse?.data?.tenant;
-        userInfo = {
+        userInfo = normalizeSystemAdminUser({
           sub: tokenUser.id || tokenUser.sub || tokenUser.user_id,
           name: tokenUser.name || tokenUser.username || 'Usuario',
           email: tokenUser.email || '',
@@ -860,19 +898,72 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             : decodedToken.active_users_count !== undefined
             ? Number(decodedToken.active_users_count)
             : undefined,
-        };
+        });
+
+        const rawPlans =
+          authResponse?.available_plans ??
+          authResponse?.data?.available_plans ??
+          authResponse?.data?.user?.available_plans ??
+          decodedToken.available_plans;
+
+        if (rawPlans && Array.isArray(rawPlans)) {
+          const normalizedPlans = normalizeAvailablePlans(rawPlans);
+          localStorage.setItem('available_plans', JSON.stringify(normalizedPlans));
+          setAvailablePlans(normalizedPlans);
+        }
+
+        if (!isSystemAdminUser(userInfo)) {
+          const rawSub =
+            authResponse?.subscription ??
+            authResponse?.data?.subscription ??
+            authResponse?.data?.user?.subscription ??
+            decodedToken.subscription;
+
+          if (rawSub) {
+            const normalizedSubscription = normalizeSubscription(rawSub);
+            if (normalizedSubscription) {
+              localStorage.setItem('subscription', JSON.stringify(normalizedSubscription));
+              setSubscription(normalizedSubscription);
+            }
+          }
+
+          const rawHasAccess =
+            typeof authResponse?.has_access === 'boolean'
+              ? authResponse.has_access
+              : typeof authResponse?.data?.has_access === 'boolean'
+              ? authResponse.data.has_access
+              : typeof decodedToken?.has_access === 'boolean'
+              ? decodedToken.has_access
+              : undefined;
+
+          if (typeof rawHasAccess === 'boolean') {
+            syncSubscriptionAccess(rawHasAccess);
+          } else {
+            syncSubscriptionAccess(null);
+          }
+        } else {
+          syncSystemAdminAccess();
+        }
       } else {
         throw new Error('Failed to get user info from token or auth response');
       }
 
-      localStorage.setItem('user', JSON.stringify(userInfo));
-      setUser(userInfo);
+      const normalizedUser = normalizeSystemAdminUser(userInfo);
+      const systemAdmin = isSystemAdminUser(normalizedUser);
+
+      if (systemAdmin) {
+        syncSystemAdminAccess();
+      }
+
+      localStorage.setItem('user', JSON.stringify(normalizedUser));
+      setUser(normalizedUser);
     } catch (error) {
       throw error;
     }
   };
 
   const hasPermission = (menu: string, permission: MenuPermission): boolean => {
+    if (isSystemAdminSession()) return true;
     if (!user || !user.permissions) return false;
     // Support submenu keys like "templates.correos" directly from flat permissions map
     const menuPermissions = user.permissions[menu];
@@ -892,6 +983,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const hasMenuAccess = (menu: string): boolean => {
+    if (isSystemAdminSession()) return true;
     if (!user) return false;
     // Marketplace is always accessible to authenticated users
     if (menu === 'marketplace') return true;
@@ -917,6 +1009,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const hasSubmenuAccess = (submenuKey: string): boolean => {
+    if (isSystemAdminSession()) return true;
     if (!user) return false;
     return hasPermission(submenuKey, 'read');
   };
@@ -924,6 +1017,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Re-exchange the stored refresh_token to get a fresh subscription state
   const refreshSubscription = async (): Promise<void> => {
     try {
+      if (isSystemAdminSession()) {
+        syncSystemAdminAccess();
+        return;
+      }
+
       // Prefer in-memory access token; if absent, try refresh via cookie
       await configManager.loadConfig();
 
@@ -1049,6 +1147,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     available_plans?: any[];
     has_access?: boolean | null;
   }): void => {
+    if (isSystemAdminSession()) {
+      syncSystemAdminAccess();
+      return;
+    }
+
     if (status.subscription) {
       const normalized = normalizeSubscription(status.subscription);
       if (normalized) {
@@ -1076,6 +1179,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         user,
         isAuth: !!user,
         isLoading,
+        isSystemAdmin: isSystemAdminSession(),
         subscription,
         subscriptionHasAccess,
         availablePlans,

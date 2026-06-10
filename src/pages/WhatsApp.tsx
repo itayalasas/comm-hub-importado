@@ -66,7 +66,7 @@ const fmtDate = (d: string | null) =>
 /* ── Component ─────────────────────────────────────────────────── */
 
 export const WhatsApp = () => {
-  const { user } = useAuth();
+  const { user, isSystemAdmin } = useAuth();
   const toast = useToast();
   const { canDelete } = usePermissions('statistics.jobs_whatsapp');
 
@@ -96,7 +96,7 @@ export const WhatsApp = () => {
   /* ── Load ── */
   useEffect(() => {
     if (user) loadApplications();
-  }, [user]);
+  }, [user, isSystemAdmin]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -120,7 +120,7 @@ export const WhatsApp = () => {
         .eq('user_id', user.sub)
         .maybeSingle();
 
-      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
       setApplications(rows);
       const defaultId = (prefs as any)?.default_application_id;
       if (defaultId) setSelectedApp(defaultId);

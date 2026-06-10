@@ -150,7 +150,7 @@ const StatCard = ({ icon: Icon, label, value, sub, color, trend }: {
 /* ── Main component ──────────────────────────────────────────────── */
 
 export const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, isSystemAdmin } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [channel, setChannel] = useState<Channel>('all');
@@ -180,7 +180,7 @@ export const Dashboard = () => {
       window.location.replace(`/subscription/result${window.location.search}`);
     }
   }, []);
-  useEffect(() => { if (user) loadApplications(); }, [user]);
+  useEffect(() => { if (user) loadApplications(); }, [user, isSystemAdmin]);
   useEffect(() => {
     if (selectedApp) { loadEmailStats(); loadWhatsAppStats(); loadChartData(); }
   }, [selectedApp]);
@@ -200,7 +200,7 @@ export const Dashboard = () => {
 
       if (prefsError) throw prefsError;
 
-      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id);
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
       const appList = rows.map(({ id, name }) => ({ id, name }));
       setApplications(appList);
 
