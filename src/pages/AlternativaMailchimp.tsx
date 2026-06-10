@@ -2,16 +2,16 @@ import { MarketingPage } from '../components/MarketingPage';
 
 const FAQ = [
   {
-    question: 'En que se diferencia de Mailchimp?',
-    answer: 'SendCraft combina email marketing con correos transaccionales, API y control tecnico, en una sola plataforma enfocada en equipos de producto.',
+    question: '¿En qué se diferencia de Mailchimp?',
+    answer: 'SendCraft combina email marketing con correos transaccionales, API y control técnico, en una sola plataforma enfocada en equipos de producto.',
   },
   {
-    question: 'Puedo mantener mi marca propia?',
-    answer: 'Si. El objetivo es que tengas mas control operativo y menos dependencia de una herramienta cerrada.',
+    question: '¿Puedo mantener mi marca propia?',
+    answer: 'Sí. El objetivo es que tengas más control operativo y menos dependencia de una herramienta cerrada.',
   },
   {
-    question: 'Sirve para una pyme o solo para SaaS?',
-    answer: 'Sirve para ambos. Las pymes ganan simplicidad y los SaaS ganan control, automatizacion y trazabilidad.',
+    question: '¿Sirve para una pyme o solo para SaaS?',
+    answer: 'Sirve para ambos. Las pymes ganan simplicidad y los SaaS ganan control, automatización y trazabilidad.',
   },
 ];
 
@@ -21,7 +21,7 @@ const structuredData = {
   name: 'SendCraft',
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Web',
-  description: 'Alternativa a Mailchimp para equipos que quieren control tecnico, API y transaccional en una misma plataforma.',
+  description: 'Alternativa a Mailchimp para equipos que quieren control técnico, API y transaccional en una misma plataforma.',
   url: 'https://sendcraft.net/alternativa-mailchimp',
 };
 
@@ -44,7 +44,7 @@ export const AlternativaMailchimp = () => {
       seo={{
         title: 'Alternativa a Mailchimp',
         description:
-          'SendCraft es una alternativa a Mailchimp para email marketing, automatizaciones y correos transaccionales con mas control tecnico.',
+          'SendCraft es una alternativa a Mailchimp para email marketing, automatizaciones y correos transaccionales con más control técnico.',
         path: '/alternativa-mailchimp',
         canonicalUrl: 'https://sendcraft.net/alternativa-mailchimp',
         keywords: ['alternativa a mailchimp', 'mailchimp alternative', 'email marketing alternativa'],
@@ -56,24 +56,24 @@ export const AlternativaMailchimp = () => {
           Una alternativa a <span className="text-cyan-300">Mailchimp</span> para equipos que necesitan API, marca propia y transaccional.
         </>
       }
-      description="Si quieres menos friccion operativa y mas control tecnico, SendCraft unifica campañas, automatizaciones y correo critico en un solo lugar."
+      description="Si quieres menos fricción operativa y más control técnico, SendCraft unifica campañas, automatizaciones y correo crítico en un solo lugar."
       primaryAction={{ label: 'Ver email marketing', to: '/email-marketing' }}
       secondaryAction={{ label: 'Ver precios', to: '/precios' }}
       navLinks={[
         { label: 'Email marketing', to: '/email-marketing' },
         { label: 'Precios', to: '/precios' },
-        { label: 'Documentacion', to: '/docs' },
+        { label: 'Documentación', to: '/docs' },
       ]}
       stats={[
         { value: '1 stack', label: 'Marketing + transaccional' },
-        { value: 'API', label: 'Integracion directa' },
-        { value: 'Marca', label: 'Mas control' },
+        { value: 'API', label: 'Integración directa' },
+        { value: 'Marca', label: 'Más control' },
         { value: 'SaaS', label: 'Pensado para crecer' },
       ]}
       highlights={[
         {
           tag: 'Control',
-          title: 'Mas control sobre la experiencia',
+          title: 'Más control sobre la experiencia',
           description: 'No dependes de flujos demasiado cerrados para tu estrategia de comunicaciones.',
         },
         {
@@ -83,17 +83,17 @@ export const AlternativaMailchimp = () => {
         },
         {
           tag: 'Tech',
-          title: 'Mas amigable para producto',
-          description: 'La API y los datos hacen mas facil conectar la herramienta con tu app real.',
+          title: 'Más amigable para producto',
+          description: 'La API y los datos hacen más fácil conectar la herramienta con tu app real.',
         },
       ]}
       features={[
         {
-          title: 'Menos fragmentacion',
+          title: 'Menos fragmentación',
           description: 'Centraliza campañas, templates, logs y documentos en una sola superficie de control.',
         },
         {
-          title: 'Mas orientada a producto',
+          title: 'Más orientada a producto',
           description: 'Se adapta mejor cuando tu equipo quiere automatizar el email desde el backend.',
         },
         {
@@ -106,7 +106,7 @@ export const AlternativaMailchimp = () => {
         },
         {
           title: 'APIs y templates',
-          description: 'La plataforma no solo envía: tambien te ayuda a organizar como se generan los mensajes.',
+          description: 'La plataforma no solo envía: también te ayuda a organizar cómo se generan los mensajes.',
         },
         {
           title: 'Alcance y crecimiento',
@@ -115,12 +115,12 @@ export const AlternativaMailchimp = () => {
       ]}
       steps={[
         {
-          title: 'Evalua tu stack actual',
-          description: 'Revisa que necesitas hoy y que te esta costando mantener con una herramienta generica.',
+          title: 'Evalúa tu stack actual',
+          description: 'Revisa qué necesitas hoy y qué te está costando mantener con una herramienta genérica.',
         },
         {
           title: 'Prueba el flujo',
-          description: 'Convierte una campana o una integracion critica y mide la mejora en claridad y control.',
+          description: 'Convierte una campaña o una integración crítica y mide la mejora en claridad y control.',
         },
         {
           title: 'Consolida canales',
@@ -129,7 +129,7 @@ export const AlternativaMailchimp = () => {
       ]}
       faq={FAQ}
       relatedLinks={[
-        { label: 'Email marketing', to: '/email-marketing', description: 'Pilares de captacion y automatizacion.' },
+        { label: 'Email marketing', to: '/email-marketing', description: 'Pilares de captación y automatización.' },
         { label: 'Email transaccional', to: '/email-transaccional', description: 'Notificaciones, facturas y alertas.' },
         { label: 'Precios', to: '/precios', description: 'Planes para evaluar el cambio sin compromiso.' },
       ]}

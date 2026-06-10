@@ -2,16 +2,16 @@ import { MarketingPage } from '../components/MarketingPage';
 
 const FAQ = [
   {
-    question: 'La API sirve para aplicaciones web y backend?',
-    answer: 'Si. Puedes llamarla desde tu backend, workers, jobs o cualquier servicio que haga requests HTTP.',
+    question: '¿La API sirve para aplicaciones web y backend?',
+    answer: 'Sí. Puedes llamarla desde tu backend, workers, jobs o cualquier servicio que haga requests HTTP.',
   },
   {
-    question: 'Necesito usar SMTP obligatoriamente?',
-    answer: 'No. La plataforma ofrece un enfoque API first, aunque tambien soporta SMTP cuando lo necesitas.',
+    question: '¿Necesito usar SMTP obligatoriamente?',
+    answer: 'No. La plataforma ofrece un enfoque API first, aunque también soporta SMTP cuando lo necesitas.',
   },
   {
-    question: 'Puedo enviar correos con templates?',
-    answer: 'Si. Puedes usar plantillas y variables para mantener consistencia sin generar HTML a mano cada vez.',
+    question: '¿Puedo enviar correos con templates?',
+    answer: 'Sí. Puedes usar plantillas y variables para mantener consistencia sin generar HTML a mano cada vez.',
   },
 ];
 
@@ -47,7 +47,7 @@ export const ApiEmail = () => {
           'Integra una API de email para enviar correos transaccionales, templates y automatizaciones desde tu backend o frontend.',
         path: '/api-email',
         canonicalUrl: 'https://sendcraft.net/api-email',
-        keywords: ['API email', 'api para enviar correos', 'email api', 'envio de correos por API'],
+        keywords: ['API email', 'api para enviar correos', 'email api', 'envío de correos por API'],
         structuredData: [structuredData, faqSchema],
       }}
       eyebrow="API email"
@@ -56,18 +56,18 @@ export const ApiEmail = () => {
           API para enviar correos desde tu app sin complicar tu backend.
         </>
       }
-      description="Integra envios con endpoints REST, usa variables en templates y controla el resultado de cada comunicacion desde una sola plataforma."
-      primaryAction={{ label: 'Leer la documentacion', to: '/docs' }}
+      description="Integra envíos con endpoints REST, usa variables en templates y controla el resultado de cada comunicación desde una sola plataforma."
+      primaryAction={{ label: 'Leer la documentación', to: '/docs' }}
       secondaryAction={{ label: 'Ver SMTP', to: '/smtp' }}
       navLinks={[
-        { label: 'Documentacion', to: '/docs' },
+        { label: 'Documentación', to: '/docs' },
         { label: 'Transaccional', to: '/email-transaccional' },
         { label: 'Precios', to: '/precios' },
       ]}
       stats={[
-        { value: 'REST', label: 'Integracion directa' },
+        { value: 'REST', label: 'Integración directa' },
         { value: 'JSON', label: 'Payloads simples' },
-        { value: 'Keys', label: 'Autenticacion' },
+        { value: 'Keys', label: 'Autenticación' },
         { value: 'Logs', label: 'Observabilidad' },
       ]}
       highlights={[
@@ -79,12 +79,12 @@ export const ApiEmail = () => {
         {
           tag: 'Control',
           title: 'Claves y permisos',
-          description: 'Cada aplicacion puede operar con su propia API key y su propio contexto.',
+          description: 'Cada aplicación puede operar con su propia API key y su propio contexto.',
         },
         {
           tag: 'Scale',
-          title: 'Crecimiento sin friccion',
-          description: 'Empiezas con pocos envios y luego escalas sin cambiar de herramienta.',
+          title: 'Crecimiento sin fricción',
+          description: 'Empiezas con pocos envíos y luego escalas sin cambiar de herramienta.',
         },
       ]}
       features={[
@@ -98,7 +98,7 @@ export const ApiEmail = () => {
         },
         {
           title: 'Respuesta trazable',
-          description: 'Registra cada accion para saber que paso con el mensaje y su estado.',
+          description: 'Registra cada acción para saber qué pasó con el mensaje y su estado.',
         },
         {
           title: 'Control de errores',
@@ -116,22 +116,22 @@ export const ApiEmail = () => {
       steps={[
         {
           title: 'Crea tu API key',
-          description: 'Asigna permisos a cada aplicacion para mantener separadas las credenciales.',
+          description: 'Asigna permisos a cada aplicación para mantener separadas las credenciales.',
         },
         {
           title: 'Define el payload',
-          description: 'Envias los datos del destinatario, template y variables que el mensaje necesita.',
+          description: 'Envías los datos del destinatario, template y variables que el mensaje necesita.',
         },
         {
           title: 'Recibe la respuesta',
-          description: 'Tu sistema registra el resultado y sigue el flujo con la informacion devuelta.',
+          description: 'Tu sistema registra el resultado y sigue el flujo con la información devuelta.',
         },
       ]}
       faq={FAQ}
       relatedLinks={[
         { label: 'Email transaccional', to: '/email-transaccional', description: 'Ideal para confirmaciones, alertas y documentos.' },
-        { label: 'SMTP', to: '/smtp', description: 'Si tu integracion ya habla SMTP y quieres mantener compatibilidad.' },
-        { label: 'Documentacion', to: '/docs', description: 'Ejemplos de request, response y conectores.' },
+        { label: 'SMTP', to: '/smtp', description: 'Si tu integración ya habla SMTP y quieres mantener compatibilidad.' },
+        { label: 'Documentación', to: '/docs', description: 'Ejemplos de request, response y conectores.' },
       ]}
     />
   );

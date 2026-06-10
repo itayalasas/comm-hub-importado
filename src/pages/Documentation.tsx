@@ -508,7 +508,7 @@ export default function Documentation({ publicView = false }: DocumentationProps
       <div>
         <h2 className="text-2xl font-bold text-white mb-4">Documentación de API</h2>
         <p className="text-slate-300 mb-4">
-          Bienvenido a la documentacion de la API de SendCraft. Esta guia te ayudara a integrar nuestro
+          Bienvenido a la documentación de la API de SendCraft. Esta guía te ayudará a integrar nuestro
           servicio de comunicaciones en tu sistema.
         </p>
       </div>
@@ -530,8 +530,8 @@ export default function Documentation({ publicView = false }: DocumentationProps
         <div className="flex items-start gap-3">
           <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
           <div>
-            <h3 className="text-blue-400 font-semibold mb-2">Características principales</h3>
-            <ul className="text-slate-300 space-y-2 text-sm">
+          <h3 className="text-blue-400 font-semibold mb-2">Características principales</h3>
+          <ul className="text-slate-300 space-y-2 text-sm">
               <li>• Envío de emails con templates personalizados</li>
               <li>• Soporte para comunicaciones pendientes con datos externos</li>
               <li>• Adjuntar PDFs en base64</li>
@@ -548,7 +548,7 @@ export default function Documentation({ publicView = false }: DocumentationProps
   const renderEmailConfig = () => (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-white mb-4">Configuración de Email</h2>
+        <h2 className="text-2xl font-bold text-white mb-4">Configuración de email</h2>
         <p className="text-slate-300 mb-4">
           El sistema soporta dos proveedores de email: SMTP (genérico) y Resend. Puedes configurar tu proveedor preferido desde la sección de <strong>Configuración</strong>.
         </p>
@@ -558,7 +558,7 @@ export default function Documentation({ publicView = false }: DocumentationProps
         <div className="flex items-start gap-3">
           <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
           <div>
-            <h3 className="text-blue-400 font-semibold mb-2">Proveedores Soportados</h3>
+            <h3 className="text-blue-400 font-semibold mb-2">Proveedores soportados</h3>
             <ul className="text-slate-300 space-y-2 text-sm">
               <li>• <strong>SMTP:</strong> Compatible con cualquier servidor SMTP (Gmail, Office 365, SendGrid, etc.)</li>
               <li>• <strong>Resend:</strong> API moderna con webhooks para tracking avanzado</li>
@@ -598,7 +598,7 @@ export default function Documentation({ publicView = false }: DocumentationProps
                 <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">Contraseña de aplicación (no tu contraseña normal)</code>
               </div>
               <div className="mt-3 bg-amber-500/10 border border-amber-500/30 rounded p-3">
-                <p className="text-amber-400 text-xs font-semibold mb-1">⚠️ Configuración Requerida:</p>
+                <p className="text-amber-400 text-xs font-semibold mb-1">⚠️ Configuración requerida:</p>
                 <ol className="text-slate-300 text-xs space-y-1 ml-4">
                   <li>1. Activa la verificación en 2 pasos en tu cuenta de Google</li>
                   <li>2. Ve a: <a href="https://myaccount.google.com/apppasswords" target="_blank" className="text-cyan-400 underline">myaccount.google.com/apppasswords</a></li>
@@ -629,8 +629,8 @@ export default function Documentation({ publicView = false }: DocumentationProps
                 <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">tu-email@outlook.com</code>
               </div>
               <div>
-                <p className="text-slate-400 mb-1">Contraseña:</p>
-                <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">Tu contraseña de Microsoft 365</code>
+                  <p className="text-slate-400 mb-1">Contraseña:</p>
+                  <code className="bg-slate-800 px-3 py-1.5 rounded text-cyan-300 block">Tu contraseña de Microsoft 365</code>
               </div>
             </div>
           </div>
@@ -1833,16 +1833,16 @@ Content-Type: application/json`}
       }`}
     >
       <Seo
-        title={publicView ? 'Documentacion de API' : 'Documentacion interna'}
+        title={publicView ? 'Documentación de API' : 'Documentación interna'}
         description={
           publicView
-            ? 'Guia de endpoints, conectores y ejemplos de integracion para SendCraft.'
+            ? 'Guía de endpoints, conectores y ejemplos de integración para SendCraft.'
             : 'Referencia interna de endpoints y conectores de SendCraft.'
         }
         path="/docs"
         canonicalUrl="https://sendcraft.net/docs"
         noIndex={!publicView}
-        keywords={publicView ? ['documentacion api', 'api sendcraft', 'conectores email'] : undefined}
+        keywords={publicView ? ['documentación api', 'api sendcraft', 'conectores email'] : undefined}
       />
       <aside className="w-64 bg-slate-800/30 border-r border-slate-700 overflow-y-auto">
         <div className="p-4">

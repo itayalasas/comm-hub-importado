@@ -2,16 +2,16 @@ import { MarketingPage } from '../components/MarketingPage';
 
 const FAQ = [
   {
-    question: 'Que es un correo transaccional?',
-    answer: 'Es un email disparado por una accion concreta del usuario o del sistema: confirmacion, alerta, recibo, aviso o recuperacion de cuenta.',
+    question: '¿Qué es un correo transaccional?',
+    answer: 'Es un email disparado por una acción concreta del usuario o del sistema: confirmación, alerta, recibo, aviso o recuperación de cuenta.',
   },
   {
     question: 'Puedo usarlo para facturas y PDFs?',
-    answer: 'Si. El flujo de SendCraft incluye generacion de PDF y adjuntos para comunicaciones operativas.',
+    answer: 'Sí. El flujo de SendCraft incluye generación de PDF y adjuntos para comunicaciones operativas.',
   },
   {
-    question: 'Sirve para integraciones de alta prioridad?',
-    answer: 'Si. Esta pensado para eventos criticos donde importan velocidad, trazabilidad y control de entrega.',
+    question: '¿Sirve para integraciones de alta prioridad?',
+    answer: 'Sí. Está pensado para eventos críticos donde importan velocidad, trazabilidad y control de entrega.',
   },
 ];
 
@@ -45,10 +45,10 @@ export const EmailTransaccional = () => {
       seo={{
         title: 'Email transaccional con API y entregabilidad',
         description:
-          'Envio de correos transaccionales para confirmaciones, alertas, facturas y notificaciones criticas con control y trazabilidad.',
+          'Envío de correos transaccionales para confirmaciones, alertas, facturas y notificaciones críticas con control y trazabilidad.',
         path: '/email-transaccional',
         canonicalUrl: 'https://sendcraft.net/email-transaccional',
-        keywords: ['email transaccional', 'correos transaccionales', 'envio transaccional', 'API email'],
+        keywords: ['email transaccional', 'correos transaccionales', 'envío transaccional', 'API email'],
         structuredData: [structuredData, faqSchema],
       }}
       eyebrow="Transaccional"
@@ -57,11 +57,11 @@ export const EmailTransaccional = () => {
           Email transaccional con <span className="text-cyan-300">API</span> y entregabilidad para facturas, alertas y confirmaciones.
         </>
       }
-      description="Diseñado para eventos criticos: confirmaciones de compra, recuperacion de contrasena, avisos operativos y envios con PDF."
+      description="Diseñado para eventos críticos: confirmaciones de compra, recuperación de contraseña, avisos operativos y envíos con PDF."
       primaryAction={{ label: 'Abrir la API', to: '/docs' }}
       secondaryAction={{ label: 'Ver SMTP', to: '/smtp' }}
       navLinks={[
-        { label: 'Documentacion', to: '/docs' },
+        { label: 'Documentación', to: '/docs' },
         { label: 'API Email', to: '/api-email' },
         { label: 'Precios', to: '/precios' },
       ]}
@@ -69,7 +69,7 @@ export const EmailTransaccional = () => {
         { value: '<2s', label: 'Tiempo objetivo' },
         { value: 'PDF', label: 'Adjuntos y documentos' },
         { value: 'Logs', label: 'Trazabilidad' },
-        { value: 'API', label: 'Integracion directa' },
+        { value: 'API', label: 'Integración directa' },
       ]}
       highlights={[
         {
@@ -80,7 +80,7 @@ export const EmailTransaccional = () => {
         {
           tag: 'Trace',
           title: 'Seguimiento de punta a punta',
-          description: 'Te ayuda a saber que se envio, cuando y con que resultado para depurar incidentes rapido.',
+          description: 'Te ayuda a saber qué se envió, cuándo y con qué resultado para depurar incidentes rápido.',
         },
         {
           tag: 'Automation',
@@ -90,8 +90,8 @@ export const EmailTransaccional = () => {
       ]}
       features={[
         {
-          title: 'Confirmaciones automaticas',
-          description: 'Envio de recibos, reservas, altas de usuario y movimientos criticos sin trabajo manual.',
+          title: 'Confirmaciones automáticas',
+          description: 'Envío de recibos, reservas, altas de usuario y movimientos críticos sin trabajo manual.',
         },
         {
           title: 'Alertas operativas',
@@ -99,19 +99,19 @@ export const EmailTransaccional = () => {
         },
         {
           title: 'Adjuntos PDF',
-          description: 'Genera y adjunta documentos para que la comunicacion salga completa desde el mismo flujo.',
+          description: 'Genera y adjunta documentos para que la comunicación salga completa desde el mismo flujo.',
         },
         {
           title: 'Trazabilidad y logs',
-          description: 'Monitorea los envios para diagnosticar problemas y mejorar la observabilidad del sistema.',
+          description: 'Monitorea los envíos para diagnosticar problemas y mejorar la observabilidad del sistema.',
         },
         {
-          title: 'Integracion simple',
-          description: 'Consume un endpoint REST o conecta por SMTP segun la arquitectura que ya tengas.',
+          title: 'Integración simple',
+          description: 'Consume un endpoint REST o conecta por SMTP según la arquitectura que ya tengas.',
         },
         {
           title: 'Control de entregabilidad',
-          description: 'Reduce errores de envio con un flujo pensado para correo critico y no solo marketing masivo.',
+          description: 'Reduce errores de envío con un flujo pensado para correo crítico y no solo marketing masivo.',
         },
       ]}
       steps={[
@@ -132,7 +132,7 @@ export const EmailTransaccional = () => {
       relatedLinks={[
         { label: 'API para email', to: '/api-email', description: 'Endpoints para integrarte directamente desde tu backend.' },
         { label: 'SMTP', to: '/smtp', description: 'Si ya tienes integraciones que usan host, puerto y credenciales.' },
-        { label: 'Documentacion', to: '/docs', description: 'Guia completa de endpoints, ejemplos y payloads.' },
+        { label: 'Documentación', to: '/docs', description: 'Guía completa de endpoints, ejemplos y payloads.' },
       ]}
     />
   );

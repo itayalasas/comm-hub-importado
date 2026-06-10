@@ -2,20 +2,20 @@ import { MarketingPage } from '../components/MarketingPage';
 
 const FAQ = [
   {
-    question: 'Que hace distinta a SendCraft frente a una herramienta generica?',
+    question: '¿Qué hace distinta a SendCraft frente a una herramienta genérica?',
     answer: 'Combina email marketing, correos transaccionales, API, SMTP y PDF en una sola plataforma, con foco en control y entregabilidad.',
   },
   {
     question: 'Puedo segmentar por cliente, tenant o lista?',
-    answer: 'Si. La plataforma esta pensada para trabajar con multi-tenant y flujos de comunicacion separados por aplicacion o cliente.',
+    answer: 'Sí. La plataforma está pensada para trabajar con multi-tenant y flujos de comunicación separados por aplicación o cliente.',
   },
   {
-    question: 'Sirve para automatizaciones internas?',
-    answer: 'Si. Puedes disparar envios desde tu app, webhooks o procesos internos sin depender de campañas manuales.',
+    question: '¿Sirve para automatizaciones internas?',
+    answer: 'Sí. Puedes disparar envíos desde tu app, webhooks o procesos internos sin depender de campañas manuales.',
   },
   {
-    question: 'Es util para pymes y SaaS?',
-    answer: 'Si. De hecho el contenido y la arquitectura estan pensados para empresas que necesitan crecer sin perder control tecnico.',
+    question: '¿Es útil para pymes y SaaS?',
+    answer: 'Sí. De hecho el contenido y la arquitectura están pensados para empresas que necesitan crecer sin perder control técnico.',
   },
 ];
 
@@ -26,7 +26,7 @@ const structuredData = {
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Web',
   description:
-    'Plataforma de email marketing para crear campañas, automatizaciones y segmentacion con analitica de aperturas y clics.',
+    'Plataforma de email marketing para crear campañas, automatizaciones y segmentación con analítica de aperturas y clics.',
   url: 'https://sendcraft.net/email-marketing',
   offers: {
     '@type': 'Offer',
@@ -54,14 +54,14 @@ export const EmailMarketing = () => {
       seo={{
         title: 'Email Marketing para empresas',
         description:
-          'Crea campañas de email marketing, automatizaciones y segmentacion desde una plataforma pensada para SaaS y pymes.',
+          'Crea campañas de email marketing, automatizaciones y segmentación desde una plataforma pensada para SaaS y pymes.',
         path: '/email-marketing',
         canonicalUrl: 'https://sendcraft.net/email-marketing',
         keywords: [
           'email marketing',
           'plataforma de email marketing',
-          'campanas email',
-          'automatizacion de emails',
+          'campañas email',
+          'automatización de emails',
           'email marketing para pymes',
         ],
         structuredData: [structuredData, faqSchema],
@@ -69,20 +69,20 @@ export const EmailMarketing = () => {
       eyebrow="Email marketing"
       headline={
         <>
-          Email marketing para equipos que quieren mas aperturas, <span className="text-cyan-300">mas clics</span> y mas control.
+          Email marketing para equipos que quieren más aperturas, <span className="text-cyan-300">más clics</span> y más control.
         </>
       }
-      description="Crea campañas, segmenta audiencias, automatiza envios y mide resultados desde una plataforma pensada para SaaS, pymes y equipos de producto."
+      description="Crea campañas, segmenta audiencias, automatiza envíos y mide resultados desde una plataforma pensada para SaaS, pymes y equipos de producto."
       primaryAction={{ label: 'Probar ahora', to: '/login' }}
       secondaryAction={{ label: 'Ver precios', to: '/precios' }}
       navLinks={[
         { label: 'Precios', to: '/precios' },
-        { label: 'Documentacion', to: '/docs' },
+        { label: 'Documentación', to: '/docs' },
         { label: 'API Email', to: '/api-email' },
       ]}
       stats={[
         { value: '99.9%', label: 'Uptime objetivo' },
-        { value: '360°', label: 'Canales de envio' },
+        { value: '360°', label: 'Canales de envío' },
         { value: '24/7', label: 'Automatizaciones' },
         { value: '1 sitio', label: 'Marca y control' },
       ]}
@@ -90,31 +90,31 @@ export const EmailMarketing = () => {
         {
           tag: 'Claridad',
           title: 'Landing con propuesta clara',
-          description: 'Habla de email marketing de forma directa, sin esconder la propuesta detras de un slogan generico.',
+          description: 'Habla de email marketing de forma directa, sin esconder la propuesta detrás de un slogan genérico.',
         },
         {
           tag: 'Growth',
           title: 'Listo para convertir',
-          description: 'CTA claros, FAQ y enlaces internos para llevar al usuario al siguiente paso sin friccion.',
+          description: 'CTA claros, FAQ y enlaces internos para llevar al usuario al siguiente paso sin fricción.',
         },
         {
           tag: 'Ops',
-          title: 'Pensado para equipos tecnicos',
-          description: 'La plataforma no solo vende marketing: tambien resuelve API, SMTP y trazabilidad.',
+          title: 'Pensado para equipos técnicos',
+          description: 'La plataforma no solo vende marketing: también resuelve API, SMTP y trazabilidad.',
         },
       ]}
       features={[
         {
-          title: 'Campanas y automatizaciones',
+          title: 'Campañas y automatizaciones',
           description: 'Dispara secuencias, newsletters y correos de ciclo de vida desde una sola interfaz.',
         },
         {
-          title: 'Segmentacion por audiencia',
-          description: 'Organiza listas y flujos por cliente, tenant o tipo de comunicacion para evitar mezclar contextos.',
+          title: 'Segmentación por audiencia',
+          description: 'Organiza listas y flujos por cliente, tenant o tipo de comunicación para evitar mezclar contextos.',
         },
         {
-          title: 'Analitica util',
-          description: 'Mide aperturas, clics y entregas para entender que mensaje funciona mejor.',
+          title: 'Analítica útil',
+          description: 'Mide aperturas, clics y entregas para entender qué mensaje funciona mejor.',
         },
         {
           title: 'Templates reutilizables',
@@ -122,25 +122,25 @@ export const EmailMarketing = () => {
         },
         {
           title: 'Entregabilidad y control',
-          description: 'Suma buenas practicas de envio, dominios y reputacion para proteger la bandeja de entrada.',
+          description: 'Suma buenas prácticas de envío, dominios y reputación para proteger la bandeja de entrada.',
         },
         {
-          title: 'Integracion con producto',
+          title: 'Integración con producto',
           description: 'Conecta el marketing con tu app, tus eventos y tus datos de negocio sin procesos manuales.',
         },
       ]}
       steps={[
         {
           title: 'Define la audiencia',
-          description: 'Agrupa contactos por comportamiento, segmento o cuenta para que cada envio tenga contexto.',
+          description: 'Agrupa contactos por comportamiento, segmento o cuenta para que cada envío tenga contexto.',
         },
         {
-          title: 'Lanza la campana',
+          title: 'Lanza la campaña',
           description: 'Crea el contenido, elige el objetivo y publica sin depender de flujos manuales complejos.',
         },
         {
           title: 'Mide y mejora',
-          description: 'Revisa aperturas, clics y conversiones para iterar la proxima version del mensaje.',
+          description: 'Revisa aperturas, clics y conversiones para iterar la próxima versión del mensaje.',
         },
       ]}
       faq={FAQ}

@@ -194,7 +194,7 @@ export function MarketingPage({
                   <div className="p-6 sm:p-7">
                     <div className="flex items-center justify-between mb-6">
                       <div>
-                        <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">Que incluye</div>
+                        <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">Qué incluye</div>
                         <div className="text-lg font-bold text-white">Todo listo para crecer</div>
                       </div>
                       <div className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
@@ -206,12 +206,12 @@ export function MarketingPage({
                       {(highlights && highlights.length > 0 ? highlights : [
                         {
                           title: 'Contenido claro',
-                          description: 'Titulos, descripciones y estructura para explicar bien cada propuesta.',
+                          description: 'Títulos, descripciones y estructura para explicar bien cada propuesta.',
                           tag: 'Claridad',
                         },
                         {
                           title: 'Conexiones entre secciones',
-                          description: 'La navegacion lleva de una pagina a otra de forma natural.',
+                          description: 'La navegación lleva de una página a otra de forma natural.',
                           tag: 'Flujo',
                         },
                         {
@@ -249,7 +249,7 @@ export function MarketingPage({
               <SectionTitle
                 eyebrow="Capacidades"
                 title="Lo que te ayuda a crecer y convertir"
-                description="Cada pagina responde una necesidad concreta, con contenido util y una ruta sencilla para avanzar."
+                description="Cada página responde una necesidad concreta, con contenido útil y una ruta sencilla para avanzar."
               />
 
               <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -276,8 +276,8 @@ export function MarketingPage({
             <div className="max-w-7xl mx-auto">
               <SectionTitle
                 eyebrow="Proceso"
-                title="Como funciona el recorrido desde la web"
-                description="Landing clara + prueba social + CTA directa. Menos friccion, mas conversion."
+                title="Cómo funciona el recorrido desde la web"
+                description="Landing clara + prueba social + CTA directa. Menos fricción, más conversión."
               />
 
               <div className="grid lg:grid-cols-3 gap-5">
@@ -332,7 +332,7 @@ export function MarketingPage({
               <SectionTitle
                 eyebrow="FAQ"
                 title="Preguntas que suelen frenar conversiones"
-                description="Responder estas dudas en la pagina ayuda a cerrar la venta sin mandar al usuario a otro lado."
+                description="Responder estas dudas en la página ayuda a cerrar la venta sin mandar al usuario a otro lado."
               />
 
               <div className="space-y-4">
@@ -364,7 +364,7 @@ export function MarketingPage({
                   Listo para publicar
                 </div>
                 <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-4">
-                  Publica estas paginas y conecta tu analitica
+                  Publica estas páginas y conecta tu analítica
                 </h2>
                 <p className="text-lg text-slate-300 max-w-2xl mx-auto mb-8">
                   El siguiente salto no es solo crear contenido, sino dejarlo enlazado, medible y con una propuesta clara para cada necesidad.
@@ -393,16 +393,16 @@ export function MarketingPage({
       </main>
 
       <footer className="relative z-10 border-t border-white/5 py-10 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-500">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-500">
           <div className="flex items-center gap-3">
             <img src="/logo.svg" alt="SendCraft" className="h-6" />
             <span>Plataforma de email marketing y comunicaciones transaccionales</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-            <Link to="/docs" className="hover:text-slate-300 transition-colors">Documentacion</Link>
+            <Link to="/docs" className="hover:text-slate-300 transition-colors">Documentación</Link>
             <Link to="/precios" className="hover:text-slate-300 transition-colors">Precios</Link>
             <Link to="/privacy" className="hover:text-slate-300 transition-colors">Privacidad</Link>
-            <Link to="/terms" className="hover:text-slate-300 transition-colors">Terminos</Link>
+            <Link to="/terms" className="hover:text-slate-300 transition-colors">Términos</Link>
           </div>
         </div>
       </footer>

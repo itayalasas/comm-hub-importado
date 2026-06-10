@@ -574,7 +574,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     const normalizedNewName = normalizeApplicationName(newAppData.name);
     const duplicateApp = applications.some((app) => normalizeApplicationName(app.name) === normalizedNewName);
     if (duplicateApp) {
-      toast.error('Ya existe una aplicacion con ese nombre');
+      toast.error('Ya existe una aplicación con ese nombre');
       return;
     }
 
@@ -1291,7 +1291,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
                     </button>
                   </div>
                 )}
-                <p className="text-[11px] text-slate-600">Guardá la contraseña ahora — no se puede recuperar después.</p>
+                  <p className="text-[11px] text-slate-600">Guardá la contraseña ahora — no se puede recuperar después.</p>
               </div>
 
               {newEmbedError && (

@@ -2,16 +2,16 @@ import { MarketingPage } from '../components/MarketingPage';
 
 const FAQ = [
   {
-    question: 'Cuando conviene SMTP en lugar de API?',
-    answer: 'Conviene si ya tienes integraciones legacy o si quieres reutilizar clientes, librerias y flujos que dependen de SMTP.',
+    question: '¿Cuándo conviene SMTP en lugar de API?',
+    answer: 'Conviene si ya tienes integraciones legacy o si quieres reutilizar clientes, librerías y flujos que dependen de SMTP.',
   },
   {
     question: 'Puedo usarlo junto con la API?',
-    answer: 'Si. El objetivo es que tengas flexibilidad y no dependas de un solo modo de integracion.',
+    answer: 'Sí. El objetivo es que tengas flexibilidad y no dependas de un solo modo de integración.',
   },
   {
     question: 'Funciona con mi stack actual?',
-    answer: 'Si tu sistema envia correo por host, puerto, usuario y contrasena, probablemente lo puedas conectar sin reescribir todo.',
+    answer: 'Si tu sistema envía correo por host, puerto, usuario y contraseña, probablemente lo puedas conectar sin reescribir todo.',
   },
 ];
 
@@ -21,7 +21,7 @@ const structuredData = {
   name: 'SendCraft',
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Web',
-  description: 'SMTP para integraciones que necesitan compatibilidad inmediata y control de envio.',
+  description: 'SMTP para integraciones que necesitan compatibilidad inmediata y control de envío.',
   url: 'https://sendcraft.net/smtp',
 };
 
@@ -47,26 +47,26 @@ export const Smtp = () => {
           'Conecta tu app con SMTP para enviar correos de forma compatible, segura y sin cambiar tu arquitectura actual.',
         path: '/smtp',
         canonicalUrl: 'https://sendcraft.net/smtp',
-        keywords: ['SMTP', 'smtp email', 'servidor smtp', 'envio de correos smtp'],
+        keywords: ['SMTP', 'smtp email', 'servidor smtp', 'envío de correos smtp'],
         structuredData: [structuredData, faqSchema],
       }}
       eyebrow="SMTP"
       headline={
         <>
-          SMTP para aplicaciones que necesitan compatibilidad inmediata y control de envio.
+          SMTP para aplicaciones que necesitan compatibilidad inmediata y control de envío.
         </>
       }
-      description="Si tu stack ya usa librerias SMTP, puedes seguir trabajando con el mismo flujo y sumar control, trazabilidad y una plataforma unificada."
-      primaryAction={{ label: 'Ver documentacion', to: '/docs' }}
+      description="Si tu stack ya usa librerías SMTP, puedes seguir trabajando con el mismo flujo y sumar control, trazabilidad y una plataforma unificada."
+      primaryAction={{ label: 'Ver documentación', to: '/docs' }}
       secondaryAction={{ label: 'Ir a API Email', to: '/api-email' }}
       navLinks={[
-        { label: 'Documentacion', to: '/docs' },
+        { label: 'Documentación', to: '/docs' },
         { label: 'API Email', to: '/api-email' },
         { label: 'Precios', to: '/precios' },
       ]}
       stats={[
-        { value: '587', label: 'Puerto tipico' },
-        { value: 'TLS', label: 'Conexion segura' },
+        { value: '587', label: 'Puerto típico' },
+        { value: 'TLS', label: 'Conexión segura' },
         { value: 'Stack', label: 'Compatible con legado' },
         { value: 'API', label: 'Alternativa moderna' },
       ]}
@@ -74,12 +74,12 @@ export const Smtp = () => {
         {
           tag: 'Legacy',
           title: 'Compatible con flujos existentes',
-          description: 'No tienes que abandonar de golpe las integraciones que ya envian por SMTP.',
+          description: 'No tienes que abandonar de golpe las integraciones que ya envían por SMTP.',
         },
         {
           tag: 'Security',
-          title: 'Seguridad y buenas practicas',
-          description: 'Usa TLS, credenciales y configuracion clara para mantener el control del envio.',
+          title: 'Seguridad y buenas prácticas',
+          description: 'Usa TLS, credenciales y configuración clara para mantener el control del envío.',
         },
         {
           tag: 'Bridge',
@@ -90,23 +90,23 @@ export const Smtp = () => {
       features={[
         {
           title: 'Host y puerto conocidos',
-          description: 'La configuracion clasica funciona para sistemas que esperan credenciales SMTP.',
+          description: 'La configuración clásica funciona para sistemas que esperan credenciales SMTP.',
         },
         {
-          title: 'Integracion rapida',
+          title: 'Integración rápida',
           description: 'Ideal para herramientas, scripts y aplicaciones que ya tienen soporte SMTP nativo.',
         },
         {
-          title: 'Transicion gradual',
-          description: 'Permite mover primero el envio y luego modernizar el resto del stack a tu ritmo.',
+          title: 'Transición gradual',
+          description: 'Permite mover primero el envío y luego modernizar el resto del stack a tu ritmo.',
         },
         {
-          title: 'Misma plataforma, menos fragmentacion',
+          title: 'Misma plataforma, menos fragmentación',
           description: 'Unificas marketing, transaccional y documentos en un solo lugar.',
         },
         {
           title: 'Mejor observabilidad',
-          description: 'Ganas logs y visibilidad incluso si tu aplicacion sigue hablando SMTP.',
+          description: 'Ganas logs y visibilidad incluso si tu aplicación sigue hablando SMTP.',
         },
         {
           title: 'Listo para equipos mixtos',
@@ -116,11 +116,11 @@ export const Smtp = () => {
       steps={[
         {
           title: 'Configura credenciales',
-          description: 'Define host, puerto, usuario y contrasena como lo haria cualquier cliente SMTP.',
+          description: 'Define host, puerto, usuario y contraseña como lo haría cualquier cliente SMTP.',
         },
         {
           title: 'Apunta tu app',
-          description: 'Actualiza la configuracion en tu backend, worker o herramienta de envio.',
+          description: 'Actualiza la configuración en tu backend, worker o herramienta de envío.',
         },
         {
           title: 'Monitorea resultados',
@@ -129,9 +129,9 @@ export const Smtp = () => {
       ]}
       faq={FAQ}
       relatedLinks={[
-        { label: 'API para email', to: '/api-email', description: 'Cuando quieras un flujo REST mas moderno.' },
+        { label: 'API para email', to: '/api-email', description: 'Cuando quieras un flujo REST más moderno.' },
         { label: 'Email transaccional', to: '/email-transaccional', description: 'Para confirmaciones, alertas y PDF.' },
-        { label: 'Documentacion', to: '/docs', description: 'Guia tecnica de integracion y ejemplos.' },
+        { label: 'Documentación', to: '/docs', description: 'Guía técnica de integración y ejemplos.' },
       ]}
     />
   );

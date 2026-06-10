@@ -56,8 +56,8 @@ export const Landing = () => {
   return (
     <div className="min-h-screen bg-[#050d1a] text-white overflow-x-hidden">
       <Seo
-        title="Iniciar sesion"
-        description="Accede a SendCraft con tu sistema de autenticacion empresarial."
+        title="Iniciar sesión"
+        description="Accede a SendCraft con tu sistema de autenticación empresarial."
         path="/login"
         canonicalUrl="https://sendcraft.net/login"
         noIndex

@@ -48,7 +48,7 @@ export const Login = () => {
               Bienvenido a SendCraft
             </h1>
             <p className="text-xl text-white/90 mb-12 leading-relaxed max-w-lg">
-              Accede a tu cuenta y gestiona emails, templates y campanas desde SendCraft de forma segura y eficiente.
+              Accede a tu cuenta y gestiona emails, templates y campañas desde SendCraft de forma segura y eficiente.
             </p>
 
             <div className="space-y-6">
@@ -57,9 +57,9 @@ export const Login = () => {
                   <Shield className="w-6 h-6 text-cyan-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold mb-1">Seguridad Avanzada</h3>
+                  <h3 className="text-lg font-semibold mb-1">Seguridad avanzada</h3>
                   <p className="text-slate-300 text-sm leading-relaxed">
-                    Autenticacion empresarial con altos estandares de seguridad.
+                    Autenticación empresarial con altos estándares de seguridad.
                   </p>
                 </div>
               </div>
@@ -69,9 +69,9 @@ export const Login = () => {
                   <ArrowRight className="w-6 h-6 text-cyan-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold mb-1">Acceso Rapido</h3>
+                  <h3 className="text-lg font-semibold mb-1">Acceso rápido</h3>
                   <p className="text-slate-300 text-sm leading-relaxed">
-                    Inicia sesion en segundos con tu cuenta empresarial.
+                    Inicia sesión en segundos con tu cuenta empresarial.
                   </p>
                 </div>
               </div>
@@ -81,9 +81,9 @@ export const Login = () => {
                   <Check className="w-6 h-6 text-cyan-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold mb-1">Gestion Unificada</h3>
+                  <h3 className="text-lg font-semibold mb-1">Gestión unificada</h3>
                   <p className="text-slate-300 text-sm leading-relaxed">
-                    Administra comunicaciones, templates y analitica desde un solo lugar.
+                    Administra comunicaciones, templates y analítica desde un solo lugar.
                   </p>
                 </div>
               </div>
@@ -103,9 +103,9 @@ export const Login = () => {
               <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 border border-cyan-500/30 rounded-2xl mb-6">
                 <Shield className="w-10 h-10 text-cyan-400" />
               </div>
-              <h2 className="text-3xl font-bold text-white mb-3">Iniciar Sesion</h2>
+              <h2 className="text-3xl font-bold text-white mb-3">Iniciar sesión</h2>
               <p className="text-slate-400">
-                Usa tu sistema de autenticacion empresarial para acceder de forma segura.
+                Usa tu sistema de autenticación empresarial para acceder de forma segura.
               </p>
             </div>
 
@@ -117,19 +117,19 @@ export const Login = () => {
               <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               <span className="relative flex items-center justify-center gap-2">
                 {pendingAction === 'login' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
-                <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar Sesion'}</span>
+                <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar sesión'}</span>
                 {pendingAction === 'login' ? null : <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
               </span>
             </button>
 
             <div className="bg-slate-800/80 border border-slate-700/50 rounded-xl p-6">
               <h4 className="text-sm font-semibold text-white mb-3">
-                Por que usar autenticacion empresarial?
+                ¿Por qué usar autenticación empresarial?
               </h4>
               <ul className="space-y-2 text-sm text-slate-300">
                 <li className="flex items-center space-x-2">
                   <Check className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                  <span>Maxima seguridad con encriptacion avanzada.</span>
+                  <span>Máxima seguridad con encriptación avanzada.</span>
                 </li>
                 <li className="flex items-center space-x-2">
                   <Check className="w-4 h-4 text-cyan-400 flex-shrink-0" />
@@ -137,18 +137,18 @@ export const Login = () => {
                 </li>
                 <li className="flex items-center space-x-2">
                   <Check className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                  <span>Gestion centralizada de permisos y roles.</span>
+                  <span>Gestión centralizada de permisos y roles.</span>
                 </li>
                 <li className="flex items-center space-x-2">
                   <Check className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                  <span>Soporte tecnico especializado.</span>
+                  <span>Soporte técnico especializado.</span>
                 </li>
               </ul>
             </div>
 
             <div className="text-center mt-8">
               <p className="text-slate-400 text-sm">
-                No tienes cuenta?{' '}
+                ¿No tienes cuenta?{' '}
                 <button
                   onClick={handleRegister}
                   disabled={pendingAction === 'register'}
@@ -186,13 +186,13 @@ export const Login = () => {
           <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
           <span className="relative flex items-center justify-center gap-2">
             {pendingAction === 'login' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
-            <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar Sesion'}</span>
+            <span>{pendingAction === 'login' ? 'Iniciando...' : 'Iniciar sesión'}</span>
             {pendingAction === 'login' ? null : <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
           </span>
         </button>
         <div className="text-center mt-4">
           <p className="text-slate-400 text-sm">
-            No tienes cuenta?{' '}
+            ¿No tienes cuenta?{' '}
             <button
               onClick={handleRegister}
               disabled={pendingAction === 'register'}

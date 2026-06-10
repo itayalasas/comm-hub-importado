@@ -40,15 +40,15 @@ const STATS = [
 ];
 
 const FEATURES = [
-  { icon: Mail, title: 'Gestion de Emails', description: 'Envia y rastrea emails transaccionales y de marketing con seguimiento en tiempo real de entregas, aperturas y clics.', color: 'cyan' },
-  { icon: Zap, title: 'Templates Dinamicos', description: 'Crea y personaliza templates con variables dinamicas y preview en tiempo real para distintos tipos de comunicacion.', color: 'blue' },
-  { icon: BarChart2, title: 'Analitica Avanzada', description: 'Dashboards interactivos con metricas detalladas, reportes de rendimiento y tendencias de tus comunicaciones.', color: 'teal' },
-  { icon: FileText, title: 'Generacion de PDFs', description: 'Convierte tus templates en documentos PDF profesionales listos para enviar o descargar automaticamente.', color: 'cyan' },
-  { icon: Bell, title: 'Webhooks Automaticos', description: 'Recibe notificaciones de eventos en tiempo real y mantiene tus sistemas sincronizados sin esfuerzo.', color: 'blue' },
-  { icon: Globe, title: 'API RESTful Completa', description: 'Integra SendCraft con tus sistemas existentes usando nuestra API bien documentada y facil de usar.', color: 'teal' },
-  { icon: Lock, title: 'Seguridad Empresarial', description: 'Autenticacion robusta con gestion de permisos, roles y cifrado de extremo a extremo.', color: 'cyan' },
-  { icon: MessageSquare, title: 'Comunicaciones Pendientes', description: 'Gestiona colas de comunicaciones, reprograma envios y monitorea el estado de cada mensaje.', color: 'blue' },
-  { icon: TrendingUp, title: 'Optimizacion Continua', description: 'Sugerencias inteligentes para mejorar tasas de apertura, entregabilidad y engagement general.', color: 'teal' },
+  { icon: Mail, title: 'Gestión de emails', description: 'Envía y rastrea emails transaccionales y de marketing con seguimiento en tiempo real de entregas, aperturas y clics.', color: 'cyan' },
+  { icon: Zap, title: 'Templates dinámicos', description: 'Crea y personaliza templates con variables dinámicas y preview en tiempo real para distintos tipos de comunicación.', color: 'blue' },
+  { icon: BarChart2, title: 'Analítica avanzada', description: 'Dashboards interactivos con métricas detalladas, reportes de rendimiento y tendencias de tus comunicaciones.', color: 'teal' },
+  { icon: FileText, title: 'Generación de PDFs', description: 'Convierte tus templates en documentos PDF profesionales listos para enviar o descargar automáticamente.', color: 'cyan' },
+  { icon: Bell, title: 'Webhooks automáticos', description: 'Recibe notificaciones de eventos en tiempo real y mantiene tus sistemas sincronizados sin esfuerzo.', color: 'blue' },
+  { icon: Globe, title: 'API RESTful completa', description: 'Integra SendCraft con tus sistemas existentes usando nuestra API bien documentada y fácil de usar.', color: 'teal' },
+  { icon: Lock, title: 'Seguridad empresarial', description: 'Autenticación robusta con gestión de permisos, roles y cifrado de extremo a extremo.', color: 'cyan' },
+  { icon: MessageSquare, title: 'Comunicaciones pendientes', description: 'Gestiona colas de comunicaciones, reprograma envíos y monitorea el estado de cada mensaje.', color: 'blue' },
+  { icon: TrendingUp, title: 'Optimización continua', description: 'Sugerencias inteligentes para mejorar tasas de apertura, entregabilidad y engagement general.', color: 'teal' },
 ];
 
 
@@ -85,7 +85,7 @@ const DashboardMockup = () => (
         <div className="flex items-center justify-between mb-5">
           <div>
             <div className="text-xs font-semibold text-white">Dashboard</div>
-            <div className="text-[10px] text-slate-500">Hoy, 3 mayo 2026</div>
+            <div className="text-[10px] text-slate-500">Hoy, 3 de mayo de 2026</div>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -176,7 +176,7 @@ const TemplateMockup = () => (
       </div>
       {/* Preview panel */}
       <div className="w-1/2 p-4 bg-white/[0.01]">
-        <div className="text-[9px] text-slate-500 mb-3 flex items-center gap-1"><Eye className="w-3 h-3" /> Preview</div>
+        <div className="text-[9px] text-slate-500 mb-3 flex items-center gap-1"><Eye className="w-3 h-3" /> Vista previa</div>
         <div className="bg-white rounded-lg p-3 shadow-inner" style={{ fontSize: '9px' }}>
           <div className="bg-gradient-to-r from-cyan-600 to-blue-700 text-white p-2 rounded mb-2 text-center font-bold text-[10px]">SendCraft Invoice</div>
           <div className="text-slate-800 font-semibold mb-1">Hola, <span className="text-cyan-600">Juan Garcia</span></div>
@@ -380,7 +380,7 @@ const STEPS = [
               <div className="h-1.5 bg-slate-200 rounded w-1/2" />
               <div className="h-1.5 bg-slate-200 rounded w-2/3" />
             </div>
-            <div className="mt-2 h-4 bg-cyan-500 rounded text-[6px] text-white flex items-center justify-center">Ver mas</div>
+            <div className="mt-2 h-4 bg-cyan-500 rounded text-[6px] text-white flex items-center justify-center">Ver más</div>
           </div>
         </div>
       </div>
@@ -388,17 +388,17 @@ const STEPS = [
   },
   {
     step: '02',
-    title: 'Configura el envio',
-    desc: 'Define destinatarios, programacion inteligente y reglas de entrega desde el dashboard central.',
+    title: 'Configura el envío',
+    desc: 'Define destinatarios, programación inteligente y reglas de entrega desde el dashboard central.',
     icon: Send,
     visual: (
       <div className="w-full h-32 bg-[#0a1628] rounded-xl border border-white/8 p-3 overflow-hidden">
-        <div className="text-[8px] text-slate-500 mb-2">Nuevo envio</div>
+        <div className="text-[8px] text-slate-500 mb-2">Nuevo envío</div>
         <div className="space-y-2">
           {[
             { label: 'Para', value: 'clientes@empresa.com (2,401)', color: 'border-cyan-500/40' },
             { label: 'Template', value: 'Factura mensual v2', color: 'border-white/10' },
-            { label: 'Envio', value: 'Hoy 10:00 AM', color: 'border-white/10' },
+            { label: 'Envío', value: 'Hoy 10:00 AM', color: 'border-white/10' },
           ].map(({ label, value, color }) => (
             <div key={label} className={`flex items-center gap-2 bg-white/[0.03] border ${color} rounded-lg px-2 py-1.5`}>
               <span className="text-[7px] text-slate-500 w-10">{label}</span>
@@ -418,11 +418,11 @@ const STEPS = [
   {
     step: '03',
     title: 'Analiza resultados',
-    desc: 'Monitorea entregas, aperturas, clics y genera reportes PDF automaticamente con datos en vivo.',
+    desc: 'Monitorea entregas, aperturas, clics y genera reportes PDF automáticamente con datos en vivo.',
     icon: BarChart2,
     visual: (
       <div className="w-full h-32 bg-[#0a1628] rounded-xl border border-white/8 p-3 overflow-hidden">
-        <div className="text-[8px] text-slate-500 mb-2">Resultados campana</div>
+        <div className="text-[8px] text-slate-500 mb-2">Resultados campaña</div>
         <div className="grid grid-cols-3 gap-1.5 mb-2">
           {[{ l: 'Enviados', v: '2,401', c: 'text-white' }, { l: 'Abiertos', v: '71%', c: 'text-cyan-400' }, { l: 'Clicks', v: '28%', c: 'text-teal-400' }].map(({ l, v, c }) => (
             <div key={l} className="bg-white/[0.04] rounded-lg p-1.5 text-center border border-white/5">
@@ -890,7 +890,7 @@ export const Home = () => {
             </h1>
 
             <p className="slide-up delay-200 text-lg md:text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-              SendCraft centraliza email marketing, correos transaccionales, SMTP, API, templates y PDFs en una sola plataforma. Automatiza, rastrea y optimiza cada comunicacion empresarial desde un dashboard intuitivo.
+              SendCraft centraliza email marketing, correos transaccionales, SMTP, API, templates y PDFs en una sola plataforma. Automatiza, rastrea y optimiza cada comunicación empresarial desde un dashboard intuitivo.
             </p>
 
             <div className="slide-up delay-300 flex flex-col sm:flex-row gap-4 justify-center">
@@ -914,7 +914,7 @@ export const Home = () => {
 
             {/* Trust badges */}
             <div className="slide-up delay-400 flex flex-wrap gap-6 justify-center mt-8">
-              {['Sin tarjeta de credito', '14 dias gratis', 'Soporte incluido'].map((badge) => (
+              {['Sin tarjeta de crédito', '14 días gratis', 'Soporte incluido'].map((badge) => (
                 <div key={badge} className="flex items-center gap-2 text-sm text-slate-500">
                   <CheckCircle className="w-4 h-4 text-cyan-500/70" />
                   <span>{badge}</span>
@@ -976,8 +976,8 @@ export const Home = () => {
       <section id="how" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Como funciona</div>
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">De la idea al envio en minutos</h2>
+            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Cómo funciona</div>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">De la idea al envío en minutos</h2>
             <p className="text-slate-400 max-w-lg mx-auto">Un flujo simplificado para que tu equipo se enfoque en lo que importa, no en la infraestructura.</p>
           </div>
 
@@ -1044,10 +1044,10 @@ export const Home = () => {
             <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Entregabilidad</div>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 leading-tight">Infraestructura diseñada para no fallar</h2>
             <p className="text-slate-400 mb-8 leading-relaxed text-sm">
-              Nuestra plataforma garantiza maxima entregabilidad con autenticacion SPF, DKIM y DMARC configurada automaticamente. Tus emails llegan al inbox, nunca al spam.
+              Nuestra plataforma garantiza máxima entregabilidad con autenticación SPF, DKIM y DMARC configurada automáticamente. Tus emails llegan al inbox, nunca al spam.
             </p>
             <ul className="space-y-3">
-              {['Autenticacion SPF, DKIM y DMARC automatica', 'IPs dedicadas de alta reputacion', 'Monitoreo de listas negras 24/7', 'Reintentos inteligentes ante fallos', 'Logs detallados por cada mensaje'].map((item) => (
+              {['Autenticación SPF, DKIM y DMARC automática', 'IPs dedicadas de alta reputación', 'Monitoreo de listas negras 24/7', 'Reintentos inteligentes ante fallos', 'Logs detallados por cada mensaje'].map((item) => (
                 <li key={item} className="flex items-center gap-3 text-sm text-slate-300">
                   <div className="w-5 h-5 rounded-full bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center flex-shrink-0">
                     <Check className="w-3 h-3 text-cyan-400" />
@@ -1076,13 +1076,13 @@ export const Home = () => {
             </div>
           </div>
           <div className="order-1 lg:order-2">
-            <div className="text-xs font-semibold tracking-widest text-teal-400 uppercase mb-4">Analitica</div>
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 leading-tight">Datos que informan cada decision</h2>
+            <div className="text-xs font-semibold tracking-widest text-teal-400 uppercase mb-4">Analítica</div>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 leading-tight">Datos que informan cada decisión</h2>
             <p className="text-slate-400 mb-8 leading-relaxed text-sm">
-              Comprende el comportamiento de tus destinatarios con reportes detallados y visualizaciones claras. Optimiza basandote en datos reales, no en suposiciones.
+              Comprende el comportamiento de tus destinatarios con reportes detallados y visualizaciones claras. Optimiza basándote en datos reales, no en suposiciones.
             </p>
             <ul className="space-y-3">
-              {['Metricas en tiempo real por campana', 'Comparacion entre periodos', 'Segmentacion avanzada de audiencias', 'Reportes PDF automaticos programables', 'Alertas inteligentes ante anomalias'].map((item) => (
+              {['Métricas en tiempo real por campaña', 'Comparación entre periodos', 'Segmentación avanzada de audiencias', 'Reportes PDF automáticos programables', 'Alertas inteligentes ante anomalías'].map((item) => (
                 <li key={item} className="flex items-center gap-3 text-sm text-slate-300">
                   <div className="w-5 h-5 rounded-full bg-teal-500/15 border border-teal-500/25 flex items-center justify-center flex-shrink-0">
                     <Check className="w-3 h-3 text-teal-400" />
@@ -1102,10 +1102,10 @@ export const Home = () => {
             <div className="text-xs font-semibold tracking-widest text-blue-400 uppercase mb-4">Editor de Templates</div>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 leading-tight">Templates profesionales en minutos</h2>
             <p className="text-slate-400 mb-8 leading-relaxed text-sm">
-              Nuestro editor HTML con preview en tiempo real te permite crear comunicaciones impecables. Variables dinamicas, logica condicional y exportacion a PDF integrada.
+              Nuestro editor HTML con vista previa en tiempo real te permite crear comunicaciones impecables. Variables dinámicas, lógica condicional y exportación a PDF integrada.
             </p>
             <ul className="space-y-3">
-              {['Editor HTML con resaltado de sintaxis', 'Preview instantaneo del resultado final', 'Variables dinamicas con autocompletado', 'Exportacion directa a PDF profesional', 'Biblioteca de templates prediseñados'].map((item) => (
+              {['Editor HTML con resaltado de sintaxis', 'Vista previa instantánea del resultado final', 'Variables dinámicas con autocompletado', 'Exportación directa a PDF profesional', 'Biblioteca de templates prediseñados'].map((item) => (
                 <li key={item} className="flex items-center gap-3 text-sm text-slate-300">
                   <div className="w-5 h-5 rounded-full bg-blue-500/15 border border-blue-500/25 flex items-center justify-center flex-shrink-0">
                     <Check className="w-3 h-3 text-blue-400" />
@@ -1186,12 +1186,12 @@ export const Home = () => {
       <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-14">
-            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Mas contenido</div>
+            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Más contenido</div>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
               Todo lo que necesitas para elegir el flujo correcto
             </h2>
             <p className="text-slate-400 max-w-2xl mx-auto">
-              Cada seccion profundiza en un caso distinto: email marketing, transaccional, API, SMTP, comparativas y precios.
+              Cada sección profundiza en un caso distinto: email marketing, transaccional, API, SMTP, comparativas y precios.
             </p>
           </div>
 
@@ -1200,7 +1200,7 @@ export const Home = () => {
               {
                 to: '/email-marketing',
                 title: 'Email marketing',
-                desc: 'Campanas, automatizaciones y segmentacion para equipos que quieren crecer.',
+                desc: 'Campañas, automatizaciones y segmentación para equipos que quieren crecer.',
               },
               {
                 to: '/email-transaccional',
@@ -1215,17 +1215,17 @@ export const Home = () => {
               {
                 to: '/smtp',
                 title: 'SMTP',
-                desc: 'Compatibilidad inmediata para sistemas y librerias existentes.',
+                desc: 'Compatibilidad inmediata para sistemas y librerías existentes.',
               },
               {
                 to: '/alternativa-mailchimp',
                 title: 'Alternativa a Mailchimp',
-                desc: 'Comparativa para evaluar una migracion con mas claridad.',
+                desc: 'Comparativa para evaluar una migración con más claridad.',
               },
               {
                 to: '/alternativa-sendgrid',
                 title: 'Alternativa a SendGrid',
-                desc: 'Una comparativa para entender cuando conviene cambiar de enfoque.',
+                desc: 'Una comparativa para entender cuándo conviene cambiar de enfoque.',
               },
             ].map((item) => (
               <Link
@@ -1248,7 +1248,7 @@ export const Home = () => {
       <section id="pricing" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-14">
-            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Planes y Precios</div>
+            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Planes y precios</div>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
               Elige el plan que se ajusta a tu equipo
             </h2>
@@ -1295,14 +1295,14 @@ export const Home = () => {
             <div className="relative z-10 text-center p-12 md:p-20">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-6 rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 text-xs font-semibold tracking-widest uppercase">
                 <CheckCircle className="w-3.5 h-3.5" />
-                Sin tarjeta de credito requerida
+                Sin tarjeta de crédito requerida
               </div>
               <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6 leading-tight">
-                Listo para transformar
+                ¿Listo para transformar
                 <br />tus comunicaciones?
               </h2>
               <p className="text-lg text-slate-300 mb-10 max-w-lg mx-auto">
-                Unete a mas de 500 empresas que confian en SendCraft para sus comunicaciones criticas.
+                Únete a más de 500 empresas que confían en SendCraft para sus comunicaciones críticas.
               </p>
               <button
                 onClick={handleStartTrial}

@@ -8,7 +8,7 @@ const FAQ = [
   },
   {
     question: 'Puedo empezar y luego escalar?',
-    answer: 'Si. Los planes estan pensados para entrar rapido y subir de nivel cuando tu volumen crece.',
+    answer: 'Sí. Los planes están pensados para entrar rápido y subir de nivel cuando tu volumen crece.',
   },
   {
     question: 'Hay soporte para equipos?',
@@ -57,13 +57,13 @@ export const Precios = () => {
           Planes y precios pensados para crecer sin sorpresas.
         </>
       }
-      description="Una pagina de precios clara ayuda tanto a convertir como a responder la duda comercial clave."
+      description="Una página de precios clara ayuda tanto a convertir como a responder la duda comercial clave."
       primaryAction={{ label: 'Probar ahora', to: '/login' }}
       secondaryAction={{ label: 'Ver email marketing', to: '/email-marketing' }}
       navLinks={[
         { label: 'Email marketing', to: '/email-marketing' },
         { label: 'API Email', to: '/api-email' },
-        { label: 'Documentacion', to: '/docs' },
+        { label: 'Documentación', to: '/docs' },
       ]}
       stats={[
         { value: 'Claros', label: 'Sin letra chica' },
@@ -75,7 +75,7 @@ export const Precios = () => {
         {
           tag: 'Decision',
           title: 'Pagina para comparar y decidir',
-          description: 'La pagina responde rapido una duda comercial real: cuanto cuesta y que incluye.',
+          description: 'La página responde rápido una duda comercial real: cuánto cuesta y qué incluye.',
         },
         {
           tag: 'Growth',
@@ -86,22 +86,22 @@ export const Precios = () => {
       features={[
         {
           title: 'Planes faciles de comparar',
-          description: 'Evita tablas confusas: la claridad ayuda a decidir mas rapido.',
+          description: 'Evita tablas confusas: la claridad ayuda a decidir más rápido.',
         },
         {
           title: 'Escalado progresivo',
-          description: 'Cambia de plan a medida que aumentan tus envios, contactos o necesidades de equipo.',
+          description: 'Cambia de plan a medida que aumentan tus envíos, contactos o necesidades de equipo.',
         },
         {
           title: 'Compatible con SaaS y pymes',
-          description: 'El pricing acompana tanto etapas tempranas como equipos con mas volumen.',
+          description: 'El pricing acompaña tanto etapas tempranas como equipos con más volumen.',
         },
       ]}
       faq={FAQ}
       relatedLinks={[
-        { label: 'Email marketing', to: '/email-marketing', description: 'La pagina principal de producto.' },
-        { label: 'Email transaccional', to: '/email-transaccional', description: 'Flujos criticos y automaciones.' },
-        { label: 'Documentacion', to: '/docs', description: 'Referencia tecnica para evaluar la integracion.' },
+        { label: 'Email marketing', to: '/email-marketing', description: 'La página principal de producto.' },
+        { label: 'Email transaccional', to: '/email-transaccional', description: 'Flujos críticos y automatizaciones.' },
+        { label: 'Documentación', to: '/docs', description: 'Referencia técnica para evaluar la integración.' },
       ]}
     >
       <div className="rounded-3xl border border-white/8 bg-white/[0.03] p-4 sm:p-6 lg:p-8">
