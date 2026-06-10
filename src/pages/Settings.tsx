@@ -9,7 +9,7 @@ import { UpgradeModal } from '../components/UpgradeModal';
 import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2, RefreshCw, ExternalLink, MessageSquare, X, Loader2, AlertTriangle } from 'lucide-react';
 import { configManager, getRuntimeConfig, buildFunctionsUrl } from '../lib/config';
 import { db } from '../lib/db';
-import { queryCount, queryMutate, querySelect } from '../lib/queryApi';
+import { queryMutate, querySelect } from '../lib/queryApi';
 import { createOwnedApplication, loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
 
 interface Application {
@@ -21,6 +21,22 @@ interface Application {
 interface ApplicationDeleteSummary {
   templates_count: number;
   jobs_count: number;
+}
+
+interface DeleteApplicationPreviewResponse {
+  success?: boolean;
+  data?: {
+    application?: {
+      id: string;
+      name: string;
+    };
+    dependency_summary?: ApplicationDeleteSummary;
+    can_delete?: boolean;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+  };
 }
 
 interface EmailCredentials {
@@ -619,44 +635,27 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
       if (isLocalHost()) {
         console.groupCollapsed('[settings] delete-application preview requests');
         console.log('application_id:', app.id);
-        console.table([
-          {
-            table: 'communication_templates',
-            operation: 'select',
-            select: 'id',
-            filter: `application_id eq ${app.id}`,
-          },
-          {
-            table: 'campaign_jobs',
-            operation: 'select',
-            select: 'id',
-            filter: `application_id eq ${app.id}`,
-          },
-        ]);
+        console.log('url:', buildFunctionsUrl('delete-application'));
+        console.log('body:', {
+          application_id: app.id,
+          preview: true,
+        });
         console.groupEnd();
       }
-      const [templatesResult, jobsResult] = await Promise.all([
-        queryCount({
-          table: 'communication_templates',
-          operation: 'select',
-          select: 'id',
-          filters: [{ column: 'application_id', op: 'eq', value: app.id }],
-        }),
-        queryCount({
-          table: 'campaign_jobs',
-          operation: 'select',
-          select: 'id',
-          filters: [{ column: 'application_id', op: 'eq', value: app.id }],
-        }),
-      ]);
-
-      if (templatesResult.error) throw templatesResult.error;
-      if (jobsResult.error) throw jobsResult.error;
-
-      setDeleteAppSummary({
-        templates_count: templatesResult.count,
-        jobs_count: jobsResult.count,
+      const response = await applicationManagementFetch({
+        application_id: app.id,
+        preview: true,
       });
+
+      const result = await response.json().catch(() => ({})) as DeleteApplicationPreviewResponse;
+      if (!response.ok || !result?.success) {
+        if (result?.error?.code === 'NOT_FOUND') {
+          throw new Error('La aplicación ya no existe o ya fue eliminada. Recargá la lista para ver el estado actual.');
+        }
+        throw new Error(result?.error?.message || 'No se pudo cargar la información de la aplicación');
+      }
+
+      setDeleteAppSummary(result.data?.dependency_summary || { templates_count: 0, jobs_count: 0 });
     } catch (error) {
       setDeleteAppError(error instanceof Error ? error.message : 'No se pudo cargar la información de la aplicación');
     } finally {
