@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
   AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
-  Mail, Briefcase, AppWindow, Package, MessageSquare, Star, FlaskConical,
+  Mail, Briefcase, AppWindow, Package, MessageSquare, Star, FlaskConical, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TrialBanner } from './TrialBanner';
@@ -256,8 +256,29 @@ const TestingBanner = () => {
 
 /* ── Subscription blocker ──────────────────────────────────────────── */
 
+const SessionSwitchActions = ({
+  onLogout,
+  subtitle,
+}: {
+  onLogout: () => void;
+  subtitle: string;
+}) => (
+  <div className="mt-8 flex flex-col items-center gap-4">
+    <p className="text-center text-sm text-slate-500 max-w-lg leading-relaxed">
+      {subtitle}
+    </p>
+    <button
+      onClick={onLogout}
+      className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-200 border border-red-500/25 transition-colors font-semibold"
+    >
+      <LogOut className="w-4 h-4" />
+      <span>Cerrar sesión</span>
+    </button>
+  </div>
+);
+
 const SubscriptionBlocker = () => {
-  const { user, isSystemAdmin } = useAuth();
+  const { user, isSystemAdmin, logoutAndRedirect } = useAuth();
   const isAdmin = isSystemAdmin || user?.role === 'administrador' || user?.role === 'admin';
 
   return (
@@ -286,6 +307,12 @@ const SubscriptionBlocker = () => {
             </p>
           </div>
         )}
+        <SessionSwitchActions
+          subtitle="Si necesitas entrar con otra cuenta, puedes cerrar sesion y volver a iniciar."
+          onLogout={() => {
+            void logoutAndRedirect('/login');
+          }}
+        />
       </div>
     </div>
   );
@@ -294,7 +321,7 @@ const SubscriptionBlocker = () => {
 /* ── User limit blocker ─────────────────────────────────────────── */
 
 const UserLimitBlocker = ({ activeUsersCount, maxUsers }: { activeUsersCount: number; maxUsers: number }) => {
-  const { user, isSystemAdmin } = useAuth();
+  const { user, isSystemAdmin, logoutAndRedirect } = useAuth();
   const isAdmin = isSystemAdmin || user?.role === 'administrador' || user?.role === 'admin';
 
   return (
@@ -335,6 +362,12 @@ const UserLimitBlocker = ({ activeUsersCount, maxUsers }: { activeUsersCount: nu
             </p>
           </div>
         )}
+        <SessionSwitchActions
+          subtitle="Si quieres usar otro usuario, cierra sesion y vuelve a iniciar."
+          onLogout={() => {
+            void logoutAndRedirect('/login');
+          }}
+        />
       </div>
     </div>
   );

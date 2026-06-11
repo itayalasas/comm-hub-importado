@@ -98,6 +98,7 @@ interface AuthContextType {
   login: () => Promise<void>;
   register: (planId?: string) => Promise<void>;
   logout: () => void;
+  logoutAndRedirect: (redirectTo?: string) => Promise<void>;
   handleCallback: (tokenOrCode: string) => Promise<void>;
   hasPermission: (menu: string, permission: MenuPermission) => boolean;
   hasMenuAccess: (menu: string) => boolean;
@@ -401,7 +402,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     window.location.href = authUrlFinal;
   };
 
-  const logout = async () => {
+  const performLogout = async (redirectTo: string = '/') => {
     try {
       await authClient.logout(configManager.functionsBaseUrl);
     } catch {}
@@ -413,7 +414,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUser(null);
     setSubscription(null);
     setSubscriptionHasAccess(null);
-    window.location.href = '/';
+    window.location.href = redirectTo;
+  };
+
+  const logout = async () => {
+    await performLogout('/');
+  };
+
+  const logoutAndRedirect = async (redirectTo = '/login') => {
+    await performLogout(redirectTo);
   };
 
   const decodeJWT = (token: string): any => {
@@ -1186,6 +1195,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         login,
         register,
         logout,
+        logoutAndRedirect,
         handleCallback,
         hasPermission,
         hasMenuAccess,
