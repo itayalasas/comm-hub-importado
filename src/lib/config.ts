@@ -5,7 +5,7 @@ const CONFIG_API_URL = (() => {
 
   return raw.endsWith('/get-env') ? raw : `${raw}/get-env`;
 })();
-const CONFIG_ACCESS_KEY = '4ceffb91030a93e1e3670ca95f8b63976517745a64ace0aa8b86e7861884ca45';
+const CONFIG_ACCESS_KEY = 'cc3cdc09379e1dc8f8482007290a5d9e2d2755c5613f5a3fd81fb02c81040b37';
 
 interface EnvConfig {
   project_name: string;
