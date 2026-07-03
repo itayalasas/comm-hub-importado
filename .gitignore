@@ -1,0 +1,6 @@
+node_modules/
+
+.env
+.vortex/
+vortex-install.mjs
+vortex-install.mjs

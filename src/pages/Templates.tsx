@@ -1,0 +1,820 @@
+import { useEffect, useState } from 'react';
+import { Layout } from '../components/Layout';
+import { PageLoader } from '../components/PageLoader';
+import { TemplateEditor } from '../components/TemplateEditor';
+import { useAuth } from '../contexts/AuthContext';
+import { verifyApplicationOwnership } from '../lib/security';
+import { queryMutate, querySelect } from '../lib/queryApi';
+import { useToast } from '../components/Toast';
+import { usePermissions } from '../hooks/usePermissions';
+import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
+import { loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
+import { Plus, CreditCard as Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X, Download, Upload } from 'lucide-react';
+
+interface Application {
+  id: string;
+  name: string;
+}
+
+interface Template {
+  id: string;
+  name: string;
+  description: string | null;
+  channel: string;
+  subject: string | null;
+  html_content: string;
+  variables: any;
+  is_active: boolean;
+  application_id: string;
+  has_attachment: boolean;
+  attachment_variable: string | null;
+  has_logo: boolean;
+  logo_variable: string | null;
+  has_qr: boolean;
+  qr_variable: string | null;
+  qr_position: string | null;
+  template_type?: string;
+  pdf_template_id?: string | null;
+  pdf_filename_pattern?: string | null;
+}
+
+export const Templates = () => {
+  const { user, isSystemAdmin } = useAuth();
+  const toast = useToast();
+  const { canCreate, canUpdate, canDelete } = usePermissions('templates');
+  const { checkTemplateLimit } = useSubscriptionLimits();
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [previewData, setPreviewData] = useState<any>({});
+  const [loading, setLoading] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalTemplates, setTotalTemplates] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const templatesPerPage = 6;
+
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    channel: 'email',
+    subject: '',
+    html_content: '',
+    variables: [] as string[],
+    has_attachment: false,
+    attachment_variable: '',
+    has_logo: false,
+    logo_variable: '',
+    has_qr: false,
+    qr_variable: '',
+    template_type: 'email',
+    pdf_template_id: null as string | null,
+    pdf_filename_pattern: '',
+  });
+
+  useEffect(() => {
+    if (user) {
+      loadApplications();
+    }
+  }, [user, isSystemAdmin]);
+
+  useEffect(() => {
+    if (selectedApp) {
+      setCurrentPage(1);
+      setSearchTerm('');
+      loadTemplates(selectedApp);
+    }
+  }, [selectedApp]);
+
+  useEffect(() => {
+    if (selectedApp) {
+      loadTemplates(selectedApp);
+    }
+  }, [currentPage, searchTerm]);
+
+  const loadApplications = async () => {
+    try {
+      if (!user?.sub) return;
+
+      const { data: prefs, error: prefsError } = await querySelect<{ default_application_id: string | null }>({
+        table: 'user_preferences',
+        operation: 'select',
+        select: 'default_application_id',
+        filters: [{ column: 'user_id', op: 'eq', value: user.sub }],
+        limit: 1,
+      });
+
+      if (prefsError) throw prefsError;
+
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
+      const appList = rows.map(({ id, name }) => ({ id, name }));
+      setApplications(appList);
+
+      const defaultApplicationId = prefs?.[0]?.default_application_id || null;
+      if (defaultApplicationId) {
+        setSelectedApp(defaultApplicationId);
+      } else if (appList.length > 0) {
+        setSelectedApp(appList[0].id);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTemplates = async (appId: string) => {
+    try {
+      if (!user?.sub) return;
+
+      const isOwner = isSystemAdmin ? true : await verifyApplicationOwnership(appId, user.sub, user.tenant_id);
+      if (!isOwner) {
+        return;
+      }
+
+      const countResult = await querySelect<{ id: string }>({
+        table: 'communication_templates',
+        operation: 'select',
+        select: 'id',
+        filters: [{ column: 'application_id', op: 'eq', value: appId }],
+        ...(searchTerm ? { filters: [{ column: 'application_id', op: 'eq', value: appId }, { column: 'name', op: 'ilike', value: `%${searchTerm}%` }] } : {}),
+      });
+      if (countResult.error) throw countResult.error;
+      const count = countResult.count ?? countResult.data?.length ?? 0;
+      setTotalTemplates(count || 0);
+
+      const from = (currentPage - 1) * templatesPerPage;
+
+      const dataResult = await querySelect<Template>({
+        table: 'communication_templates',
+        operation: 'select',
+        select: '*',
+        filters: searchTerm
+          ? [
+              { column: 'application_id', op: 'eq', value: appId },
+              { column: 'name', op: 'ilike', value: `%${searchTerm}%` },
+            ]
+          : [{ column: 'application_id', op: 'eq', value: appId }],
+        order: { column: 'created_at', ascending: false },
+        offset: from,
+        limit: templatesPerPage,
+      });
+
+      if (dataResult.error) throw dataResult.error;
+      const normalizedTemplates = ((dataResult.data as Template[]) || []).map((template) => ({
+        ...template,
+        variables: normalizeTemplateVariables(template.variables),
+      }));
+      setTemplates(normalizedTemplates);
+    } catch {
+      // ignore
+    }
+  };
+
+  const extractVariables = (html: string): string[] => {
+    const regex = /\{\{(\w+)\}\}/g;
+    const matches = html.matchAll(regex);
+    const vars = new Set<string>();
+    for (const match of matches) {
+      vars.add(match[1]);
+    }
+    return Array.from(vars);
+  };
+
+  const normalizeTemplateVariables = (variables: any): string[] => {
+    if (Array.isArray(variables)) {
+      return variables.map(String).filter(Boolean);
+    }
+
+    if (variables && typeof variables === 'object') {
+      return Object.keys(variables).filter(Boolean);
+    }
+
+    return [];
+  };
+
+  const buildTemplateVariables = (variables: string[]): Record<string, boolean> => {
+    return variables.reduce<Record<string, boolean>>((acc, variable) => {
+      if (variable) {
+        acc[variable] = true;
+      }
+      return acc;
+    }, {});
+  };
+
+  const openEditor = (template?: Template) => {
+    if (template) {
+      const normalizedVariables = normalizeTemplateVariables(template.variables);
+      setEditingTemplate(template);
+      setFormData({
+        name: template.name,
+        description: template.description || '',
+        channel: template.channel,
+        subject: template.subject || '',
+        html_content: template.html_content,
+        variables: normalizedVariables,
+        has_attachment: template.has_attachment || false,
+        attachment_variable: template.attachment_variable || '',
+        has_logo: template.has_logo || false,
+        logo_variable: template.logo_variable || '',
+        has_qr: template.has_qr || false,
+        qr_variable: template.qr_variable || '',
+        template_type: (template as any).template_type || 'email',
+        pdf_template_id: (template as any).pdf_template_id || null,
+        pdf_filename_pattern: (template as any).pdf_filename_pattern || '',
+      });
+    } else {
+      setEditingTemplate(null);
+      setFormData({
+        name: '',
+        description: '',
+        channel: 'email',
+        subject: '',
+        html_content: '',
+        variables: [],
+        has_attachment: false,
+        attachment_variable: '',
+        has_logo: false,
+        logo_variable: '',
+        has_qr: false,
+        qr_variable: '',
+        template_type: 'email',
+        pdf_template_id: null,
+        pdf_filename_pattern: '',
+      });
+    }
+    setShowEditor(true);
+  };
+
+  const saveTemplate = async () => {
+    if (!selectedApp || !formData.name || !formData.html_content) return;
+
+    // Enforce template limit only for new templates (not edits)
+    if (!editingTemplate) {
+      const tplLimit = checkTemplateLimit();
+      if (tplLimit.limitReached) {
+        toast.error(`Límite de templates alcanzado (${tplLimit.currentCount}/${tplLimit.maxLimit}). Actualiza tu plan para crear más.`);
+        return;
+      }
+    }
+
+    try {
+      const variables = extractVariables(formData.html_content);
+      const variablesPayload = buildTemplateVariables(variables);
+
+      if (editingTemplate) {
+        const { error } = await queryMutate({
+          table: 'communication_templates',
+          operation: 'update',
+          update: {
+            name: formData.name,
+            description: formData.description || null,
+            channel: formData.channel,
+            subject: formData.subject || null,
+            html_content: formData.html_content,
+            variables: variablesPayload,
+            has_attachment: formData.has_attachment,
+            attachment_variable: formData.has_attachment ? formData.attachment_variable : null,
+            has_logo: formData.has_logo,
+            logo_variable: formData.has_logo ? formData.logo_variable : null,
+            has_qr: formData.has_qr,
+            qr_variable: formData.has_qr ? formData.qr_variable : null,
+            template_type: formData.template_type,
+            generates_pdf: formData.template_type === 'pdf',
+            pdf_template_id: formData.pdf_template_id || null,
+            pdf_filename_pattern: formData.template_type === 'pdf' ? formData.pdf_filename_pattern : null,
+            updated_at: new Date().toISOString(),
+          },
+          filters: [{ column: 'id', op: 'eq', value: editingTemplate.id }],
+        });
+
+        if (error) throw error;
+      } else {
+        const { error } = await queryMutate({
+          table: 'communication_templates',
+          operation: 'insert',
+          data: {
+            application_id: selectedApp,
+            name: formData.name,
+            description: formData.description || null,
+            channel: formData.channel,
+            subject: formData.subject || null,
+            html_content: formData.html_content,
+            variables: variablesPayload,
+            has_attachment: formData.has_attachment,
+            attachment_variable: formData.has_attachment ? formData.attachment_variable : null,
+            has_logo: formData.has_logo,
+            logo_variable: formData.has_logo ? formData.logo_variable : null,
+            has_qr: formData.has_qr,
+            qr_variable: formData.has_qr ? formData.qr_variable : null,
+            template_type: formData.template_type,
+            generates_pdf: formData.template_type === 'pdf',
+            pdf_template_id: formData.pdf_template_id || null,
+            pdf_filename_pattern: formData.template_type === 'pdf' ? formData.pdf_filename_pattern : null,
+          },
+        });
+
+        if (error) throw error;
+      }
+
+      setShowEditor(false);
+      loadTemplates(selectedApp);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al guardar el template');
+    }
+  };
+
+  const confirmDeleteTemplate = async () => {
+    if (!deleteConfirm) return;
+
+    try {
+      const { error } = await queryMutate({
+        table: 'communication_templates',
+        operation: 'delete',
+        filters: [{ column: 'id', op: 'eq', value: deleteConfirm }],
+      });
+
+      if (error) throw error;
+      if (selectedApp) loadTemplates(selectedApp);
+      toast.success('Template eliminado exitosamente');
+      setDeleteConfirm(null);
+    } catch {
+      toast.error('Error al eliminar el template');
+    }
+  };
+
+  const openPreview = (template: Template) => {
+    setEditingTemplate(template);
+    const vars = template.variables || [];
+    const initialData: any = {};
+    vars.forEach((v: string) => {
+      initialData[v] = '';
+    });
+    setPreviewData(initialData);
+    setShowPreview(true);
+  };
+
+  const renderPreview = () => {
+    if (!editingTemplate) return '';
+    let html = editingTemplate.html_content;
+    Object.keys(previewData).forEach((key) => {
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+      html = html.replace(regex, previewData[key] || `{{${key}}}`);
+    });
+    return html;
+  };
+
+  const exportTemplate = (template: Template) => {
+    const exportData = {
+      sendcraft_template_version: '1.0',
+      exported_at: new Date().toISOString(),
+      template: {
+        name: template.name,
+        description: template.description,
+        channel: template.channel,
+        subject: template.subject,
+        html_content: template.html_content,
+        variables: template.variables,
+        has_attachment: template.has_attachment,
+        attachment_variable: template.attachment_variable,
+        has_logo: template.has_logo,
+        logo_variable: template.logo_variable,
+        has_qr: template.has_qr,
+        qr_variable: template.qr_variable,
+        template_type: template.template_type,
+        pdf_filename_pattern: template.pdf_filename_pattern,
+      },
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `template-${template.name.toLowerCase().replace(/\s+/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Template "${template.name}" exportado`);
+  };
+
+  const importTemplate = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const json = JSON.parse(ev.target?.result as string);
+        const tpl = json.template ?? json;
+        setEditingTemplate(null);
+        setFormData({
+          name: tpl.name || '',
+          description: tpl.description || '',
+          channel: tpl.channel || 'email',
+          subject: tpl.subject || '',
+          html_content: tpl.html_content || '',
+          variables: tpl.variables || [],
+          has_attachment: tpl.has_attachment || false,
+          attachment_variable: tpl.attachment_variable || '',
+          has_logo: tpl.has_logo || false,
+          logo_variable: tpl.logo_variable || '',
+          has_qr: tpl.has_qr || false,
+          qr_variable: tpl.qr_variable || '',
+          template_type: tpl.template_type || 'email',
+          pdf_template_id: null,
+          pdf_filename_pattern: tpl.pdf_filename_pattern || '',
+        });
+        setShowEditor(true);
+        toast.success('Template importado — revisá los datos y guardá');
+      } catch {
+        toast.error('El archivo no es un template válido de SendCraft');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  if (loading) {
+    return (
+      <Layout currentPage="templates">
+        <PageLoader />
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout currentPage="templates">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">Templates</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Import button */}
+            {selectedApp && canCreate && (
+              <label className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white rounded-lg text-sm cursor-pointer transition-colors">
+                <Upload className="w-4 h-4" />
+                <span>Importar</span>
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={importTemplate}
+                />
+              </label>
+            )}
+
+            {/* New template button */}
+            {selectedApp && canCreate && (() => {
+              const tplLimit = checkTemplateLimit();
+              return tplLimit.limitReached ? (
+                <div className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-slate-400 rounded-lg text-sm cursor-not-allowed" title={`Límite de templates alcanzado (${tplLimit.currentCount}/${tplLimit.maxLimit})`}>
+                  <Plus className="w-5 h-5" />
+                  <span>Nuevo Template</span>
+                  <span className="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
+                    {tplLimit.currentCount}/{tplLimit.maxLimit}
+                  </span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => openEditor()}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>Nuevo Template</span>
+                  {tplLimit.maxLimit !== Infinity && (
+                    <span className="text-xs bg-white/10 px-1.5 py-0.5 rounded-full">
+                      {tplLimit.currentCount}/{tplLimit.maxLimit}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
+          </div>
+        </div>
+
+        {applications.length === 0 ? (
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-8 text-center">
+            <p className="text-slate-400 mb-4">Primero debes crear una aplicación</p>
+            <a
+              href="/dashboard"
+              className="inline-block px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+            >
+              Ir al Dashboard
+            </a>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
+              {applications.map((app) => (
+                <button
+                  key={app.id}
+                  onClick={() => setSelectedApp(app.id)}
+                  className={`px-3 sm:px-4 py-2 rounded-lg whitespace-nowrap transition-colors text-sm sm:text-base ${
+                    selectedApp === app.id
+                      ? 'bg-cyan-500 text-white'
+                      : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
+                  }`}
+                >
+                  {app.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 sm:pl-4 pointer-events-none">
+                <Search className="w-5 h-5 text-slate-400" />
+              </div>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Buscar templates por nombre..."
+                className="w-full pl-12 pr-12 py-3 bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setCurrentPage(1);
+                  }}
+                  className="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {templates.length === 0 ? (
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-8 text-center">
+                  {searchTerm ? (
+                    <>
+                      <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                      <p className="text-slate-400 mb-4">
+                        No se encontraron templates con el nombre "{searchTerm}"
+                      </p>
+                      <button
+                        onClick={() => {
+                          setSearchTerm('');
+                          setCurrentPage(1);
+                        }}
+                        className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                      >
+                        Limpiar búsqueda
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Code className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                      <p className="text-slate-400 mb-4">No hay templates para esta aplicación</p>
+                      {canCreate && (
+                        <button
+                          onClick={() => openEditor()}
+                          className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+                        >
+                          Crear Primer Template
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-4">
+                    {templates.map((template) => (
+                      <div
+                        key={template.id}
+                        className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-6"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-white mb-2">{template.name}</h3>
+                            {template.description && (
+                              <p className="text-slate-400 mb-3">{template.description}</p>
+                            )}
+                            <div className="flex items-center space-x-4 text-sm">
+                              <span className={`px-3 py-1 rounded-full ${
+                                template.template_type === 'pdf'
+                                  ? 'bg-amber-500/10 text-amber-400'
+                                  : 'bg-cyan-500/10 text-cyan-400'
+                              }`}>
+                                {template.template_type === 'pdf' ? 'PDF' : 'Email'}
+                              </span>
+                              {template.has_attachment && (
+                                <span className="flex items-center space-x-1 text-emerald-400" title="Genera PDF adjunto">
+                                  <FileText className="w-4 h-4" />
+                                  <span className="text-xs">PDF</span>
+                                </span>
+                              )}
+                              {template.has_logo && (
+                                <span className="flex items-center space-x-1 text-blue-400" title="Incluye logo">
+                                  <Image className="w-4 h-4" />
+                                  <span className="text-xs">Logo</span>
+                                </span>
+                              )}
+                              {template.has_qr && (
+                                <span className="flex items-center space-x-1 text-purple-400" title="Código QR">
+                                  <QrCode className="w-4 h-4" />
+                                  <span className="text-xs">QR</span>
+                                </span>
+                              )}
+                              {template.variables && template.variables.length > 0 && (
+                                <span className="text-slate-500">
+                                  Variables: {template.variables.join(', ')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => openPreview(template)}
+                              className="p-2 text-slate-400 hover:text-cyan-400 transition-colors"
+                              title="Vista previa"
+                            >
+                              <Eye className="w-5 h-5" />
+                            </button>
+                            <button
+                              onClick={() => exportTemplate(template)}
+                              className="p-2 text-slate-400 hover:text-emerald-400 transition-colors"
+                              title="Exportar template"
+                            >
+                              <Download className="w-5 h-5" />
+                            </button>
+                            {canUpdate && (
+                              <button
+                                onClick={() => openEditor(template)}
+                                className="p-2 text-slate-400 hover:text-cyan-400 transition-colors"
+                                title="Editar"
+                              >
+                                <Edit className="w-5 h-5" />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => setDeleteConfirm(template.id)}
+                                className="p-2 text-slate-400 hover:text-red-400 transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {totalTemplates > templatesPerPage && (
+                    <div className="flex items-center justify-between bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-4">
+                      <div className="text-sm text-slate-400">
+                        Mostrando {((currentPage - 1) * templatesPerPage) + 1} - {Math.min(currentPage * templatesPerPage, totalTemplates)} de {totalTemplates} templates
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                          className={`p-2 rounded-lg transition-colors ${
+                            currentPage === 1
+                              ? 'text-slate-600 cursor-not-allowed'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                          }`}
+                        >
+                          <ChevronLeft className="w-5 h-5" />
+                        </button>
+
+                        <div className="flex items-center space-x-1">
+                          {Array.from({ length: Math.ceil(totalTemplates / templatesPerPage) }, (_, i) => i + 1).map((page) => {
+                            const totalPages = Math.ceil(totalTemplates / templatesPerPage);
+                            if (
+                              page === 1 ||
+                              page === totalPages ||
+                              (page >= currentPage - 1 && page <= currentPage + 1)
+                            ) {
+                              return (
+                                <button
+                                  key={page}
+                                  onClick={() => setCurrentPage(page)}
+                                  className={`w-10 h-10 rounded-lg transition-colors ${
+                                    currentPage === page
+                                      ? 'bg-cyan-500 text-white'
+                                      : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {page}
+                                </button>
+                              );
+                            } else if (
+                              page === currentPage - 2 ||
+                              page === currentPage + 2
+                            ) {
+                              return <span key={page} className="text-slate-600">...</span>;
+                            }
+                            return null;
+                          })}
+                        </div>
+
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalTemplates / templatesPerPage), prev + 1))}
+                          disabled={currentPage === Math.ceil(totalTemplates / templatesPerPage)}
+                          className={`p-2 rounded-lg transition-colors ${
+                            currentPage === Math.ceil(totalTemplates / templatesPerPage)
+                              ? 'text-slate-600 cursor-not-allowed'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                          }`}
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {showEditor && selectedApp && (
+        <TemplateEditor
+          formData={formData}
+          setFormData={setFormData}
+          onSave={saveTemplate}
+          onCancel={() => setShowEditor(false)}
+          isEditing={!!editingTemplate}
+          applicationId={selectedApp}
+        />
+      )}
+
+      {showPreview && editingTemplate && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-700">
+              <h2 className="text-xl font-bold text-white">Vista Previa: {editingTemplate.name}</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              {editingTemplate.variables && editingTemplate.variables.length > 0 && (
+                <div className="bg-slate-900/50 rounded-lg p-4 space-y-3">
+                  <h3 className="text-sm font-medium text-slate-300">Variables del Template</h3>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {editingTemplate.variables.map((variable: string) => (
+                      <div key={variable}>
+                        <label className="block text-xs text-slate-400 mb-1">{variable}</label>
+                        <input
+                          type="text"
+                          value={previewData[variable] || ''}
+                          onChange={(e) =>
+                            setPreviewData({ ...previewData, [variable]: e.target.value })
+                          }
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:outline-none focus:border-cyan-500"
+                          placeholder={`Valor para ${variable}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white rounded-lg p-6 min-h-[300px]">
+                <div dangerouslySetInnerHTML={{ __html: renderPreview() }} />
+              </div>
+
+              <button
+                onClick={() => setShowPreview(false)}
+                className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-white mb-2">Eliminar Template</h3>
+            <p className="text-slate-300 text-sm mb-6">
+              ¿Estás seguro de que deseas eliminar este template? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteTemplate}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Layout>
+  );
+};

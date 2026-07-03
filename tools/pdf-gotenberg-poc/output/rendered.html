@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Factura INV-001</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .invoice-shell {
+      max-width: 860px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d1d5db;
+      border-radius: 18px;
+      padding: 32px;
+      box-shadow: 0 10px 30px rgba(17, 24, 39, 0.08);
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 2px solid #111827;
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      margin: 0 0 12px;
+      font-size: 28px;
+      color: #0f172a;
+    }
+
+    .muted {
+      margin: 0 0 6px;
+      color: #4b5563;
+      font-size: 14px;
+    }
+
+    .company-card {
+      min-width: 220px;
+      padding: 16px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 12px;
+    }
+
+    .company-card strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 16px;
+    }
+
+    .status {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .status.paid {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .status.pending {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+    }
+
+    thead th {
+      background: #111827;
+      color: #ffffff;
+      padding: 12px;
+      font-size: 12px;
+      text-align: left;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    tbody td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 12px;
+      font-size: 14px;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    .totals {
+      margin-top: 24px;
+      margin-left: auto;
+      width: 280px;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 14px;
+    }
+
+    .totals-row:last-child {
+      border-bottom: 0;
+      background: #dbeafe;
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .observations {
+      margin-top: 24px;
+      padding: 16px;
+      background: #f8fafc;
+      border-left: 4px solid #38bdf8;
+      border-radius: 10px;
+      font-size: 14px;
+      color: #334155;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: center;
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px dashed #9ca3af;
+    }
+
+    .footer img {
+      width: 120px;
+      height: 120px;
+      object-fit: contain;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 8px;
+      background: #ffffff;
+    }
+
+    .footer-meta {
+      flex: 1;
+      font-size: 13px;
+      color: #475569;
+    }
+
+    .footer-meta p {
+      margin: 0 0 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-shell">
+    <div class="header">
+      <div>
+        <h1>Factura INV-001</h1>
+        <p class="muted">Fecha de emision: 2026-05-01</p>
+        <p class="muted">Cliente: Juan Perez</p>
+        <p class="muted">Moneda: UYU</p>
+      </div>
+
+      <div class="company-card">
+        <strong>Empresa Demo S.A.</strong>
+        <p class="muted">RUT: 211234560018</p>
+        <p class="muted">Serie: A</p>
+        
+        <span class="status pending">Pendiente</span>
+        
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Descripcion</th>
+          <th>Cantidad</th>
+          <th>Precio Unit.</th>
+          <th>IVA</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td>Servicio de implementacion</td>
+          <td>1</td>
+          <td>$ 500.00</td>
+          <td>22%</td>
+          <td>$ 610.00</td>
+        </tr>
+        
+        <tr>
+          <td>Soporte mensual</td>
+          <td>1</td>
+          <td>$ 319.67</td>
+          <td>22%</td>
+          <td>$ 390.00</td>
+        </tr>
+        
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <div class="totals-row">
+        <span>Subtotal</span>
+        <span>$ 819.67</span>
+      </div>
+      <div class="totals-row">
+        <span>IVA</span>
+        <span>$ 180.33</span>
+      </div>
+      <div class="totals-row">
+        <span>Total</span>
+        <span>$ 1000.00</span>
+      </div>
+    </div>
+
+    
+    <div class="observations">
+      <strong>Observaciones:</strong> Prueba de conversion HTML a PDF con renderer intermedio.
+    </div>
+    
+
+    <div class="footer">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5WQAAAAASUVORK5CYII=" alt="QR" />
+
+      <div class="footer-meta">
+        <p><strong>CAE:</strong> 12345678901234</p>
+        <p><strong>Vencimiento CAE:</strong> 2026-05-31</p>
+        <p><strong>Forma de pago:</strong> Transferencia bancaria</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

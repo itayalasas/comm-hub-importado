@@ -1,0 +1,20 @@
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:8-chromium
+    container_name: gotenberg
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      API_PORT: "3000"
+      API_TIMEOUT: "120s"
+      API_BODY_LIMIT: "20MB"
+      API_ENABLE_BASIC_AUTH: "true"
+      GOTENBERG_API_BASIC_AUTH_USERNAME: "admin"
+      GOTENBERG_API_BASIC_AUTH_PASSWORD: "change-this-password"
+      CHROMIUM_AUTO_START: "true"
+      CHROMIUM_START_TIMEOUT: "30s"
+      CHROMIUM_RESTART_AFTER: "50"
+      CHROMIUM_MAX_CONCURRENCY: "4"
+      CHROMIUM_MAX_QUEUE_SIZE: "16"
+

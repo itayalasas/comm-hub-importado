@@ -1,0 +1,26 @@
+<svg width="246" height="40" viewBox="0 0 246 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sendcraft-icon" x1="4" y1="4" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="sendcraft-wordmark" x1="120" y1="10" x2="196" y2="31" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#60A5FA"/>
+    </linearGradient>
+    <filter id="sendcraft-glow" x="0" y="0" width="40" height="40" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+      <feGaussianBlur stdDeviation="3" result="effect1_foregroundBlur"/>
+    </filter>
+  </defs>
+  <g opacity="0.35" filter="url(#sendcraft-glow)">
+    <rect x="6" y="6" width="28" height="28" rx="9" fill="url(#sendcraft-icon)"/>
+  </g>
+  <rect x="4" y="4" width="32" height="32" rx="10" fill="url(#sendcraft-icon)"/>
+  <rect x="11" y="13" width="18" height="13" rx="3" stroke="white" stroke-width="2"/>
+  <path d="M12 15L20 21L28 15" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M26.5 8.5L27.7 11L30.2 12.2L27.7 13.4L26.5 15.9L25.3 13.4L22.8 12.2L25.3 11L26.5 8.5Z" fill="#BAE6FD"/>
+  <text x="48" y="27" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="800" fill="white">Send</text>
+  <text x="101" y="27" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="800" fill="url(#sendcraft-wordmark)">Craft</text>
+</svg>
