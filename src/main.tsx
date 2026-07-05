@@ -43,9 +43,10 @@ async function clearLegacyBrowserState() {
 }
 
 void (async () => {
-  await clearLegacyBrowserState();
+  // Start fetching runtime config as early as possible while the bootstrap loader is visible.
+  void configManager.loadConfig().catch(() => {});
 
-  await configManager.loadConfig();
+  await clearLegacyBrowserState();
 
   root.render(
     <React.StrictMode>

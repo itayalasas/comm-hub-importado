@@ -133,6 +133,7 @@ export const InvitationsModal = ({ onClose }: InvitationsModalProps) => {
           application_id: configManager.authAppId,
           api_key: configManager.authApiKey,
           invited_by_email: user?.email || '',
+          invited_by_name: user?.name || '',
           email: email.trim(),
           role_id: roleId,
           ...(name.trim() ? { name: name.trim() } : {}),
@@ -140,6 +141,14 @@ export const InvitationsModal = ({ onClose }: InvitationsModalProps) => {
       });
       const json = await res.json();
       if (json.success) {
+        if (json.data?.email_sent === false) {
+          setSendError(
+            json.data?.email_error
+              ? `La invitaciÃ³n se creÃ³, pero no se pudo enviar el correo: ${json.data.email_error}`
+              : 'La invitaciÃ³n se creÃ³, pero no se pudo confirmar el envÃ­o del correo.'
+          );
+          return;
+        }
         const resent = json.data?.resent;
         setSendSuccess(
           resent

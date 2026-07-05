@@ -1,4 +1,4 @@
-import { buildCorsHeaders } from "../_shared/auth-proxy.ts";
+import { buildCorsHeaders } from "./_shared/auth-proxy.ts";
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get("Origin");

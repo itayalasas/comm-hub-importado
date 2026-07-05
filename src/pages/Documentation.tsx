@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Book, Code, Copy, Check, ChevronDown, ChevronRight, Info, AlertCircle, Mail, FileText, Zap, Globe, CheckCircle2 } from 'lucide-react';
+import { Book, Code, Copy, Check, ChevronDown, ChevronRight, Info, AlertCircle, Mail, FileText, Zap, Globe, CheckCircle2, Package } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { buildFunctionsUrl, getRuntimeConfig } from '../lib/config';
 import { Seo } from '../components/Seo';
+import { DocsSdkMarketplaceSection } from '../components/DocsSdkMarketplaceSection';
 
 const getFunctionsBaseUrl = () => {
   const { functionsBaseUrlRaw, functionsBaseUrl } = getRuntimeConfig();
@@ -67,6 +68,8 @@ export default function Documentation({ publicView = false }: DocumentationProps
     { id: 'templates', title: 'Variables de Template', icon: Code },
     { id: 'examples', title: 'Ejemplos de Integración', icon: Code },
   ];
+
+  sections.splice(3, 0, { id: 'sdks-marketplace', title: 'SDKs y Marketplace', icon: Package });
 
   const endpoints: EndpointSection[] = [
     {
@@ -2177,6 +2180,10 @@ Content-Type: application/json`}
     </div>
   );
 
+  const renderSdkMarketplace = () => (
+    <DocsSdkMarketplaceSection baseUrl={functionsBaseUrl} />
+  );
+
   const renderContent = () => {
     switch (activeSection) {
       case 'introduction':
@@ -2185,6 +2192,8 @@ Content-Type: application/json`}
         return renderAuthentication();
       case 'connectors':
         return renderConnectors();
+      case 'sdks-marketplace':
+        return renderSdkMarketplace();
       case 'email-config':
         return renderEmailConfig();
       case 'endpoints':

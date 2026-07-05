@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { configManager, getRuntimeConfig, logRuntimeConfig } from '../lib/config';
+import { configManager, logRuntimeConfig, resolveAuthLaunchConfig } from '../lib/config';
 import { authClient } from '../lib/auth';
 import { isSystemAdminEmail, isSystemAdminUser } from '../lib/systemAdmin';
 import {
@@ -573,8 +573,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const login = async () => {
-    await configManager.loadConfig();
-    const { authUrl, authAppId, authApiKey, redirectUri } = getRuntimeConfig();
+    const { authUrl, authAppId, authApiKey, redirectUri } = await resolveAuthLaunchConfig();
     const attemptId = startWebAccessAttempt();
 
     void recordWebAccessAttempt({
@@ -609,8 +608,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const register = async (planId?: string) => {
-    await configManager.loadConfig();
-    const { authUrl, authAppId, authApiKey, redirectUri } = getRuntimeConfig();
+    const { authUrl, authAppId, authApiKey, redirectUri } = await resolveAuthLaunchConfig();
 
     if (!authUrl || !authAppId || !authApiKey || !redirectUri) {
       throw new Error('No se pudo cargar la configuración de autenticación.');

@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "sdk:generate": "node tools/generate-sdk-artifacts.mjs",
+    "sdk:status": "node tools/sdk-status.mjs",
     "vortex": "node --import ./.vortex/cli/scripts/register-ts-loader.mjs ./.vortex/cli/scripts/vortex-cli.ts"
   },
   "dependencies": {

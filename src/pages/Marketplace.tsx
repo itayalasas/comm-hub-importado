@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Layout } from '../components/Layout';
+import { SDKSection } from '../components/SDKSection';
 import { getRuntimeConfig } from '../lib/config';
 import {
   Package, CheckCircle2, Copy, X, ChevronRight,
@@ -1225,6 +1226,7 @@ const EMBED_CODE = `<!-- SendCraft Marketplace — con fallback popup si el ifra
 
 const EmbedSection = () => {
   const [copied, setCopied] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeBlocked, setIframeBlocked] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1277,7 +1279,7 @@ const EmbedSection = () => {
     <div className="border border-slate-700 rounded-2xl overflow-hidden">
       {/* Header */}
       <div className="bg-slate-800/60 px-5 py-4 border-b border-slate-700 flex items-center justify-between">
-        <div>
+        <div onClick={() => setIsOpen((value) => !value)} className="flex-1 min-w-0 cursor-pointer select-none">
           <h2 className="text-sm font-bold text-white">Embeber en tu CRM</h2>
           <p className="text-xs text-slate-500 mt-0.5">
             Pegá este código en tu sistema. El usuario instala el conector y tu CRM recibe todo via <code className="text-slate-400">postMessage</code> (iframe o popup).
@@ -1294,6 +1296,8 @@ const EmbedSection = () => {
         </a>
       </div>
 
+      {isOpen && (
+      <>
       {/* Live preview */}
       <div className="bg-slate-900/60 border-b border-slate-700/50 p-4">
         <div className="flex items-center justify-between mb-3">
@@ -1369,6 +1373,8 @@ const EmbedSection = () => {
           ))}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 };
@@ -1379,6 +1385,14 @@ export const Marketplace = () => {
   const [filter, setFilter] = useState<'all' | 'email' | 'pdf' | 'automation'>('all');
   const [selected, setSelected] = useState<ConnectorManifest | null>(null);
   const [copiedRegistry, setCopiedRegistry] = useState(false);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+
+    if (window.location.hash) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+  }, []);
 
   const baseUrl = getBaseUrl();
   const registryUrl = `${baseUrl}/connectors`;
@@ -1412,6 +1426,13 @@ export const Marketplace = () => {
             <p className="text-slate-400 text-sm">
               Conectores listos para instalar en tu CRM. Usá la API Key de tu aplicación para autenticarte.
             </p>
+            <a
+              href="#sdk-packages"
+              className="inline-flex items-center gap-1 mt-3 text-xs font-medium text-cyan-300 hover:text-cyan-200 transition-colors"
+            >
+              Ver SDKs instalables
+              <ChevronRight className="w-3 h-3" />
+            </a>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -1491,6 +1512,9 @@ export const Marketplace = () => {
 
         {/* Embed section */}
         <EmbedSection />
+
+        {/* SDK section */}
+        <SDKSection />
 
         {/* Footer note */}
         <div className="text-center pt-2">

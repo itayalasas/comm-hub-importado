@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, Minus, Loader2, Star } from 'lucide-react';
 import { sortPlansByOrder, usePlans, type Plan } from '../hooks/usePlans';
-import { configManager } from '../lib/config';
+import { resolveAuthLaunchConfig } from '../lib/config';
 import { buildLegacyRegisterUrl } from '../lib/subscriptionCheckout';
 
 const PLAN_STYLE: Record<number, { accentClass: string; borderClass: string; bgClass: string; btnClass: string; highlight: boolean; badge: string | null }> = {
@@ -74,7 +74,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
     setIsRedirecting(true);
     void (async () => {
       try {
-        await configManager.loadConfig();
+        await resolveAuthLaunchConfig();
         window.location.href = buildRegisterUrl(plan.id);
       } catch (error) {
         console.error(error);

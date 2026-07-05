@@ -29,6 +29,7 @@ import {
 import { SYSTEM_ADMIN_EMAIL } from '../lib/systemAdmin';
 
 type AnalyticsRange = '7d' | '30d' | '90d' | 'all';
+const RECENT_ATTEMPTS_PAGE_SIZE = 10;
 
 const RANGE_OPTIONS: Array<{ value: AnalyticsRange; label: string }> = [
   { value: '7d', label: '7 días' },
@@ -230,6 +231,7 @@ export const AdminDashboard = () => {
   const { user } = useAuth();
   const [range, setRange] = useState<AnalyticsRange>('30d');
   const [reloadToken, setReloadToken] = useState(0);
+  const [recentPage, setRecentPage] = useState(1);
   const [payload, setPayload] = useState<AccessAnalyticsDashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -271,10 +273,30 @@ export const AdminDashboard = () => {
     };
   }, [range, reloadToken]);
 
+  useEffect(() => {
+    setRecentPage(1);
+  }, [range]);
+
   const summary = payload?.summary;
   const countries = [...(payload?.countries ?? [])].sort((a, b) => b.attempts - a.attempts);
   const daily = payload?.daily ?? [];
   const recentAttempts = payload?.recent_attempts ?? [];
+  const recentPageCount = Math.max(1, Math.ceil(recentAttempts.length / RECENT_ATTEMPTS_PAGE_SIZE));
+  const safeRecentPage = Math.min(recentPage, recentPageCount);
+  const recentAttemptsPage = recentAttempts.slice(
+    (safeRecentPage - 1) * RECENT_ATTEMPTS_PAGE_SIZE,
+    safeRecentPage * RECENT_ATTEMPTS_PAGE_SIZE,
+  );
+  const latestDaily = daily[daily.length - 1] ?? null;
+  const previousDaily = daily[daily.length - 2] ?? null;
+  const dailyTrendDelta = latestDaily && previousDaily && previousDaily.attempts > 0
+    ? Math.round(((latestDaily.attempts - previousDaily.attempts) / previousDaily.attempts) * 100)
+    : null;
+  const dailyTrendLabel = latestDaily
+    ? dailyTrendDelta !== null
+      ? `${formatNumber(latestDaily.attempts)} hoy - ${dailyTrendDelta >= 0 ? '+' : ''}${dailyTrendDelta}% vs ayer`
+      : `${formatNumber(latestDaily.attempts)} hoy`
+    : 'Sin actividad';
 
   const totalAttempts = summary?.total_attempts ?? 0;
   const successRate = totalAttempts > 0
@@ -283,6 +305,10 @@ export const AdminDashboard = () => {
   const failRate = totalAttempts > 0
     ? Math.round(((summary?.failed_attempts ?? 0) / totalAttempts) * 100)
     : 0;
+
+  useEffect(() => {
+    setRecentPage((current) => Math.min(current, recentPageCount));
+  }, [recentPageCount]);
 
   if (loading && !payload) {
     return (
@@ -411,9 +437,15 @@ export const AdminDashboard = () => {
             subtitle="Comparativa entre intentos exitosos y fallidos en el rango seleccionado."
             icon={BarChart3}
             actions={
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/40 px-3 py-1 text-xs text-slate-400">
-                <TrendingUp className="h-3.5 w-3.5 text-cyan-300" />
-                {totalAttempts > 0 ? `${successRate}% éxito` : 'Sin actividad'}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/40 px-3 py-1 text-xs text-slate-400">
+                  <TrendingUp className="h-3.5 w-3.5 text-cyan-300" />
+                  {totalAttempts > 0 ? `${successRate}% éxito` : 'Sin actividad'}
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/40 px-3 py-1 text-xs text-slate-400">
+                  <ArrowUpRight className="h-3.5 w-3.5 text-emerald-300" />
+                  {dailyTrendLabel}
+                </div>
               </div>
             }
           >
@@ -457,64 +489,94 @@ export const AdminDashboard = () => {
           }
         >
           {recentAttempts.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-700/60 text-left">
-                <thead>
-                  <tr className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                    <th className="pb-3 pr-4 font-semibold">Fecha</th>
-                    <th className="pb-3 pr-4 font-semibold">Estado</th>
-                    <th className="pb-3 pr-4 font-semibold">País</th>
-                    <th className="pb-3 pr-4 font-semibold">IP</th>
-                    <th className="pb-3 pr-4 font-semibold">Email / ruta</th>
-                    <th className="pb-3 font-semibold">Detalle</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/70">
-                  {recentAttempts.slice(0, 12).map((attempt) => {
-                    const tone = resolveAttemptTone(attempt);
-                    const ToneIcon = tone.icon;
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-700/60 text-left">
+                  <thead>
+                    <tr className="text-xs uppercase tracking-[0.16em] text-slate-500">
+                      <th className="pb-3 pr-4 font-semibold">Fecha</th>
+                      <th className="pb-3 pr-4 font-semibold">Estado</th>
+                      <th className="pb-3 pr-4 font-semibold">País</th>
+                      <th className="pb-3 pr-4 font-semibold">IP</th>
+                      <th className="pb-3 pr-4 font-semibold">Email / ruta</th>
+                      <th className="pb-3 font-semibold">Detalle</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/70">
+                    {recentAttemptsPage.map((attempt) => {
+                      const tone = resolveAttemptTone(attempt);
+                      const ToneIcon = tone.icon;
 
-                    return (
-                      <tr key={attempt.id} className="align-top">
-                        <td className="py-4 pr-4 text-sm text-slate-300">
-                          {formatDateTime(attempt.created_at)}
-                        </td>
-                        <td className="py-4 pr-4">
-                          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${tone.className}`}>
-                            <ToneIcon className="h-3.5 w-3.5" />
-                            {tone.label}
-                          </span>
-                        </td>
-                        <td className="py-4 pr-4 text-sm text-slate-300">
-                          <div className="font-medium text-white">
-                            {attempt.country_name || 'Desconocido'}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {attempt.country_code || '--'}
-                          </div>
-                        </td>
-                        <td className="py-4 pr-4 text-sm text-slate-300">
-                          {attempt.ip || 'Sin IP'}
-                        </td>
-                        <td className="py-4 pr-4 text-sm text-slate-300">
-                          <div className="font-medium text-white">
-                            {attempt.email || 'Acceso anónimo'}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {attempt.path || 'Sin ruta'}
-                          </div>
-                        </td>
-                        <td className="py-4 text-sm text-slate-400">
-                          <div className="max-w-md whitespace-pre-wrap rounded-xl border border-slate-700/70 bg-slate-950/30 p-3">
-                            {attempt.error_message || 'Sin error'}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      return (
+                        <tr key={attempt.id} className="align-top">
+                          <td className="py-4 pr-4 text-sm text-slate-300">
+                            {formatDateTime(attempt.created_at)}
+                          </td>
+                          <td className="py-4 pr-4">
+                            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${tone.className}`}>
+                              <ToneIcon className="h-3.5 w-3.5" />
+                              {tone.label}
+                            </span>
+                          </td>
+                          <td className="py-4 pr-4 text-sm text-slate-300">
+                            <div className="font-medium text-white">
+                              {attempt.country_name || 'Desconocido'}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {attempt.country_code || '--'}
+                            </div>
+                          </td>
+                          <td className="py-4 pr-4 text-sm text-slate-300">
+                            {attempt.ip || 'Sin IP'}
+                          </td>
+                          <td className="py-4 pr-4 text-sm text-slate-300">
+                            <div className="font-medium text-white">
+                              {attempt.email || 'Acceso anónimo'}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {attempt.path || 'Sin ruta'}
+                            </div>
+                          </td>
+                          <td className="py-4 text-sm text-slate-400">
+                            <div className="max-w-md whitespace-pre-wrap rounded-xl border border-slate-700/70 bg-slate-950/30 p-3">
+                              {attempt.error_message || 'Sin error'}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 flex flex-col gap-3 border-t border-slate-800/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-slate-500">
+                  Mostrando {formatNumber((safeRecentPage - 1) * RECENT_ATTEMPTS_PAGE_SIZE + 1)}-
+                  {formatNumber(Math.min(recentAttempts.length, safeRecentPage * RECENT_ATTEMPTS_PAGE_SIZE))} de{' '}
+                  {formatNumber(recentAttempts.length)}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRecentPage((current) => Math.max(1, current - 1))}
+                    disabled={safeRecentPage <= 1}
+                    className="rounded-full border border-slate-700 bg-slate-950/40 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:border-cyan-500/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Anterior
+                  </button>
+                  <span className="rounded-full border border-slate-700 bg-slate-950/40 px-3 py-1.5 text-xs font-semibold text-slate-400">
+                    Pagina {formatNumber(safeRecentPage)} / {formatNumber(recentPageCount)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRecentPage((current) => Math.min(recentPageCount, current + 1))}
+                    disabled={safeRecentPage >= recentPageCount}
+                    className="rounded-full border border-slate-700 bg-slate-950/40 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:border-cyan-500/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </>
           ) : (
             <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 text-sm text-slate-500">
               No hay intentos registrados en este rango.

@@ -1,0 +1,21 @@
+{
+  "name": "sendcraft-sdk",
+  "version": "1.0.0",
+  "description": "SendCraft API client generated from the Marketplace catalog.",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "scripts": {
+    "sdk:status": "node ./scripts/sdk-status.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

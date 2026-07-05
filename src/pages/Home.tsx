@@ -25,7 +25,7 @@ import {
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { sortPlansByOrder, usePlans, type Plan } from '../hooks/usePlans';
-import { configManager } from '../lib/config';
+import { resolveAuthLaunchConfig } from '../lib/config';
 import { buildLegacyRegisterUrl } from '../lib/subscriptionCheckout';
 import { Seo } from '../components/Seo';
 
@@ -511,7 +511,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
     setIsRedirecting(true);
     void (async () => {
       try {
-        await configManager.loadConfig();
+        await resolveAuthLaunchConfig();
         window.location.href = buildRegisterUrl(plan.id);
       } catch (error) {
         console.error(error);

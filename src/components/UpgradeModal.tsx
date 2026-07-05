@@ -4,7 +4,7 @@ import { X, Check, Minus, TrendingUp, Loader2, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { resolveManagedCheckoutEndpoint, resolvePlanCheckoutUrl, sortPlansByOrder, usePlans } from '../hooks/usePlans';
 import { useToast } from './Toast';
-import { configManager, getRuntimeConfig } from '../lib/config';
+import { resolveAuthLaunchConfig } from '../lib/config';
 import { startManagedSubscriptionCheckout, storePendingSubscriptionCheckout } from '../lib/subscriptionCheckout';
 import type { Plan, PlanFeature } from '../hooks/usePlans';
 
@@ -83,8 +83,7 @@ export const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
 
     setSubscribingPlanId(plan.id);
     try {
-      await configManager.loadConfig();
-      const { authAppId, authApiKey } = getRuntimeConfig();
+      const { authAppId, authApiKey } = await resolveAuthLaunchConfig();
       if (!authAppId || !authApiKey) {
         throw new Error('No se encontraron las credenciales de suscripción.');
       }

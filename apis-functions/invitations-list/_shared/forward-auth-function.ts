@@ -7,21 +7,17 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
-function getAuthFunctionsBaseUrl(): string {
+function getInvitationFunctionsBaseUrl(): string {
   return (
-    Deno.env.get("AUTH_FUNCTIONS_BASE_URL") ||
-    Deno.env.get("AUTH_EDGE_FUNCTIONS_BASE_URL") ||
-    Deno.env.get("AUTH_URL") ||
-    Deno.env.get("VITE_AUTH_URL") ||
-    Deno.env.get("FUNCTIONS_BASE_URL") ||
-    ""
+     Deno.env.get("AUTH_EDGE_FUNCTIONS_BASE_URL") ||    
+    "https://sfqtmnncgiqkveaoqckt.supabase.co/functions/v1"
   )
     .trim()
     .replace(/\/+$/, "");
 }
 
 function buildUpstreamUrl(route: string, incomingUrl: URL): string {
-  const baseUrl = getAuthFunctionsBaseUrl();
+  const baseUrl = getInvitationFunctionsBaseUrl();
   const upstream = new URL(`${baseUrl}/${route.replace(/^\/+/, "")}`);
   upstream.search = incomingUrl.search;
   return upstream.toString();
@@ -88,8 +84,9 @@ export async function forwardAuthFunction(req: Request, route: string): Promise<
 
     const responseHeaders = new Headers(upstream.headers);
     Object.entries(corsHeaders).forEach(([key, value]) => responseHeaders.set(key, value));
+    const responseText = await upstream.text();
 
-    return new Response(upstream.body, {
+    return new Response(responseText, {
       status: upstream.status,
       headers: responseHeaders,
     });

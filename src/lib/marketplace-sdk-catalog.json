@@ -1,0 +1,270 @@
+{
+  "groups": [
+    {
+      "id": "sendcraft-email",
+      "name": "SendCraft Email",
+      "slug": "email",
+      "category": "email",
+      "tagline": "Envio de emails transaccionales",
+      "description": "Envio de emails transaccionales usando templates HTML con variables dinamicas.",
+      "auth": {
+        "type": "api_key",
+        "header": "x-api-key",
+        "label": "API Key de la aplicacion",
+        "placeholder": "sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "hint": "Configuracion > Aplicaciones > tu app > API Key"
+      },
+      "features": [
+        "Templates HTML con variables dinamicas",
+        "Seguimiento de aperturas y clics",
+        "Logos y codigos QR automaticos"
+      ],
+      "actions": [
+        {
+          "id": "send_email",
+          "name": "Enviar email con template",
+          "method": "POST",
+          "path": "/send-email",
+          "description": "Envio transaccional con template, destinatario y datos dinamicos."
+        }
+      ]
+    },
+    {
+      "id": "sendcraft-email-pdf",
+      "name": "SendCraft Email + PDF",
+      "slug": "email-pdf",
+      "category": "pdf",
+      "tagline": "Email adjuntando PDF generado al vuelo",
+      "description": "Genera un PDF y lo adjunta en la misma llamada al enviar el email.",
+      "auth": {
+        "type": "api_key",
+        "header": "x-api-key",
+        "label": "API Key de la aplicacion",
+        "placeholder": "sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "hint": "Usa la misma API Key que en SendCraft Email"
+      },
+      "features": [
+        "PDF generado en tiempo real desde templates HTML",
+        "Email y PDF en una sola llamada API",
+        "Variables independientes para email y PDF"
+      ],
+      "actions": [
+        {
+          "id": "send_email_with_pdf",
+          "name": "Enviar email con PDF adjunto",
+          "method": "POST",
+          "path": "/send-email-with-pdf",
+          "description": "Envio combinado de email y PDF en una sola operacion."
+        }
+      ]
+    },
+    {
+      "id": "sendcraft-pdf",
+      "name": "SendCraft PDF Generator",
+      "slug": "pdf",
+      "category": "pdf",
+      "tagline": "Generacion y almacenamiento de PDFs",
+      "description": "Genera PDFs a partir de templates y devuelve una salida lista para descargar o reutilizar.",
+      "auth": {
+        "type": "api_key",
+        "header": "x-api-key",
+        "label": "API Key de la aplicacion",
+        "placeholder": "sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "hint": "Configuracion > Aplicaciones > tu app > API Key"
+      },
+      "features": [
+        "URL publica de descarga con expiracion configurable",
+        "CSS completo soportado",
+        "Variables dinamicas en todo el documento"
+      ],
+      "actions": [
+        {
+          "id": "generate_pdf",
+          "name": "Generar PDF",
+          "method": "POST",
+          "path": "/generate-pdf",
+          "description": "Generacion de PDF a partir de un template y datos."
+        }
+      ]
+    },
+    {
+      "id": "sendcraft-notify",
+      "name": "SendCraft Notify",
+      "slug": "notify",
+      "category": "automation",
+      "tagline": "Campanas y notificaciones masivas asincronas",
+      "description": "Envio asincrono de emails, PDFs o ambos a una lista de destinatarios.",
+      "auth": {
+        "type": "api_key",
+        "header": "x-api-key",
+        "label": "API Key de la aplicacion",
+        "placeholder": "sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "hint": "La misma API Key de tu aplicacion en SendCraft"
+      },
+      "features": [
+        "Procesamiento asincrono con job_id",
+        "Tipos email, email + PDF y solo PDF",
+        "Datos compartidos con override por destinatario"
+      ],
+      "actions": [
+        {
+          "id": "create_campaign",
+          "name": "Crear campana",
+          "method": "POST",
+          "path": "/notify",
+          "description": "Dispara una campana asincrona y devuelve un job_id."
+        },
+        {
+          "id": "get_campaign_status",
+          "name": "Consultar estado de la campana",
+          "method": "GET",
+          "path": "/notify/:job_id",
+          "description": "Consulta el progreso y el estado de una campana por job_id."
+        }
+      ]
+    },
+    {
+      "id": "sendcraft-programs",
+      "name": "SendCraft Programs",
+      "slug": "programs",
+      "category": "automation",
+      "tagline": "Programacion y ejecucion de envios",
+      "description": "Gestion de programaciones, cola externa y ejecucion manual de envios.",
+      "auth": {
+        "type": "api_key",
+        "header": "x-api-key",
+        "label": "API Key de la aplicacion",
+        "placeholder": "sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "hint": "La misma API Key que usas para automatizaciones"
+      },
+      "features": [
+        "Programaciones one-shot y recetas reutilizables",
+        "Repeticion con cron para agendas recurrentes",
+        "Cola externa por programa y por aplicacion"
+      ],
+      "actions": [
+        {
+          "id": "list_programs",
+          "name": "Listar programaciones",
+          "method": "GET",
+          "path": "/automation-programs",
+          "description": "Lista las programaciones del tenant."
+        },
+        {
+          "id": "create_program",
+          "name": "Crear programacion",
+          "method": "POST",
+          "path": "/automation-programs",
+          "description": "Crea una programacion nueva."
+        },
+        {
+          "id": "update_program",
+          "name": "Actualizar programacion",
+          "method": "PUT",
+          "path": "/automation-programs/:programId",
+          "description": "Actualiza una programacion existente."
+        },
+        {
+          "id": "delete_program",
+          "name": "Eliminar programacion",
+          "method": "DELETE",
+          "path": "/automation-programs/:programId",
+          "description": "Elimina una programacion."
+        },
+        {
+          "id": "run_program",
+          "name": "Ejecutar programacion",
+          "method": "POST",
+          "path": "/automation-programs/:programId/run",
+          "description": "Dispara una programacion y crea el job asociado."
+        },
+        {
+          "id": "list_program_queue",
+          "name": "Listar cola",
+          "method": "GET",
+          "path": "/automation-programs/:programId/queue",
+          "description": "Lista los items encolados de una programacion."
+        },
+        {
+          "id": "enqueue_program_items",
+          "name": "Encolar items",
+          "method": "POST",
+          "path": "/automation-programs/:programId/queue",
+          "description": "Agrega items a la cola de una programacion."
+        },
+        {
+          "id": "cancel_program_queue_item",
+          "name": "Cancelar item",
+          "method": "DELETE",
+          "path": "/automation-programs/:programId/queue/:queueItemId",
+          "description": "Cancela un item puntual de la cola."
+        }
+      ]
+    },
+    {
+      "id": "sendcraft-monitoring",
+      "name": "SendCraft Monitoring",
+      "slug": "monitoring",
+      "category": "automation",
+      "tagline": "Trazas y estadisticas operativas",
+      "description": "Resumen operativo de programas, jobs y trazas para dashboards internos.",
+      "auth": {
+        "type": "api_key",
+        "header": "x-api-key",
+        "label": "API Key de la aplicacion",
+        "placeholder": "sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "hint": "Usa la misma API Key que en Programs"
+      },
+      "features": [
+        "Resumen de programas y jobs",
+        "Trazas cronologicas para diagnostico rapido",
+        "Vista compacta para dashboards internos"
+      ],
+      "actions": [
+        {
+          "id": "get_snapshot",
+          "name": "Obtener snapshot",
+          "method": "GET",
+          "path": "/automation-monitoring",
+          "description": "Devuelve el resumen operativo de automatizaciones."
+        }
+      ]
+    },
+    {
+      "id": "sendcraft-webhook",
+      "name": "SendCraft Webhooks",
+      "slug": "webhooks",
+      "category": "automation",
+      "tagline": "Tracking de emails en tiempo real",
+      "description": "Tracking de aperturas y clicks para emails enviados por SendCraft.",
+      "auth": {
+        "type": "api_key",
+        "header": "x-api-key",
+        "label": "No requiere autenticacion manual",
+        "placeholder": "",
+        "hint": "El tracking se activa automaticamente al enviar emails"
+      },
+      "features": [
+        "Pixel de apertura 1x1 inyectado automaticamente",
+        "Tracking de clics con redireccion transparente",
+        "Visible en el dashboard de estadisticas"
+      ],
+      "actions": [
+        {
+          "id": "track_open",
+          "name": "Registrar apertura",
+          "method": "GET",
+          "path": "/track-email/open",
+          "description": "Marca una apertura para un email enviado."
+        },
+        {
+          "id": "track_click",
+          "name": "Registrar click",
+          "method": "GET",
+          "path": "/track-email/click",
+          "description": "Registra un click y redirige de forma transparente."
+        }
+      ]
+    }
+  ]
+}

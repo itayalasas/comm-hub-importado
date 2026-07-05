@@ -40,7 +40,7 @@ export default defineConfig({
     'CANCEL_',
   ],
   server: {
-    port: 5173,
+    port: 5171,
     host: true
   },
 });

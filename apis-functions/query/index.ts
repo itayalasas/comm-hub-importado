@@ -1,10 +1,11 @@
 
+import geoip from "npm:geoip-lite@1.4.10";
 import { Pool } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-Api-Key",
+  "Access-Control-Allow-Headers": "Content-Type, X-Api-Key, Authorization",
 };
 
 const allowedTables = [
@@ -42,6 +43,14 @@ const allowedOperators: Record<string, string> = {
 
 const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") || "", connectionTimeoutMillis: 5000 }, 3, true);
 
+const COUNTRY_DISPLAY_NAMES = (() => {
+  try {
+    return new Intl.DisplayNames(["es"], { type: "region" });
+  } catch {
+    return null;
+  }
+})();
+
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -60,6 +69,185 @@ function parseTokens(raw?: string): string[] {
   }
 
   return raw.split(",").map((x) => x.trim()).filter(Boolean);
+}
+
+function isPrivateIp(ip: string): boolean {
+  return /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|fc00:|fd00:)/i.test(ip);
+}
+
+function getClientIp(req: Request): string {
+  const headerNames = [
+    "cf-connecting-ip",
+    "x-forwarded-for",
+    "x-real-ip",
+    "x-client-ip",
+    "true-client-ip",
+    "x-azure-clientip",
+  ];
+
+  for (const headerName of headerNames) {
+    const raw = req.headers.get(headerName)?.trim();
+    if (!raw) continue;
+
+    const candidate = raw.split(",")[0]?.trim().replace(/^::ffff:/, "");
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return "";
+}
+
+function isCountryCodeLike(value: string): boolean {
+  const normalized = String(value || "").trim().toUpperCase();
+  return normalized === "LO" || normalized === "??" || /^[A-Z]{2}$/.test(normalized);
+}
+
+function hasMeaningfulCountryCode(value: string): boolean {
+  const normalized = String(value || "").trim().toUpperCase();
+  return normalized === "LO" || /^[A-Z]{2}$/.test(normalized);
+}
+
+function getCountryName(countryCode: string): string {
+  const normalized = String(countryCode || "").trim().toUpperCase();
+
+  if (!normalized || normalized === "??") {
+    return "Desconocido";
+  }
+
+  if (normalized === "LO") {
+    return "Local";
+  }
+
+  if (!/^[A-Z]{2}$/.test(normalized)) {
+    return normalized;
+  }
+
+  return COUNTRY_DISPLAY_NAMES?.of(normalized) || normalized;
+}
+
+function lookupCountryByIp(ipAddress: string): { country_code: string; country_name: string } {
+  const cleanedIp = String(ipAddress || "").trim();
+
+  if (!cleanedIp || cleanedIp === "127.0.0.1" || cleanedIp === "::1") {
+    return { country_code: "LO", country_name: "Local" };
+  }
+
+  const geo = geoip.lookup(cleanedIp);
+  if (!geo?.country) {
+    return { country_code: "??", country_name: "Desconocido" };
+  }
+
+  const countryCode = String(geo.country).trim().toUpperCase();
+  return {
+    country_code: countryCode,
+    country_name: getCountryName(countryCode),
+  };
+}
+
+function getCountryFromRequest(req: Request, ipAddress: string): { country_code: string; country_name: string } {
+  const headerNames = [
+    "cf-ipcountry",
+    "x-vercel-ip-country",
+    "x-country-code",
+    "x-country",
+    "cloudfront-viewer-country",
+  ];
+
+  for (const headerName of headerNames) {
+    const raw = req.headers.get(headerName)?.trim();
+    if (!raw) continue;
+
+    const countryCode = raw.toUpperCase();
+    if (!hasMeaningfulCountryCode(countryCode)) {
+      continue;
+    }
+
+    if (countryCode === "LO") {
+      return { country_code: "LO", country_name: "Local" };
+    }
+
+    return {
+      country_code: countryCode,
+      country_name: getCountryName(countryCode),
+    };
+  }
+
+  if (ipAddress && isPrivateIp(ipAddress)) {
+    return { country_code: "LO", country_name: "Local" };
+  }
+
+  return lookupCountryByIp(ipAddress);
+}
+
+function normalizeWebAccessAttemptRow(row: Record<string, any>, req: Request): Record<string, any> {
+  const normalized = { ...row };
+  const rawIp = String(
+    normalized.ip_address ??
+    normalized.ip ??
+    normalized.client_ip ??
+    normalized.remote_ip ??
+    "",
+  ).trim();
+  const ipAddress = rawIp || getClientIp(req);
+  const rawCountryCode = String(
+    normalized.country_code ??
+    normalized.countryCode ??
+    normalized.iso_code ??
+    normalized.isoCode ??
+    "",
+  ).trim().toUpperCase();
+  const rawCountryName = String(
+    normalized.country_name ??
+    normalized.countryName ??
+    normalized.country ??
+    normalized.label ??
+    "",
+  ).trim();
+  const requestCountry = getCountryFromRequest(req, ipAddress);
+
+  if (ipAddress) {
+    normalized.ip_address = ipAddress;
+  }
+
+  if (rawCountryCode && hasMeaningfulCountryCode(rawCountryCode)) {
+    normalized.country_code = rawCountryCode;
+    normalized.country_name = rawCountryName || getCountryName(rawCountryCode);
+  } else {
+    normalized.country_code = requestCountry.country_code;
+    normalized.country_name = rawCountryName || requestCountry.country_name;
+  }
+
+  delete normalized.ip;
+  delete normalized.client_ip;
+  delete normalized.remote_ip;
+  delete normalized.country;
+  delete normalized.countryCode;
+  delete normalized.countryName;
+  delete normalized.iso_code;
+  delete normalized.isoCode;
+
+  return normalized;
+}
+
+function enrichWebAccessAttemptData(table: string, operation: string, data: any, req: Request): any {
+  if (table !== "web_access_attempts" || !["insert", "upsert"].includes(operation)) {
+    return data;
+  }
+
+  if (Array.isArray(data)) {
+    return data.map((row) => (
+      row && typeof row === "object" && !Array.isArray(row)
+        ? normalizeWebAccessAttemptRow(row, req)
+        : row
+    ));
+  }
+
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    return normalizeWebAccessAttemptRow(data, req);
+  }
+
+  return data;
 }
 
 function getAllowedApiKeys(): string[] {
@@ -246,6 +434,7 @@ export default async function handler(req: Request) {
     }
 
     const tableSql = quoteIdentifier(table);
+    const mutationData = enrichWebAccessAttemptData(table, operation, data, req);
     const params: any[] = [];
     let sql = "";
 
@@ -290,7 +479,7 @@ export default async function handler(req: Request) {
     }
 
     if (operation === "insert") {
-      const rows = Array.isArray(data) ? data : [data];
+      const rows = Array.isArray(mutationData) ? mutationData : [mutationData];
 
       if (!rows.length || !rows[0]) {
         throw new Error("Insert requires data");
@@ -377,7 +566,7 @@ export default async function handler(req: Request) {
     }
 
     if (operation === "upsert") {
-      const rows = Array.isArray(data) ? data : [data];
+      const rows = Array.isArray(mutationData) ? mutationData : [mutationData];
 
       if (!rows.length || !rows[0]) {
         throw new Error("Upsert requires data");

@@ -1,4 +1,4 @@
-import { buildCorsHeaders, resolveAuthUpstreamUrl } from "../_shared/auth-proxy.ts";
+import { buildCorsHeaders, resolveAuthUpstreamUrl } from "./_shared/auth-proxy.ts";
 
 function parseCookies(cookieHeader = ""): Record<string, string> {
   return cookieHeader.split(";").reduce((acc, pair) => {

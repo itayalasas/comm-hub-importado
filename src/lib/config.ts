@@ -444,3 +444,15 @@ export function logRuntimeConfig(context = 'runtime') {
   console.table(buildConfigRows(snapshot));
   console.groupEnd();
 }
+
+export async function resolveAuthLaunchConfig(): Promise<ReturnType<typeof getRuntimeConfig>> {
+  const runtime = getRuntimeConfig();
+
+  if (runtime.authUrl && runtime.authAppId && runtime.authApiKey && runtime.redirectUri) {
+    void configManager.loadConfig().catch(() => {});
+    return runtime;
+  }
+
+  await configManager.loadConfig();
+  return getRuntimeConfig();
+}

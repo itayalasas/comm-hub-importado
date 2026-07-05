@@ -100,6 +100,31 @@ const asNumber = (value: unknown, fallback = 0): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+const getAttemptTimestamp = (attempt: AccessAnalyticsAttempt): number => {
+  const parsed = new Date(attempt.created_at);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+};
+
+const countUniqueStrings = (values: Array<string | null | undefined>): number => {
+  return new Set(values.map((value) => String(value ?? '').trim()).filter(Boolean)).size;
+};
+
+const countAttemptsSince = (attempts: AccessAnalyticsAttempt[], cutoffTimestamp: number): number => {
+  return attempts.reduce((count, attempt) => count + (getAttemptTimestamp(attempt) >= cutoffTimestamp ? 1 : 0), 0);
+};
+
+const getLatestAttemptIso = (attempts: AccessAnalyticsAttempt[]): string => {
+  const latestTimestamp = attempts.reduce((latest, attempt) => Math.max(latest, getAttemptTimestamp(attempt)), 0);
+  return latestTimestamp > 0 ? new Date(latestTimestamp).toISOString() : new Date().toISOString();
+};
+
+const resolveDerivedCount = (value: unknown, fallback: number): number => {
+  const parsed = asNumber(value, fallback);
+  return parsed > 0 ? parsed : fallback;
+};
+
 const createAttemptId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -325,39 +350,40 @@ const normalizeSummary = (
   daily: AccessAnalyticsDailyStat[],
   recentAttempts: AccessAnalyticsAttempt[],
 ): AccessAnalyticsSummary => {
-  const totalAttempts = asNumber(
-    source.total_attempts ??
-    source.attempts ??
-    source.total ??
-    source.count,
-    countries.reduce((sum, item) => sum + item.attempts, 0) || daily.reduce((sum, item) => sum + item.attempts, 0) || recentAttempts.length,
-  );
-
-  const successfulAttempts = asNumber(
-    source.successful_attempts ??
-    source.success_attempts ??
-    source.success ??
-    source.sent,
-    countries.reduce((sum, item) => sum + item.successful_attempts, 0) || daily.reduce((sum, item) => sum + item.successful_attempts, 0),
-  );
-
-  const failedAttempts = asNumber(
-    source.failed_attempts ??
-    source.fail_attempts ??
-    source.failed ??
-    source.errors,
-    countries.reduce((sum, item) => sum + item.failed_attempts, 0) || daily.reduce((sum, item) => sum + item.failed_attempts, 0),
-  );
+  const totalAttemptsFallback = countries.reduce((sum, item) => sum + item.attempts, 0) || daily.reduce((sum, item) => sum + item.attempts, 0) || recentAttempts.length;
+  const successfulAttemptsFallback = countries.reduce((sum, item) => sum + item.successful_attempts, 0) || daily.reduce((sum, item) => sum + item.successful_attempts, 0);
+  const failedAttemptsFallback = countries.reduce((sum, item) => sum + item.failed_attempts, 0) || daily.reduce((sum, item) => sum + item.failed_attempts, 0);
+  const uniqueIpsFallback = countUniqueStrings(recentAttempts.map((attempt) => attempt.ip));
+  const last24hFallback = countAttemptsSince(recentAttempts, Date.now() - DAY_IN_MS);
+  const last7dFallback = countAttemptsSince(recentAttempts, Date.now() - 7 * DAY_IN_MS);
 
   return {
-    total_attempts: totalAttempts,
-    successful_attempts: successfulAttempts,
-    failed_attempts: failedAttempts,
-    unique_countries: asNumber(source.unique_countries ?? source.countries_count, countries.length),
-    unique_ips: asNumber(source.unique_ips ?? source.ips_count, 0),
-    last_24h_attempts: asNumber(source.last_24h_attempts ?? source.attempts_24h ?? source.last_day_attempts, 0),
-    last_7d_attempts: asNumber(source.last_7d_attempts ?? source.attempts_7d ?? source.last_week_attempts, 0),
-    generated_at: getValue(source, ['generated_at', 'updated_at', 'timestamp', 'generatedAt'], new Date().toISOString()),
+    total_attempts: resolveDerivedCount(
+      source.total_attempts ??
+      source.attempts ??
+      source.total ??
+      source.count,
+      totalAttemptsFallback,
+    ),
+    successful_attempts: resolveDerivedCount(
+      source.successful_attempts ??
+      source.success_attempts ??
+      source.success ??
+      source.sent,
+      successfulAttemptsFallback,
+    ),
+    failed_attempts: resolveDerivedCount(
+      source.failed_attempts ??
+      source.fail_attempts ??
+      source.failed ??
+      source.errors,
+      failedAttemptsFallback,
+    ),
+    unique_countries: resolveDerivedCount(source.unique_countries ?? source.countries_count, countries.length),
+    unique_ips: resolveDerivedCount(source.unique_ips ?? source.ips_count, uniqueIpsFallback),
+    last_24h_attempts: resolveDerivedCount(source.last_24h_attempts ?? source.attempts_24h ?? source.last_day_attempts, last24hFallback),
+    last_7d_attempts: resolveDerivedCount(source.last_7d_attempts ?? source.attempts_7d ?? source.last_week_attempts, last7dFallback),
+    generated_at: getValue(source, ['generated_at', 'updated_at', 'timestamp', 'generatedAt'], getLatestAttemptIso(recentAttempts)),
   };
 };
 

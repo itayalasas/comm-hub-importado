@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>SendCraft.Sdk</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>SendCraft</Authors>
+    <Description>SendCraft API client generated from the Marketplace catalog.</Description>
+  </PropertyGroup>
+</Project>
