@@ -2,9 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { Layout } from '../components/Layout';
 import { SDKSection } from '../components/SDKSection';
 import { getRuntimeConfig } from '../lib/config';
+import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import {
   Package, CheckCircle2, Copy, X, ChevronRight,
   Mail, FileText, Zap, Globe, ShieldCheck, ExternalLink,
+  Lock,
 } from 'lucide-react';
 
 /* ── Connector manifest types ──────────────────────────────────────── */
@@ -1385,6 +1387,9 @@ export const Marketplace = () => {
   const [filter, setFilter] = useState<'all' | 'email' | 'pdf' | 'automation'>('all');
   const [selected, setSelected] = useState<ConnectorManifest | null>(null);
   const [copiedRegistry, setCopiedRegistry] = useState(false);
+  const { hasAnyFeature } = useSubscriptionLimits();
+  const canUseSdkDownloads = hasAnyFeature(['sdk_download', 'api_access']);
+  const canUseEmbed = hasAnyFeature(['marketplace_embed_access', 'api_access']);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -1511,10 +1516,48 @@ export const Marketplace = () => {
         </div>
 
         {/* Embed section */}
-        <EmbedSection />
+        {canUseEmbed ? (
+          <EmbedSection />
+        ) : (
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-6">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-sm font-bold text-white">Embeber en tu CRM</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Esta funcion requiere actualizar a un plan superior para habilitar esta funcionalidad.
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  El acceso al iframe, el popup y el postMessage de instalacion esta disponible en planes superiores.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* SDK section */}
-        <SDKSection />
+        {canUseSdkDownloads ? (
+          <SDKSection />
+        ) : (
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-6">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                <Package className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-sm font-bold text-white">SDKs instalables</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Esta funcion requiere actualizar a un plan superior para habilitar esta funcionalidad.
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Cuando el plan lo permita, el usuario podra descargar los paquetes Node.js, .NET y Java desde aqui.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer note */}
         <div className="text-center pt-2">

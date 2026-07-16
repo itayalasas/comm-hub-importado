@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/db';
 import { queryCount, querySelect } from '../lib/queryApi';
+import { findPlanFeatureByCode } from '../lib/planFeatures';
 
 interface LimitCheck {
   canAdd: boolean;
@@ -209,9 +210,7 @@ export const useSubscriptionLimits = () => {
 
     if (!subscription?.entitlements?.features) return null;
 
-    const feature = subscription.entitlements.features.find(
-      (f) => f.code === featureCode
-    );
+    const feature = findPlanFeatureByCode(subscription.entitlements.features, featureCode);
 
     if (!feature) return null;
 
@@ -227,9 +226,7 @@ export const useSubscriptionLimits = () => {
 
     if (!subscription?.entitlements?.features) return false;
 
-    const feature = subscription.entitlements.features.find(
-      (f) => f.code === featureCode
-    );
+    const feature = findPlanFeatureByCode(subscription.entitlements.features, featureCode);
 
     if (!feature) return false;
 
@@ -279,6 +276,11 @@ export const useSubscriptionLimits = () => {
     return { canAdd: !limitReached, currentCount, maxLimit, limitReached };
   };
 
+  const hasAnyFeature = (featureCodes: string[]): boolean => {
+    if (isSystemAdmin) return true;
+    return featureCodes.some((featureCode) => hasFeature(featureCode));
+  };
+
   return {
     isLoading,
     applicationCount,
@@ -290,6 +292,7 @@ export const useSubscriptionLimits = () => {
     checkFeatureLimit,
     getFeatureLimit,
     hasFeature,
+    hasAnyFeature,
     refreshCounts: loadCounts,
     refreshApplicationCount: loadApplicationCount,
   };

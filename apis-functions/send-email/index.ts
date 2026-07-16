@@ -1,5 +1,5 @@
 
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+import nodemailer from 'npm:nodemailer@^9';
 import { Pool } from 'https://deno.land/x/postgres@v0.19.3/mod.ts';
 import { resendFetchWithRetry } from './_shared/resend-client.ts';
 
@@ -17,7 +17,7 @@ function wrapLinksForTracking(
   trackingBaseUrl: string,
 ): string {
   return html.replace(
-    /(<a\s[^>]*href=")((https?:\/\/)[^"]+)"/gi,
+    /(<a\s[^>]*href=")((https?:\/\/)[^"]+)(")/gi,
     (match, prefix, url, _scheme, suffix) => {
       if (url.includes(trackingBaseUrl)) return match;
       const trackingUrl =
@@ -66,7 +66,7 @@ export default async function handler(req: Request) {
   }
 
   const databaseUrl = Deno.env.get('DATABASE_URL');
-  const functionsBaseUrl = Deno.env.get('FUNCTIONS_BASE_URL');
+  const functionsBaseUrl = (Deno.env.get('FUNCTIONS_BASE_URL') || '').trim();
 
   if (!databaseUrl) {
     return jsonResponse({
@@ -215,7 +215,9 @@ export default async function handler(req: Request) {
       };
     }
 
-    const providerType = effectiveCredentials.provider_type || 'resend';
+    const providerType = String(effectiveCredentials.provider_type || 'resend')
+      .trim()
+      .toLowerCase();
 
     const templateResult = await client.queryObject<any>(
       `
@@ -477,26 +479,42 @@ export default async function handler(req: Request) {
         'SendCraft';
 
       if (providerType === 'smtp') {
-        const useTLS = effectiveCredentials.smtp_port === 465;
+        const smtpHost = String(effectiveCredentials.smtp_host || '').trim();
+        const smtpPort = Number(effectiveCredentials.smtp_port);
+        const smtpUser = String(effectiveCredentials.smtp_user || '').trim();
+        const smtpPassword = String(effectiveCredentials.smtp_password || '');
+        const fromEmail = String(actualFromEmail || '').trim();
 
-        const connectionConfig: any = {
-          hostname: effectiveCredentials.smtp_host,
-          port: effectiveCredentials.smtp_port,
-          auth: {
-            username: effectiveCredentials.smtp_user,
-            password: effectiveCredentials.smtp_password,
-          },
-        };
+        if (!smtpHost) {
+          throw new Error('Missing SMTP host');
+        }
 
-        if (useTLS) connectionConfig.tls = true;
+        if (!Number.isFinite(smtpPort) || smtpPort <= 0) {
+          throw new Error('Invalid SMTP port');
+        }
 
-        const smtpClient = new SMTPClient({ connection: connectionConfig });
+        if (!fromEmail) {
+          throw new Error('Missing from email');
+        }
+
+        const auth = smtpUser || smtpPassword
+          ? {
+            user: smtpUser,
+            pass: smtpPassword,
+          }
+          : undefined;
+
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          ...(auth ? { auth } : {}),
+        });
 
         const emailConfig: any = {
-          from: `"${fromName}" <${actualFromEmail}>`,
+          from: `"${fromName}" <${fromEmail}>`,
           to: recipient_email,
           subject: emailSubject,
-          content: 'text/html; charset=utf-8',
           html: htmlContent,
         };
 
@@ -508,8 +526,7 @@ export default async function handler(req: Request) {
           }];
         }
 
-        await smtpClient.send(emailConfig);
-        await smtpClient.close();
+        await transporter.sendMail(emailConfig);
 
         await client.queryObject(
           `
@@ -633,4 +650,3 @@ export default async function handler(req: Request) {
     client.release();
   }
 }
-

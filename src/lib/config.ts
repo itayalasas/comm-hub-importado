@@ -14,6 +14,209 @@ interface EnvConfig {
   updated_at: string;
 }
 
+export interface DedicatedFunctionsBaseUrlState {
+  scope: string;
+  baseUrl: string;
+  publicHostname: string;
+  tenantName: string;
+  subdomain: string;
+  updatedAt: string;
+}
+
+const DEDICATED_FUNCTIONS_BASE_URL_STORAGE_KEY = 'dedicated_functions_base_url_state';
+
+function firstString(...values: Array<string | number | null | undefined>): string {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return '';
+}
+
+function readStoredRecord(key: string): Record<string, unknown> | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function readNestedRecord(source: Record<string, unknown> | null | undefined, key: string): Record<string, unknown> | null {
+  if (!source) return null;
+
+  const value = source[key];
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  return value as Record<string, unknown>;
+}
+
+function readCurrentTenantScopeKey(): string {
+  const user = readStoredRecord('user');
+  const subscription = readStoredRecord('subscription');
+  const userTenant = readNestedRecord(user, 'tenant');
+  const userMetadata = readNestedRecord(user, 'metadata');
+  const subscriptionMetadata = readNestedRecord(subscription, 'metadata');
+
+  const scopeSource = firstString(
+    user?.tenant_id as string | number | null | undefined,
+    user?.tenantId as string | number | null | undefined,
+    userTenant?.id as string | number | null | undefined,
+    userMetadata?.tenant_id as string | number | null | undefined,
+    userMetadata?.tenantId as string | number | null | undefined,
+    user?.tenant_name as string | number | null | undefined,
+    user?.tenantName as string | number | null | undefined,
+    userTenant?.name as string | number | null | undefined,
+    userMetadata?.tenant_name as string | number | null | undefined,
+    userMetadata?.tenantName as string | number | null | undefined,
+    subscriptionMetadata?.tenant_id as string | number | null | undefined,
+    subscriptionMetadata?.tenantId as string | number | null | undefined,
+    subscriptionMetadata?.tenant_name as string | number | null | undefined,
+    subscriptionMetadata?.tenantName as string | number | null | undefined,
+    subscription?.id as string | number | null | undefined,
+  );
+
+  return scopeSource ? `tenant:${scopeSource.toLowerCase()}` : '';
+}
+
+function hasDedicatedApiAccessFromSubscription(subscription: Record<string, unknown> | null): boolean {
+  if (!subscription) return false;
+
+  const entitlements = readNestedRecord(subscription, 'entitlements');
+  const rawFeatures = entitlements?.features ?? subscription.features;
+  const features = Array.isArray(rawFeatures) ? rawFeatures : [];
+
+  for (const feature of features) {
+    if (!feature || typeof feature !== 'object' || Array.isArray(feature)) {
+      continue;
+    }
+
+    const record = feature as Record<string, unknown>;
+    const code = String(record.code || '').trim().toLowerCase();
+    if (!['acceso_api_dedicado', 'api_dedicada', 'dedicated_api_access'].includes(code)) {
+      continue;
+    }
+
+    if (typeof record.value === 'boolean') {
+      return record.value;
+    }
+
+    if (typeof record.value === 'number') {
+      return Number.isFinite(record.value) && record.value > 0;
+    }
+
+    const valueType = String(record.value_type || '').trim().toLowerCase();
+    const normalizedValue = String(record.value ?? '').trim().toLowerCase();
+
+    if (valueType === 'boolean') {
+      return ['true', '1', 'yes', 'on'].includes(normalizedValue);
+    }
+
+    if (valueType === 'number') {
+      const numericValue = Number(record.value);
+      return Number.isFinite(numericValue) && numericValue > 0;
+    }
+
+    return ['true', '1', 'yes', 'on'].includes(normalizedValue);
+  }
+
+  return false;
+}
+
+function readDedicatedFunctionsBaseUrlState(): DedicatedFunctionsBaseUrlState | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = localStorage.getItem(DEDICATED_FUNCTIONS_BASE_URL_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const scope = String((parsed as Record<string, unknown>).scope || '').trim();
+    const baseUrl = normalizeFunctionsBaseUrl(
+      String((parsed as Record<string, unknown>).baseUrl || (parsed as Record<string, unknown>).base_url || ''),
+    );
+    const publicHostname = String((parsed as Record<string, unknown>).publicHostname || (parsed as Record<string, unknown>).public_hostname || '').trim();
+    const tenantName = String((parsed as Record<string, unknown>).tenantName || (parsed as Record<string, unknown>).tenant_name || '').trim();
+    const subdomain = String((parsed as Record<string, unknown>).subdomain || '').trim();
+    const updatedAt = String((parsed as Record<string, unknown>).updatedAt || (parsed as Record<string, unknown>).updated_at || new Date().toISOString()).trim();
+
+    if (!scope || !baseUrl) return null;
+
+    return {
+      scope,
+      baseUrl,
+      publicHostname,
+      tenantName,
+      subdomain,
+      updatedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readActiveDedicatedFunctionsBaseUrlState(): DedicatedFunctionsBaseUrlState | null {
+  const dedicatedState = readDedicatedFunctionsBaseUrlState();
+  if (!dedicatedState) return null;
+
+  const subscription = readStoredRecord('subscription');
+  if (!hasDedicatedApiAccessFromSubscription(subscription)) {
+    return null;
+  }
+
+  const currentScope = readCurrentTenantScopeKey();
+  if (!currentScope || dedicatedState.scope !== currentScope) {
+    return null;
+  }
+
+  return dedicatedState;
+}
+
+export function getDedicatedFunctionsBaseUrlState(): DedicatedFunctionsBaseUrlState | null {
+  return readActiveDedicatedFunctionsBaseUrlState();
+}
+
+export function setDedicatedFunctionsBaseUrlState(state: DedicatedFunctionsBaseUrlState): void {
+  if (typeof window === 'undefined') return;
+
+  const normalizedBaseUrl = normalizeFunctionsBaseUrl(state.baseUrl);
+  const normalizedScope = String(state.scope || '').trim();
+
+  if (!normalizedBaseUrl || !normalizedScope) return;
+
+  const nextState: DedicatedFunctionsBaseUrlState = {
+    scope: normalizedScope,
+    baseUrl: normalizedBaseUrl,
+    publicHostname: String(state.publicHostname || '').trim(),
+    tenantName: String(state.tenantName || '').trim(),
+    subdomain: String(state.subdomain || '').trim(),
+    updatedAt: String(state.updatedAt || new Date().toISOString()).trim() || new Date().toISOString(),
+  };
+
+  localStorage.setItem(DEDICATED_FUNCTIONS_BASE_URL_STORAGE_KEY, JSON.stringify(nextState));
+}
+
+export function clearDedicatedFunctionsBaseUrlState(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(DEDICATED_FUNCTIONS_BASE_URL_STORAGE_KEY);
+}
+
 function shouldLogConfig(): boolean {
   return typeof window !== 'undefined' && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 }
@@ -53,6 +256,35 @@ function buildAuthEndpoint(baseUrl: string, path: string): string {
   if (!normalizedBase) return '';
 
   return `${normalizedBase}/${path.replace(/^\/+/, '')}`;
+}
+
+export interface AuthLaunchConfig {
+  authUrl: string;
+  authAppId: string;
+  authApiKey: string;
+  redirectUri: string;
+}
+
+export function getLocalAuthLaunchConfig(): AuthLaunchConfig | null {
+  const env = import.meta.env as Record<string, string | undefined>;
+  const authUrl = normalizeFunctionsBaseUrl(
+    env.VITE_AUTH_URL ||
+    env.AUTH_URL ||
+    env.AUTH_FUNCTIONS_BASE_URL ||
+    env.AUTH_EDGE_FUNCTIONS_BASE_URL ||
+    '',
+  );
+
+  const config: AuthLaunchConfig = {
+    authUrl,
+    authAppId: env.VITE_AUTH_APP_ID || '',
+    authApiKey: env.VITE_AUTH_API_KEY || '',
+    redirectUri: env.VITE_REDIRECT_URI || '',
+  };
+
+  return config.authUrl && config.authAppId && config.authApiKey && config.redirectUri
+    ? config
+    : null;
 }
 
 export function buildFunctionsUrl(endpoint: string, baseUrl?: string): string {
@@ -111,6 +343,8 @@ function readFallbackEnv(key: string): string {
       return env.VITE_CONFIG_API_URL || '';
     case 'FUNCTIONS_BASE_URL':
       return env.FUNCTIONS_BASE_URL || env.VITE_FUNCTIONS_BASE_URL || '';
+    case 'URL_SERVER_DEDICADO':
+      return env.URL_SERVER_DEDICADO || env.VITE_URL_SERVER_DEDICADO || '';
     case 'VITE_QUERY_API_URL':
       return env.VITE_QUERY_API_URL || env.QUERY_API_URL || '';
     case 'PLANS_API_URL':
@@ -158,12 +392,16 @@ function readFallbackEnv(key: string): string {
 
 function buildFallbackConfig(): EnvConfig {
   const env = import.meta.env as Record<string, string | undefined>;
-  const functionsBaseUrl = normalizeFunctionsBaseUrl(
+  const publicFunctionsBaseUrl = normalizeFunctionsBaseUrl(
     readFallbackEnv('VITE_FUNCTIONS_BASE_URL') || readFallbackEnv('FUNCTIONS_BASE_URL'),
   );
+  const dedicatedFunctionsBaseUrl = readActiveDedicatedFunctionsBaseUrlState()?.baseUrl || '';
+  const effectiveFunctionsBaseUrl = normalizeFunctionsBaseUrl(dedicatedFunctionsBaseUrl || publicFunctionsBaseUrl);
   const authBaseUrl = resolveAuthBaseUrlFromEnv(env);
-  const queryApiUrl = readFallbackEnv('VITE_QUERY_API_URL') || (functionsBaseUrl ? `${functionsBaseUrl}/query` : '');
-  const plansApiUrl = readFallbackEnv('PLANS_API_URL') || (functionsBaseUrl ? `${functionsBaseUrl}/application-plans` : '');
+  const queryApiUrl = effectiveFunctionsBaseUrl
+    ? `${effectiveFunctionsBaseUrl}/query`
+    : readFallbackEnv('VITE_QUERY_API_URL') || readFallbackEnv('QUERY_API_URL') || '';
+  const plansApiUrl = readFallbackEnv('PLANS_API_URL') || (publicFunctionsBaseUrl ? `${publicFunctionsBaseUrl}/application-plans` : '');
   const plansApiUrlVite = readFallbackEnv('VITE_PLANS_API_URL') || plansApiUrl;
   const authExchangeUrl = readFallbackEnv('AUTH_VALIDA_TOKEN') || readFallbackEnv('AUTH_EXCHANGE_URL');
   const authVerifyUrl = readFallbackEnv('AUTH_TOKEN_VALIDA') || readFallbackEnv('AUTH_VERIFY_URL');
@@ -174,9 +412,9 @@ function buildFallbackConfig(): EnvConfig {
     project_name: '',
     description: '',
     variables: {
-      VITE_FUNCTIONS_BASE_URL: functionsBaseUrl,
+      VITE_FUNCTIONS_BASE_URL: publicFunctionsBaseUrl,
       VITE_CONFIG_API_URL: readFallbackEnv('VITE_CONFIG_API_URL'),
-      FUNCTIONS_BASE_URL: functionsBaseUrl,
+      FUNCTIONS_BASE_URL: publicFunctionsBaseUrl,
       VITE_QUERY_API_URL: queryApiUrl,
       PLANS_API_URL: plansApiUrl,
       VITE_PLANS_API_URL: plansApiUrlVite,
@@ -197,6 +435,7 @@ function buildFallbackConfig(): EnvConfig {
       URL_HEALTH_CHECK_API: readFallbackEnv('URL_HEALTH_CHECK_API'),
       VALIDATION_API_BASE_URL: readFallbackEnv('VALIDATION_API_BASE_URL'),
       CANCEL_SUBSCRIPTION_URL: readFallbackEnv('CANCEL_SUBSCRIPTION_URL'),
+      URL_SERVER_DEDICADO: readFallbackEnv('URL_SERVER_DEDICADO'),
     },
     updated_at: new Date().toISOString(),
   };
@@ -234,22 +473,24 @@ class ConfigManager {
           ...fallbackConfig.variables,
           ...remoteVariables,
         } as Record<string, string | undefined>;
-        const functionsBaseUrl = normalizeFunctionsBaseUrl(
+        const publicFunctionsBaseUrl = normalizeFunctionsBaseUrl(
           mergedVariables.VITE_FUNCTIONS_BASE_URL ||
           mergedVariables.FUNCTIONS_BASE_URL ||
           '',
         );
+        const dedicatedFunctionsBaseUrl = readActiveDedicatedFunctionsBaseUrlState()?.baseUrl || '';
+        const effectiveFunctionsBaseUrl = normalizeFunctionsBaseUrl(dedicatedFunctionsBaseUrl || publicFunctionsBaseUrl);
         const authBaseUrl = resolveAuthBaseUrlFromEnv(mergedVariables);
-        const queryApiUrl = functionsBaseUrl
-          ? `${functionsBaseUrl}/query`
+        const queryApiUrl = effectiveFunctionsBaseUrl
+          ? `${effectiveFunctionsBaseUrl}/query`
           : remoteVariables.VITE_QUERY_API_URL ||
             remoteVariables.QUERY_API_URL ||
             fallbackConfig.variables.VITE_QUERY_API_URL;
-        const plansApiUrl = functionsBaseUrl
+        const plansApiUrl = publicFunctionsBaseUrl
           ? remoteVariables.PLANS_API_URL ||
             remoteVariables.VITE_PLANS_API_URL ||
             fallbackConfig.variables.PLANS_API_URL ||
-            `${functionsBaseUrl}/application-plans`
+            `${publicFunctionsBaseUrl}/application-plans`
           : remoteVariables.PLANS_API_URL ||
             remoteVariables.VITE_PLANS_API_URL ||
             fallbackConfig.variables.PLANS_API_URL;
@@ -272,9 +513,9 @@ class ConfigManager {
           variables: {
             ...fallbackConfig.variables,
             ...remoteVariables,
-            VITE_FUNCTIONS_BASE_URL: functionsBaseUrl,
+            VITE_FUNCTIONS_BASE_URL: publicFunctionsBaseUrl,
             VITE_CONFIG_API_URL: remoteVariables.VITE_CONFIG_API_URL || fallbackConfig.variables.VITE_CONFIG_API_URL,
-            FUNCTIONS_BASE_URL: functionsBaseUrl,
+            FUNCTIONS_BASE_URL: publicFunctionsBaseUrl,
             VITE_QUERY_API_URL: queryApiUrl,
             PLANS_API_URL: plansApiUrl,
             VITE_PLANS_API_URL: remoteVariables.VITE_PLANS_API_URL || fallbackConfig.variables.VITE_PLANS_API_URL || plansApiUrl,
@@ -295,6 +536,7 @@ class ConfigManager {
             URL_HEALTH_CHECK_API: remoteVariables.URL_HEALTH_CHECK_API || fallbackConfig.variables.URL_HEALTH_CHECK_API,
             VALIDATION_API_BASE_URL: remoteVariables.VALIDATION_API_BASE_URL || fallbackConfig.variables.VALIDATION_API_BASE_URL,
             CANCEL_SUBSCRIPTION_URL: remoteVariables.CANCEL_SUBSCRIPTION_URL || fallbackConfig.variables.CANCEL_SUBSCRIPTION_URL,
+            URL_SERVER_DEDICADO: remoteVariables.URL_SERVER_DEDICADO || fallbackConfig.variables.URL_SERVER_DEDICADO,
           },
         };
 
@@ -319,6 +561,15 @@ class ConfigManager {
   }
 
   get functionsBaseUrl(): string {
+    const dedicatedState = readActiveDedicatedFunctionsBaseUrlState();
+    return normalizeFunctionsBaseUrl(
+      dedicatedState?.baseUrl ||
+      this.getVariable('VITE_FUNCTIONS_BASE_URL') ||
+      this.getVariable('FUNCTIONS_BASE_URL'),
+    );
+  }
+
+  get publicFunctionsBaseUrl(): string {
     return normalizeFunctionsBaseUrl(
       this.getVariable('VITE_FUNCTIONS_BASE_URL') ||
       this.getVariable('FUNCTIONS_BASE_URL'),
@@ -367,12 +618,21 @@ class ConfigManager {
   }
 
   get apiUrl(): string {
-    const base = this.getVariable('VITE_QUERY_API_URL') || `${this.functionsBaseUrl}/query`;
-    return base;
+    if (this.functionsBaseUrl) {
+      return `${this.functionsBaseUrl}/query`;
+    }
+
+    return this.getVariable('VITE_QUERY_API_URL') ||
+      this.getVariable('QUERY_API_URL') ||
+      '';
   }
 
   get urlHealthCheckEmail(): string {
-    return this.getVariable('URL_HEALTH_CHECK_API') || (this.functionsBaseUrl ? `${this.functionsBaseUrl}/health-check-email` : '');
+    if (this.functionsBaseUrl) {
+      return `${this.functionsBaseUrl}/health-check-email`;
+    }
+
+    return this.getVariable('URL_HEALTH_CHECK_API') || '';
   }
 
   get urlHealthCheckPdf(): string {
@@ -390,7 +650,11 @@ class ConfigManager {
   get plansApiUrl(): string {
     return this.getVariable('PLANS_API_URL') ||
       this.getVariable('VITE_PLANS_API_URL') ||
-      (this.functionsBaseUrl ? `${this.functionsBaseUrl}/application-plans` : '');
+      (this.publicFunctionsBaseUrl ? `${this.publicFunctionsBaseUrl}/application-plans` : '');
+  }
+
+  get dedicatedApiProvisionUrl(): string {
+    return this.getVariable('URL_SERVER_DEDICADO');
   }
 
   get cancelSubscriptionUrl(): string {
@@ -406,18 +670,32 @@ export const configManager = new ConfigManager();
 
 export function getRuntimeConfig() {
   const snapshot = configManager.getSnapshot();
-  const functionsBaseUrlRaw = normalizeFunctionsBaseUrl(
+  const publicFunctionsBaseUrlRaw = normalizeFunctionsBaseUrl(
     snapshot.variables.VITE_FUNCTIONS_BASE_URL ||
     snapshot.variables.FUNCTIONS_BASE_URL ||
     '',
   );
+  const dedicatedFunctionsBaseUrlState = readActiveDedicatedFunctionsBaseUrlState();
+  const functionsBaseUrlRaw = normalizeFunctionsBaseUrl(
+    dedicatedFunctionsBaseUrlState?.baseUrl ||
+    publicFunctionsBaseUrlRaw ||
+    '',
+  );
   const functionsBaseUrl = functionsBaseUrlRaw;
+  const queryApiUrl = functionsBaseUrlRaw
+    ? `${functionsBaseUrlRaw}/query`
+    : snapshot.variables.VITE_QUERY_API_URL ||
+      snapshot.variables.QUERY_API_URL ||
+      '';
 
   return {
     functionsBaseUrlRaw,
     functionsBaseUrl,
-    queryApiUrl: snapshot.variables.VITE_QUERY_API_URL || (functionsBaseUrlRaw ? `${functionsBaseUrlRaw}/query` : ''),
-    plansApiUrl: snapshot.variables.PLANS_API_URL || snapshot.variables.VITE_PLANS_API_URL || (functionsBaseUrlRaw ? `${functionsBaseUrlRaw}/application-plans` : ''),
+    publicFunctionsBaseUrlRaw,
+    publicFunctionsBaseUrl: publicFunctionsBaseUrlRaw,
+    dedicatedApiProvisionUrl: snapshot.variables.URL_SERVER_DEDICADO || '',
+    queryApiUrl,
+    plansApiUrl: snapshot.variables.PLANS_API_URL || snapshot.variables.VITE_PLANS_API_URL || (publicFunctionsBaseUrlRaw ? `${publicFunctionsBaseUrlRaw}/application-plans` : ''),
     apiKey: snapshot.variables.API_KEY || '',
     apiKeyUserEmbed: snapshot.variables.API_KEY_USER_EMBED || '',
     authApiKey: snapshot.variables.VITE_AUTH_API_KEY || '',

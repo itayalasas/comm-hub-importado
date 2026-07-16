@@ -1,5 +1,4 @@
-
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import nodemailer from "npm:nodemailer@^9";
 import { Pool } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { renderTemplate } from "./_shared/template-engine.ts";
 import { renderHtmlToPdfBase64 } from "./_shared/pdf-renderer.ts";
@@ -493,26 +492,20 @@ Deno.serve(async (req: Request) => {
     if (providerType === "smtp") {
       const useTLS = effectiveCredentials.smtp_port === 465;
 
-      const connectionConfig: any = {
-        hostname: effectiveCredentials.smtp_host,
+      const transporter = nodemailer.createTransport({
+        host: effectiveCredentials.smtp_host,
         port: effectiveCredentials.smtp_port,
+        secure: useTLS,
         auth: {
-          username: effectiveCredentials.smtp_user,
-          password: effectiveCredentials.smtp_password,
+          user: effectiveCredentials.smtp_user,
+          pass: effectiveCredentials.smtp_password,
         },
-      };
-
-      if (useTLS) {
-        connectionConfig.tls = true;
-      }
-
-      const smtpClient = new SMTPClient({ connection: connectionConfig });
+      });
 
       const emailConfig: any = {
         from: `"${fromName}" <${fromEmail}>`,
         to: recipient_email,
         subject: emailSubject,
-        content: "text/html; charset=utf-8",
         html: htmlContent,
       };
 
@@ -526,8 +519,7 @@ Deno.serve(async (req: Request) => {
         ];
       }
 
-      await smtpClient.send(emailConfig);
-      await smtpClient.close();
+      await transporter.sendMail(emailConfig);
     } else {
       const resendApiKey = effectiveCredentials.resend_api_key ||
         Deno.env.get("RESEND_API_KEY");

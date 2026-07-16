@@ -145,6 +145,7 @@ export function buildEnvPayload(req) {
       AUTH_VERIFY_URL: authVerifyUrl,
       AUTH_REFRESH_URL: authRefreshUrl,
       AUTH_LOGOUT_URL: authLogoutUrl,
+      URL_SERVER_DEDICADO: readEnv('URL_SERVER_DEDICADO') || readEnv('VITE_URL_SERVER_DEDICADO') || '',
       URL_HEALTH_CHECK_API: publicBaseUrl ? `${publicBaseUrl}/health-check-email` : '',
       VALIDATION_API_BASE_URL: readEnv('VALIDATION_API_BASE_URL'),
       CANCEL_SUBSCRIPTION_URL: serverConfig.cancelSubscriptionUrl,

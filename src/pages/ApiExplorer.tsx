@@ -16,6 +16,7 @@ import {
 import { Layout } from '../components/Layout';
 import { buildFunctionsUrl, getRuntimeConfig } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
+import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import {
   buildApiExplorerCatalog,
   type ApiExplorerEndpoint,
@@ -448,8 +449,10 @@ export default function ApiExplorer() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [filterGroup, setFilterGroup] = useState<string>('all');
   useAuth();
+  const { hasAnyFeature } = useSubscriptionLimits();
 
   const baseUrl = getFunctionsBaseUrl();
+  const canUseApiExplorer = hasAnyFeature(['api_explorer_access', 'api_access']);
 
   const copyToClipboard = useCallback((text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -474,6 +477,29 @@ export default function ApiExplorer() {
     : groups.filter((group) => group.id === filterGroup);
 
   const queryExample = visibleEndpoints.find((endpoint) => getQueryFields(endpoint).length > 0);
+
+  if (!canUseApiExplorer) {
+    return (
+      <Layout currentPage="api-explorer">
+        <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-6">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-xl font-bold text-white">API Explorer</h1>
+              <p className="mt-1 text-sm text-slate-400">
+                Esta experiencia requiere actualizar a un plan superior para habilitar esta funcionalidad.
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                El explorador interactivo de APIs esta disponible en planes superiores.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout currentPage="api-explorer">

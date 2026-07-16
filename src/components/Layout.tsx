@@ -13,6 +13,7 @@ import { useToast } from './Toast';
 import { resolveManagedCheckoutEndpoint, resolvePlanCheckoutUrl, sortPlansByOrder, usePlans } from '../hooks/usePlans';
 import { getRuntimeConfig, configManager } from '../lib/config';
 import { startManagedSubscriptionCheckout, storePendingSubscriptionCheckout } from '../lib/subscriptionCheckout';
+import { findPlanFeatureByCode } from '../lib/planFeatures';
 
 interface LayoutProps {
   children: ReactNode;
@@ -32,24 +33,52 @@ const FEATURE_LABEL: Record<string, string> = {
   total_de_correos_mensuales: 'Emails / mes',
   pdf_generations_monthly:    'PDFs / mes',
   max_applications:           'Aplicaciones',
+  max_users:                  'Usuarios',
+  team_seats:                 'Usuarios',
   templates:                  'Templates',
   api_access:                 'Acceso API',
+  api_explorer_access:        'API Explorer',
+  sdk_download:               'SDK Downloads',
+  marketplace_embed_access:   'Marketplace Embed',
+  automation_programs:        'Automation Programs',
+  monitoring_dashboard:       'Monitoring Dashboard',
+  whatsapp_access:            'WhatsApp',
+  custom_branding:            'Custom Branding',
   two_factor_auth:            '2FA',
   priority_support:           'Soporte prioritario',
   advanced_reports:           'Reportes avanzados',
   custom_domain:              'Dominio pers.',
+  audit_logs:                 'Audit Logs',
+  sso_saml:                   'SSO / SAML',
+  configuracion_smtp:         'Configuracion SMTP',
+  acceso_api_resend:          'API Resend',
+  acceso_api_dedicado:        'APIs dedicadas',
 };
 
 const FEATURE_ORDER = [
   'total_de_correos_mensuales',
   'pdf_generations_monthly',
   'max_applications',
+  'max_users',
+  'team_seats',
   'templates',
   'api_access',
+  'api_explorer_access',
+  'sdk_download',
+  'marketplace_embed_access',
+  'automation_programs',
+  'monitoring_dashboard',
+  'whatsapp_access',
+  'custom_branding',
   'two_factor_auth',
   'advanced_reports',
   'custom_domain',
+  'audit_logs',
+  'sso_saml',
   'priority_support',
+  'configuracion_smtp',
+  'acceso_api_resend',
+  'acceso_api_dedicado',
 ];
 
 /* ── Plan card list (shared by blockers) ────────────────────────── */
@@ -146,7 +175,7 @@ const PlanCards = ({ highlightUsersAbove }: { highlightUsersAbove?: number }) =>
             return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
           });
 
-          const planMaxUsers = plan.entitlements?.features?.find(f => f.code === 'max_users');
+          const planMaxUsers = findPlanFeatureByCode(plan.entitlements?.features, 'max_users');
           const planUserLimit = planMaxUsers ? parseInt(planMaxUsers.value, 10) : null;
           const coversNeeds = highlightUsersAbove === undefined || planUserLimit === null || planUserLimit > highlightUsersAbove;
           const cardHighlightClass =
@@ -600,7 +629,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
     accessWindowActive;
   const subscriptionBlocked = !subscriptionAccessGranted;
 
-  const maxUsersFeature = subscription?.entitlements?.features?.find(f => f.code === 'max_users');
+  const maxUsersFeature = findPlanFeatureByCode(subscription?.entitlements?.features, 'max_users');
   const maxUsers = maxUsersFeature ? parseInt(maxUsersFeature.value, 10) : null;
   const activeUsersCount = user?.active_users_count ?? 0;
   const userLimitExceeded = maxUsers !== null && activeUsersCount > maxUsers;

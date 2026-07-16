@@ -6,7 +6,7 @@ import { consumePendingWebAccessAttemptId, recordWebAccessAttempt } from '../lib
 import { getPostLoginRedirectPath } from '../lib/authNavigation';
 
 export const AuthProcessing = () => {
-  const { handleCallback } = useAuth();
+  const { handleCallback, authProgress } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -127,7 +127,14 @@ export const AuthProcessing = () => {
         ) : (
           <>
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-slate-700 border-t-cyan-400 mb-4"></div>
-            <div className="text-white text-lg">Procesando autenticación...</div>
+            <div className="text-white text-lg">
+              {authProgress?.message || 'Procesando autenticación...'}
+            </div>
+            <div className="text-slate-400 text-sm mt-2 max-w-sm">
+              {authProgress?.phase === 'provisioning_dedicated_api'
+                ? 'Tu servidor dedicado está en camino. Esto puede tardar unos segundos.'
+                : 'Cargando credenciales, sesión y permisos del usuario.'}
+            </div>
           </>
         )}
       </div>

@@ -15,7 +15,7 @@ type ResultState = 'loading' | 'success' | 'pending' | 'error';
 export const SubscriptionResult = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { refreshSubscription, applyCheckoutStatus } = useAuth();
+  const { refreshSubscription, applyCheckoutStatus, authProgress } = useAuth();
   const { checkout } = usePlans();
 
   const [state, setState] = useState<ResultState>('loading');
@@ -54,8 +54,10 @@ export const SubscriptionResult = () => {
 
         clearPendingSubscriptionCheckout();
         invalidatePlansCache();
-        await refreshSubscription().catch(() => null);
-        applyCheckoutStatus(result);
+        await refreshSubscription({ skipDedicatedProvisioning: true }).catch(() => null);
+        await applyCheckoutStatus(result);
+
+        if (cancelled) return;
 
         const sub = result.subscription;
         const status = String(result.status ?? sub?.status ?? '').toLowerCase();
@@ -103,7 +105,14 @@ export const SubscriptionResult = () => {
                 </div>
               </div>
               <h2 className="text-xl font-bold text-white mb-2">Verificando pago</h2>
-              <p className="text-slate-400 text-sm">Estamos confirmando el estado de tu suscripción...</p>
+              <p className="text-slate-400 text-sm">
+                {authProgress?.message || 'Estamos confirmando el estado de tu suscripción...'}
+              </p>
+              <p className="text-slate-500 text-xs mt-3">
+                {authProgress?.phase === 'provisioning_dedicated_api'
+                  ? 'Tu plan incluye APIs dedicadas, así que también estamos preparando tu servidor.'
+                  : 'Este paso puede tardar un poco mientras sincronizamos tu cuenta.'}
+              </p>
             </>
           )}
 

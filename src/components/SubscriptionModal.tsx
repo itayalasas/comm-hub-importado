@@ -16,16 +16,30 @@ const FEATURE_LABEL: Record<string, string> = {
   pdf_generations_monthly:    'PDFs mensuales',
   max_applications:           'Aplicaciones',
   max_users:                  'Máximo de usuarios',
+  team_seats:                 'Máximo de usuarios',
   templates:                  'Templates',
   api_access:                 'Acceso API',
+  api_explorer_access:        'API Explorer',
+  sdk_download:               'SDK Downloads',
+  marketplace_embed_access:   'Marketplace Embed',
+  automation_programs:        'Automation Programs',
+  monitoring_dashboard:       'Monitoring Dashboard',
+  whatsapp_access:            'WhatsApp',
+  custom_branding:            'Custom Branding',
   two_factor_auth:            '2FA',
   priority_support:           'Soporte prioritario',
   advanced_reports:           'Reportes avanzados',
   custom_domain:              'Dominio personalizado',
+  audit_logs:                 'Audit Logs',
+  sso_saml:                   'SSO / SAML',
+  configuracion_smtp:         'Configuracion SMTP',
+  acceso_api_resend:          'API Resend',
+  acceso_api_dedicado:        'APIs dedicadas',
 };
 
 const FEATURE_ICON: Record<string, React.ElementType> = {
   max_users:                  Users,
+  team_seats:                 Users,
   templates:                  FileText,
   max_applications:           LayoutGrid,
   total_de_correos_mensuales: Mail,
@@ -198,7 +212,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
         periodEnd ??
         null;
       setCancelActiveUntil(activeUntil ?? null);
-      applyCheckoutStatus({
+      await applyCheckoutStatus({
         subscription: {
           ...subscription,
           ...responseSubscription,
@@ -223,6 +237,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
       case 'max_applications':           return applicationCount;
       case 'templates':                  return templateCount;
       case 'max_users':                  return activeUsersCount;
+      case 'team_seats':                 return activeUsersCount;
       case 'total_de_correos_mensuales': return emailsThisMonth;
       case 'pdf_generations_monthly':    return pdfsThisMonth;
       default:                           return -1; // -1 signals "no usage data for this feature"
@@ -234,6 +249,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
       case 'max_applications':           return 'usadas';
       case 'templates':                  return 'creados';
       case 'max_users':                  return 'activos';
+      case 'team_seats':                 return 'activos';
       case 'total_de_correos_mensuales': return 'enviados';
       case 'pdf_generations_monthly':    return 'generados';
       default:                           return 'usados';

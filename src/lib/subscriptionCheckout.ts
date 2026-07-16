@@ -104,7 +104,7 @@ function normalizeManagedCheckoutPath(endpoint: string, fallbackPath: string): s
 
 export function resolveCheckoutEndpoint(endpoint: string | undefined, fallbackPath: string): string {
   const runtime = getRuntimeConfig();
-  const baseUrl = (runtime.functionsBaseUrlRaw || '').trim().replace(/\/+$/, '');
+  const baseUrl = (runtime.publicFunctionsBaseUrlRaw || runtime.functionsBaseUrlRaw || '').trim().replace(/\/+$/, '');
   if (!baseUrl) {
     throw new Error('Missing functions base URL');
   }

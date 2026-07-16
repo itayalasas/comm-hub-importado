@@ -1,5 +1,5 @@
 import { authClient } from './auth';
-import { configManager, getRuntimeConfig } from './config';
+import { buildFunctionsUrl, configManager, getRuntimeConfig } from './config';
 
 export type QueryOperation = 'select' | 'insert' | 'update' | 'delete' | 'upsert';
 
@@ -31,6 +31,7 @@ export interface QueryOrder {
 export interface QueryRequest {
   table: string;
   operation: QueryOperation;
+  baseUrl?: string;
   select?: string;
   filters?: QueryFilter[];
   order?: QueryOrder;
@@ -159,7 +160,11 @@ function logQueryRequest(url: string, request: QueryRequest): void {
 
 async function queryRequest<T>(request: QueryRequest): Promise<QueryResponse<T>> {
   await configManager.loadConfig();
-  const { queryApiUrl } = getRuntimeConfig();
+  const { baseUrl: baseUrlOverride, ...requestBody } = request;
+  const runtime = getRuntimeConfig();
+  const queryApiUrl = baseUrlOverride
+    ? buildFunctionsUrl('query', baseUrlOverride)
+    : runtime.queryApiUrl;
 
   if (!queryApiUrl) {
     return {
@@ -171,12 +176,12 @@ async function queryRequest<T>(request: QueryRequest): Promise<QueryResponse<T>>
 
   try {
     const execute = async (url: string) => {
-      logQueryRequest(url, request);
+      logQueryRequest(url, requestBody);
       const response = await fetch(url, {
         method: 'POST',
         headers: buildHeaders(),
         body: JSON.stringify({
-          ...request,
+          ...requestBody,
         }),
       });
 

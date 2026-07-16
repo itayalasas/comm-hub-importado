@@ -32,8 +32,11 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { getDefaultAuthenticatedPath } from './lib/authNavigation';
 
 
-const AppLoader = () => (
-  <div className="min-h-screen bg-[#020c1b] flex flex-col items-center justify-center gap-8">
+const AppLoader = () => {
+  const { authProgress } = useAuth();
+
+  return (
+    <div className="min-h-screen bg-[#020c1b] flex flex-col items-center justify-center gap-8 px-6">
     <div className="relative">
       {/* Outer ring */}
       <div className="w-20 h-20 rounded-2xl border border-cyan-500/20 absolute inset-0 animate-ping opacity-20" />
@@ -46,11 +49,21 @@ const AppLoader = () => (
         </svg>
       </div>
     </div>
+    <div className="text-center max-w-md">
+      <p className="text-white text-lg font-semibold">
+        {authProgress?.message || 'Preparando tu acceso...'}
+      </p>
+        <p className="text-slate-500 text-sm mt-2">
+          {authProgress?.phase === 'provisioning_dedicated_api'
+            ? 'Estamos levantando tu servidor dedicado de APIs y ajustando la URL base.'
+          : 'Cargando configuraci\u00f3n, sesi\u00f3n y permisos del tenant.'}
+        </p>
+      </div>
     {/* Loading bar */}
-    <div className="w-48 h-0.5 bg-white/5 rounded-full overflow-hidden">
+    <div className="w-56 h-0.5 bg-white/5 rounded-full overflow-hidden">
       <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full animate-[loading_1.4s_ease-in-out_infinite]" style={{width: '40%'}} />
     </div>
-    <p className="text-slate-500 text-sm tracking-widest uppercase">SendCraft</p>
+    <p className="text-slate-500 text-xs tracking-[0.35em] uppercase">SendCraft</p>
     <style>{`
       @keyframes loading {
         0%   { transform: translateX(-200%); }
@@ -59,6 +72,7 @@ const AppLoader = () => (
     `}</style>
   </div>
 );
+};
 
 const ProtectedRoute = ({
   children,
@@ -69,10 +83,11 @@ const ProtectedRoute = ({
   requiredMenu?: string;
   requireSystemAdmin?: boolean;
 }) => {
-  const { isAuth, isLoading, hasMenuAccess, logout, isSystemAdmin } = useAuth();
+  const { isAuth, isLoading, authProgress, hasMenuAccess, logout, isSystemAdmin } = useAuth();
   const location = useLocation();
+  const isDedicatedProvisioning = authProgress?.phase === 'provisioning_dedicated_api';
 
-  if (isLoading) {
+  if (isLoading || (isAuth && isDedicatedProvisioning)) {
     return <AppLoader />;
   }
 
@@ -94,7 +109,7 @@ const ProtectedRoute = ({
               'Este panel es exclusivo para la cuenta administradora.'
             ) : (
               <>
-                No tienes permisos para acceder a la sección: <strong className="text-cyan-400">{requiredMenu}</strong>
+                No tienes permisos para acceder a la secci{'\u00f3'}n: <strong className="text-cyan-400">{requiredMenu}</strong>
               </>
             )}
           </p>
@@ -130,7 +145,7 @@ const ProtectedRoute = ({
               onClick={logout}
               className="px-6 py-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
             >
-              Cerrar sesión
+              Cerrar sesi{'\u00f3'}n
             </button>
           </div>
         </div>
@@ -142,9 +157,10 @@ const ProtectedRoute = ({
 };
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuth, isLoading, hasMenuAccess, isSystemAdmin } = useAuth();
+  const { isAuth, isLoading, authProgress, hasMenuAccess, isSystemAdmin } = useAuth();
+  const isDedicatedProvisioning = authProgress?.phase === 'provisioning_dedicated_api';
 
-  if (isLoading) {
+  if (isLoading || (isAuth && isDedicatedProvisioning)) {
     return <AppLoader />;
   }
 
@@ -156,9 +172,10 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const DashboardRedirect = () => {
-  const { isAuth, isLoading, hasMenuAccess, isSystemAdmin } = useAuth();
+  const { isAuth, isLoading, authProgress, hasMenuAccess, isSystemAdmin } = useAuth();
+  const isDedicatedProvisioning = authProgress?.phase === 'provisioning_dedicated_api';
 
-  if (isLoading) {
+  if (isLoading || (isAuth && isDedicatedProvisioning)) {
     return <AppLoader />;
   }
 

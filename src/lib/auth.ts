@@ -15,7 +15,7 @@ function resolveBaseUrl(baseUrl: string): string {
 
   const runtimeBaseUrl = (
     getRuntimeConfig().authUrl ||
-    getRuntimeConfig().functionsBaseUrlRaw ||
+    getRuntimeConfig().publicFunctionsBaseUrlRaw ||
     ''
   ).trim().replace(/\/+$/, '');
   return runtimeBaseUrl;
@@ -24,12 +24,12 @@ function resolveBaseUrl(baseUrl: string): string {
 function buildAuthEndpoint(baseUrl: string, endpoint: string): string {
   const resolvedBaseUrl = resolveBaseUrl(baseUrl);
   if (!resolvedBaseUrl) {
-    if (shouldLogAuth()) {
-      console.error(`[auth] Missing base URL for ${endpoint}`, {
-        baseUrl,
-        runtimeBaseUrl: getRuntimeConfig().authUrl || getRuntimeConfig().functionsBaseUrl,
-      });
-    }
+      if (shouldLogAuth()) {
+        console.error(`[auth] Missing base URL for ${endpoint}`, {
+          baseUrl,
+          runtimeBaseUrl: getRuntimeConfig().authUrl || getRuntimeConfig().publicFunctionsBaseUrlRaw,
+        });
+      }
     throw new Error(`Missing base URL for ${endpoint}`);
   }
 

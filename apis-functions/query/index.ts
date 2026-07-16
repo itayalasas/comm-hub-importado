@@ -17,6 +17,7 @@ const allowedTables = [
   "email_logs",
   "environments",
   "pdf_generation_logs",
+  "tenant_dedicated_api_servers",
   "user_preferences",
   "predefined_variables",
   "pending_communications",
@@ -648,4 +649,3 @@ export default async function handler(req: Request) {
     client.release();
   }
 }
-

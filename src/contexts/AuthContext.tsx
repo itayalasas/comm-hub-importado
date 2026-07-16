@@ -1,7 +1,18 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { configManager, logRuntimeConfig, resolveAuthLaunchConfig } from '../lib/config';
+import {
+  configManager,
+  getLocalAuthLaunchConfig,
+  logRuntimeConfig,
+  resolveAuthLaunchConfig,
+} from '../lib/config';
 import { authClient } from '../lib/auth';
 import { isSystemAdminEmail, isSystemAdminUser } from '../lib/systemAdmin';
+import {
+  clearDedicatedApiResolutionCache,
+  isDedicatedApiEnabled,
+  resolveDedicatedApiBaseUrl,
+  type DedicatedApiResolutionResult,
+} from '../lib/dedicatedApi';
 import {
   consumePendingWebAccessAttemptId,
   recordWebAccessAttempt,
@@ -78,6 +89,19 @@ interface AvailablePlan {
 
 export type { Feature, Subscription, AvailablePlan };
 
+type AuthProgressPhase =
+  | 'bootstrapping'
+  | 'authenticating'
+  | 'refreshing'
+  | 'syncing_subscription'
+  | 'provisioning_dedicated_api'
+  | 'ready';
+
+interface AuthProgress {
+  phase: AuthProgressPhase;
+  message: string;
+}
+
 interface User {
   sub: string;
   name: string;
@@ -96,6 +120,7 @@ interface AuthContextType {
   user: User | null;
   isAuth: boolean;
   isLoading: boolean;
+  authProgress: AuthProgress | null;
   isSystemAdmin: boolean;
   subscription: Subscription | null;
   subscriptionHasAccess: boolean | null;
@@ -108,12 +133,12 @@ interface AuthContextType {
   hasPermission: (menu: string, permission: MenuPermission) => boolean;
   hasMenuAccess: (menu: string) => boolean;
   hasSubmenuAccess: (submenuKey: string) => boolean;
-  refreshSubscription: () => Promise<void>;
+  refreshSubscription: (options?: { skipDedicatedProvisioning?: boolean }) => Promise<void>;
   applyCheckoutStatus: (status: {
     subscription?: any;
     available_plans?: any[];
     has_access?: boolean | null;
-  }) => void;
+  }) => Promise<void>;
 }
 
 type SubscriptionScopeCandidate = {
@@ -282,6 +307,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [subscriptionHasAccess, setSubscriptionHasAccess] = useState<boolean | null>(null);
   const [availablePlans, setAvailablePlans] = useState<AvailablePlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [authProgress, setAuthProgress] = useState<AuthProgress | null>(null);
 
   const getStoredUserEmail = (): string => {
     if (typeof window === 'undefined') return '';
@@ -314,7 +340,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const isSystemAdminSession = (): boolean =>
     isSystemAdminEmail(user?.email) || isSystemAdminEmail(getStoredUserEmail());
 
+  const updateAuthProgress = (phase: AuthProgressPhase, message: string) => {
+    setAuthProgress({ phase, message });
+  };
+
+  const clearAuthProgress = () => {
+    setAuthProgress(null);
+  };
+
   const syncSystemAdminAccess = () => {
+    clearDedicatedApiResolutionCache();
+    clearAuthProgress();
     localStorage.setItem('subscription_has_access', JSON.stringify(true));
     setSubscriptionHasAccess(true);
     localStorage.removeItem('subscription');
@@ -474,6 +510,49 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }));
   };
 
+  const ensureDedicatedApiBase = async (
+    subscriptionCandidate?: Subscription | null,
+    scopeCandidate?: SubscriptionScopeCandidate | null,
+    isSystemAdmin?: boolean,
+  ): Promise<DedicatedApiResolutionResult | null> => {
+    if (isSystemAdmin) {
+      return null;
+    }
+
+    if (!subscriptionCandidate) {
+      return null;
+    }
+
+    if (!isDedicatedApiEnabled(subscriptionCandidate)) {
+      return null;
+    }
+
+    updateAuthProgress('provisioning_dedicated_api', 'Preparando tu servidor dedicado de APIs...');
+    const result = await resolveDedicatedApiBaseUrl({
+      subscription: subscriptionCandidate,
+      user: scopeCandidate ?? getStoredUserCandidate() ?? user,
+    });
+
+    if (result?.status === 'provisioned') {
+      updateAuthProgress(
+        'provisioning_dedicated_api',
+        `Servidor dedicado listo en ${result.publicHostname || result.baseUrl}.`,
+      );
+    } else if (result?.status === 'reused') {
+      updateAuthProgress(
+        'provisioning_dedicated_api',
+        `Conectando con ${result.publicHostname || result.baseUrl}...`,
+      );
+    } else if (result?.status === 'fallback') {
+      updateAuthProgress(
+        'provisioning_dedicated_api',
+        'No pudimos preparar tu servidor dedicado. Seguimos con la API base.',
+      );
+    }
+
+    return result;
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -484,6 +563,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const storedSubscriptionHasAccess = localStorage.getItem('subscription_has_access');
       const storedPlans = localStorage.getItem('available_plans');
       let bootstrapUser: User | null = null;
+
+      if (storedUser || storedToken) {
+        updateAuthProgress('bootstrapping', 'Restaurando tu sesión y tu configuración...');
+      }
 
       if (storedUser) {
         try {
@@ -509,7 +592,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       } else if (storedUser && localStorage.getItem('refresh_token')) {
         try {
           await configManager.loadConfig();
-          const refreshedToken = await authClient.refreshAccessToken(configManager.functionsBaseUrl);
+          const refreshedToken = await authClient.refreshAccessToken(configManager.authFunctionsBaseUrl);
           if (refreshedToken) {
             localStorage.setItem('access_token', refreshedToken);
             authClient.setAccessToken(refreshedToken);
@@ -562,6 +645,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (!cancelled) {
         setIsLoading(false);
+        clearAuthProgress();
       }
     };
 
@@ -573,7 +657,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const login = async () => {
-    const { authUrl, authAppId, authApiKey, redirectUri } = await resolveAuthLaunchConfig();
+    const localAuthConfig = getLocalAuthLaunchConfig();
+    const { authUrl, authAppId, authApiKey, redirectUri } =
+      localAuthConfig || await resolveAuthLaunchConfig();
     const attemptId = startWebAccessAttempt();
 
     void recordWebAccessAttempt({
@@ -608,7 +694,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const register = async (planId?: string) => {
-    const { authUrl, authAppId, authApiKey, redirectUri } = await resolveAuthLaunchConfig();
+    const localAuthConfig = getLocalAuthLaunchConfig();
+    const { authUrl, authAppId, authApiKey, redirectUri } =
+      localAuthConfig || await resolveAuthLaunchConfig();
 
     if (!authUrl || !authAppId || !authApiKey || !redirectUri) {
       throw new Error('No se pudo cargar la configuración de autenticación.');
@@ -628,8 +716,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const performLogout = async (redirectTo: string = '/') => {
     try {
-      await authClient.logout(configManager.functionsBaseUrl);
+      await authClient.logout(configManager.authFunctionsBaseUrl);
     } catch {}
+    clearDedicatedApiResolutionCache();
+    clearAuthProgress();
     localStorage.removeItem('user');
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
@@ -895,8 +985,43 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const handleCallback = async (tokenOrCode: string) => {
     try {
+      updateAuthProgress('authenticating', 'Procesando tu autenticación...');
       await configManager.loadConfig();
       logRuntimeConfig('login');
+
+      const finalizeLogin = (
+        resolvedUser: User,
+        resolvedSubscription: Subscription | null,
+        systemAdmin: boolean,
+        accessToken: string,
+      ) => {
+        localStorage.setItem('access_token', accessToken);
+        authClient.setAccessToken(accessToken);
+
+        localStorage.setItem('user', JSON.stringify(resolvedUser));
+        setUser(resolvedUser);
+
+        void recordWebAccessAttempt({
+          event_type: 'login_success',
+          attempt_id: consumePendingWebAccessAttemptId() || undefined,
+          email: resolvedUser.email,
+          path: typeof window !== 'undefined' ? window.location.pathname : undefined,
+          metadata: {
+            source: 'auth.handleCallback',
+            is_system_admin: systemAdmin,
+          },
+        });
+
+        if (systemAdmin || !resolvedSubscription) {
+          clearAuthProgress();
+          return;
+        }
+
+        updateAuthProgress('provisioning_dedicated_api', 'Preparando tu servidor dedicado de APIs...');
+        void ensureDedicatedApiBase(resolvedSubscription, resolvedUser, systemAdmin).finally(() => {
+          clearAuthProgress();
+        });
+      };
 
       {
         const isJwt = tokenOrCode.startsWith('eyJ');
@@ -935,8 +1060,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           localStorage.setItem('refresh_token', refreshTokenCandidate);
         }
 
+        let normalizedSubscription: Subscription | null = null;
         if (authState.subscriptionSource && !systemAdmin) {
-          persistSubscription(authState.subscriptionSource, userInfo);
+          normalizedSubscription = persistSubscription(authState.subscriptionSource, userInfo);
         }
 
         if (Array.isArray(authState.availablePlansSource)) {
@@ -957,27 +1083,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           throw new Error('No access token available');
         }
 
-        localStorage.setItem('access_token', accessToken);
-        authClient.setAccessToken(accessToken);
-
-        localStorage.setItem('user', JSON.stringify(userInfo));
-        setUser(userInfo);
-
-        void recordWebAccessAttempt({
-          event_type: 'login_success',
-          attempt_id: consumePendingWebAccessAttemptId() || undefined,
-          email: userInfo.email,
-          path: typeof window !== 'undefined' ? window.location.pathname : undefined,
-          metadata: {
-            source: 'auth.handleCallback',
-            is_system_admin: systemAdmin,
-          },
-        });
+        finalizeLogin(userInfo, normalizedSubscription, systemAdmin, accessToken);
         return;
       }
 
       let accessToken = tokenOrCode;
       let authResponse = null;
+      let normalizedSubscription: Subscription | null = null;
 
       if (!tokenOrCode.startsWith('eyJ')) {
         const requestBody = {
@@ -1093,7 +1205,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         } else {
           const subSource = authResponse.data.subscription ?? authResponse.data.user?.subscription;
           if (subSource) {
-            persistSubscription(subSource, userInfo);
+            normalizedSubscription = persistSubscription(subSource, userInfo);
           }
 
           const authHasAccess =
@@ -1152,7 +1264,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             decodedToken.subscription;
 
           if (rawSub) {
-            persistSubscription(rawSub, userInfo);
+            normalizedSubscription = persistSubscription(rawSub, userInfo);
           }
 
           const rawHasAccess =
@@ -1179,12 +1291,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const normalizedUser = normalizeSystemAdminUser(userInfo);
       const systemAdmin = isSystemAdminUser(normalizedUser);
 
-      if (systemAdmin) {
-        syncSystemAdminAccess();
-      }
-
-      localStorage.setItem('user', JSON.stringify(normalizedUser));
-      setUser(normalizedUser);
+      finalizeLogin(normalizedUser, normalizedSubscription, systemAdmin, accessToken);
     } catch (error) {
       void recordWebAccessAttempt({
         event_type: 'login_failed',
@@ -1253,12 +1360,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   // Re-exchange the stored refresh_token to get a fresh subscription state
-  const refreshSubscription = async (): Promise<void> => {
+  const refreshSubscription = async (
+    options?: { skipDedicatedProvisioning?: boolean },
+  ): Promise<void> => {
+    const shouldProvisionDedicatedApi = !options?.skipDedicatedProvisioning;
+
     try {
       if (isSystemAdminSession()) {
         syncSystemAdminAccess();
         return;
       }
+
+      updateAuthProgress('refreshing', 'Sincronizando tu suscripción...');
 
       // Prefer in-memory access token; if absent, try refresh via cookie
       await configManager.loadConfig();
@@ -1266,7 +1379,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       {
         let accessToken = authClient.getAccessToken();
         if (!accessToken) {
-          accessToken = await authClient.refreshAccessToken(configManager.functionsBaseUrl);
+          accessToken = await authClient.refreshAccessToken(configManager.authFunctionsBaseUrl);
         }
         if (!accessToken) return;
 
@@ -1299,9 +1412,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             ? decodedToken.has_access
             : undefined;
         const rawPlans = authState.availablePlansSource ?? decodedToken?.available_plans;
+        const refreshSubscriptionCandidate = user ?? getStoredUserCandidate();
+        let normalizedSubscription: Subscription | null = null;
 
         if (rawSub) {
-          persistSubscription(rawSub, user ?? getStoredUserCandidate());
+          normalizedSubscription = persistSubscription(rawSub, refreshSubscriptionCandidate);
         } else {
           localStorage.removeItem('subscription');
           setSubscription(null);
@@ -1319,6 +1434,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           syncSubscriptionAccess(null);
         }
 
+        if (shouldProvisionDedicatedApi) {
+          await ensureDedicatedApiBase(normalizedSubscription, refreshSubscriptionCandidate, isSystemAdminSession());
+        }
+
         localStorage.setItem('access_token', accessToken);
         authClient.setAccessToken(accessToken);
         return;
@@ -1326,7 +1445,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       let accessToken = authClient.getAccessToken();
       if (!accessToken) {
-        accessToken = await authClient.refreshAccessToken(configManager.functionsBaseUrl);
+        accessToken = await authClient.refreshAccessToken(configManager.authFunctionsBaseUrl);
       }
       if (!accessToken) return;
 
@@ -1352,9 +1471,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           : typeof data.data?.has_access === 'boolean'
           ? data.data.has_access
           : undefined;
+      const refreshSubscriptionCandidate = user ?? getStoredUserCandidate();
+      let normalizedSubscription: Subscription | null = null;
 
       if (rawSub) {
-        persistSubscription(rawSub, user ?? getStoredUserCandidate());
+        normalizedSubscription = persistSubscription(rawSub, refreshSubscriptionCandidate);
       } else {
         localStorage.removeItem('subscription');
         setSubscription(null);
@@ -1366,24 +1487,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         syncSubscriptionAccess(null);
       }
 
+      if (shouldProvisionDedicatedApi) {
+        await ensureDedicatedApiBase(normalizedSubscription, refreshSubscriptionCandidate, isSystemAdminSession());
+      }
+
       localStorage.setItem('access_token', accessToken || '');
     } catch {
       // Silently fail — caller decides what to do next
+    } finally {
+      clearAuthProgress();
     }
   };
-
-  const applyCheckoutStatus = (status: {
+  const applyCheckoutStatus = async (status: {
     subscription?: any;
     available_plans?: any[];
     has_access?: boolean | null;
-  }): void => {
+  }): Promise<void> => {
     if (isSystemAdminSession()) {
       syncSystemAdminAccess();
       return;
     }
 
-    if (status.subscription) {
-      persistSubscription(status.subscription, user ?? getStoredUserCandidate());
+    const checkoutSubscription = status.subscription
+      ? persistSubscription(status.subscription, user ?? getStoredUserCandidate())
+      : null;
+
+    if (!status.subscription) {
+      localStorage.removeItem('subscription');
+      setSubscription(null);
     }
 
     if (Array.isArray(status.available_plans)) {
@@ -1397,6 +1528,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } else {
       syncSubscriptionAccess(null);
     }
+
+    await ensureDedicatedApiBase(checkoutSubscription, user ?? getStoredUserCandidate(), isSystemAdminSession());
   };
 
   return (
@@ -1405,6 +1538,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         user,
         isAuth: !!user,
         isLoading,
+        authProgress,
         isSystemAdmin: isSystemAdminSession(),
         subscription,
         subscriptionHasAccess,

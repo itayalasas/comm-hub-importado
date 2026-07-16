@@ -13,6 +13,7 @@ export const UserMenu = () => {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showInvitationsModal, setShowInvitationsModal] = useState(false);
+  const userEmail = user?.email?.trim() || '';
 
   const isAdmin = isSystemAdmin || user?.role === 'administrador' || user?.role === 'admin';
   const canOpenAdminDashboard = isSystemAdmin;
@@ -112,9 +113,13 @@ export const UserMenu = () => {
                 </span>
               </div>
             )}
-            <div className="text-left hidden sm:block">
-              <div className="text-sm font-medium text-white">{user?.name || 'Usuario'}</div>
-              <div className="text-xs text-slate-400">{user?.email}</div>
+            <div className="hidden min-w-0 text-left sm:flex sm:max-w-[12rem] sm:flex-col">
+              <div className="truncate text-sm font-medium text-white" title={user?.name || 'Usuario'}>
+                {user?.name || 'Usuario'}
+              </div>
+              <div className="truncate text-xs text-slate-400" title={userEmail || undefined}>
+                {userEmail || 'Sin correo'}
+              </div>
             </div>
           </div>
           <ChevronDown
@@ -125,8 +130,12 @@ export const UserMenu = () => {
         {isOpen && (
           <div className="absolute right-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl shadow-black/50 z-[100]">
             <div className="p-3 border-b border-slate-700">
-              <div className="text-sm font-medium text-white">{user?.name}</div>
-              <div className="text-xs text-slate-400">{user?.email}</div>
+              <div className="truncate text-sm font-medium text-white" title={user?.name || ''}>
+                {user?.name || 'Usuario'}
+              </div>
+              <div className="truncate text-xs text-slate-400" title={userEmail || undefined}>
+                {userEmail || 'Sin correo'}
+              </div>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {user?.role && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
