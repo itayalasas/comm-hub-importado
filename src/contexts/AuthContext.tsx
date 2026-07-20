@@ -138,7 +138,7 @@ interface AuthContextType {
     subscription?: any;
     available_plans?: any[];
     has_access?: boolean | null;
-  }) => Promise<void>;
+  }, options?: { skipDedicatedProvisioning?: boolean }) => Promise<void>;
 }
 
 type SubscriptionScopeCandidate = {
@@ -1502,7 +1502,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     subscription?: any;
     available_plans?: any[];
     has_access?: boolean | null;
-  }): Promise<void> => {
+  }, options?: { skipDedicatedProvisioning?: boolean }): Promise<void> => {
     if (isSystemAdminSession()) {
       syncSystemAdminAccess();
       return;
@@ -1529,7 +1529,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       syncSubscriptionAccess(null);
     }
 
-    await ensureDedicatedApiBase(checkoutSubscription, user ?? getStoredUserCandidate(), isSystemAdminSession());
+    if (!options?.skipDedicatedProvisioning) {
+      await ensureDedicatedApiBase(checkoutSubscription, user ?? getStoredUserCandidate(), isSystemAdminSession());
+    }
   };
 
   return (

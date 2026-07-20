@@ -54,17 +54,19 @@ export const SubscriptionResult = () => {
 
         clearPendingSubscriptionCheckout();
         invalidatePlansCache();
-        await refreshSubscription({ skipDedicatedProvisioning: true }).catch(() => null);
-        await applyCheckoutStatus(result);
-
-        if (cancelled) return;
 
         const sub = result.subscription;
         const status = String(result.status ?? sub?.status ?? '').toLowerCase();
         const planFromStatus = sub?.plan_name || sub?.name || stored?.plan_id || '';
         setPlanName(planFromStatus);
 
-        if (result.has_access || status === 'active' || status === 'authorized') {
+        const hasConfirmedAccess =
+          result.has_access === true ||
+          status === 'active' ||
+          status === 'authorized' ||
+          status === 'trialing';
+
+        if (hasConfirmedAccess) {
           setState('success');
           setMessage('Tu suscripción está activa. Ya puedes acceder a todas las funcionalidades.');
         } else if (status === 'pending' || status === 'in_process') {
@@ -74,6 +76,11 @@ export const SubscriptionResult = () => {
           setState('error');
           setMessage('No se pudo confirmar la suscripción.');
         }
+
+        void (async () => {
+          await refreshSubscription({ skipDedicatedProvisioning: true }).catch(() => null);
+          await applyCheckoutStatus(result, { skipDedicatedProvisioning: true }).catch(() => null);
+        })();
       } catch (error) {
         if (cancelled) return;
         clearPendingSubscriptionCheckout();
