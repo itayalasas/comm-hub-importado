@@ -1,36 +1,36 @@
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastContainer } from './components/ToastContainer';
-import { Landing } from './pages/Landing';
 import { Home } from './pages/Home';
-import { Callback } from './pages/Callback';
-import { AuthProcessing } from './pages/AuthProcessing';
-import { SubscriptionResult } from './pages/SubscriptionResult';
-import { Dashboard } from './pages/Dashboard';
-import { Templates } from './pages/Templates';
-import { Statistics } from './pages/Statistics';
-import { Settings } from './pages/Settings';
-import { Terms } from './pages/Terms';
-import { Privacy } from './pages/Privacy';
-import Documentation from './pages/Documentation';
-import ApiExplorer from './pages/ApiExplorer';
-import { Marketplace } from './pages/Marketplace';
-import { MarketplaceEmbed } from './pages/MarketplaceEmbed';
-import { AutomatizacionesProgramados } from './pages/AutomatizacionesProgramados';
-import { AutomatizacionesBatch } from './pages/AutomatizacionesBatch';
-import { AutomatizacionesMonitoreo } from './pages/AutomatizacionesMonitoreo';
-import { WhatsApp } from './pages/WhatsApp';
-import { WhatsAppTemplates } from './pages/WhatsAppTemplates';
-import { EmailMarketing } from './pages/EmailMarketing';
-import { EmailTransaccional } from './pages/EmailTransaccional';
-import { ApiEmail } from './pages/ApiEmail';
-import { Smtp } from './pages/Smtp';
-import { AlternativaMailchimp } from './pages/AlternativaMailchimp';
-import { AlternativaSendgrid } from './pages/AlternativaSendgrid';
-import { Precios } from './pages/Precios';
-import { AdminDashboard } from './pages/AdminDashboard';
 import { getDefaultAuthenticatedPath } from './lib/authNavigation';
 
+const Landing = lazy(() => import('./pages/Landing'));
+const Callback = lazy(() => import('./pages/Callback').then((module) => ({ default: module.Callback })));
+const AuthProcessing = lazy(() =>
+  import('./pages/AuthProcessing').then((module) => ({ default: module.AuthProcessing }))
+);
+const SubscriptionResult = lazy(() => import('./pages/SubscriptionResult'));
+const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
+const Templates = lazy(() => import('./pages/Templates').then((module) => ({ default: module.Templates })));
+const Statistics = lazy(() => import('./pages/Statistics').then((module) => ({ default: module.Statistics })));
+const Settings = lazy(() => import('./pages/Settings').then((module) => ({ default: module.Settings })));
+const Terms = lazy(() => import('./pages/Terms').then((module) => ({ default: module.Terms })));
+const Privacy = lazy(() => import('./pages/Privacy').then((module) => ({ default: module.Privacy })));
+const Documentation = lazy(() => import('./pages/Documentation'));
+const ApiExplorer = lazy(() => import('./pages/ApiExplorer'));
+const Marketplace = lazy(() => import('./pages/Marketplace'));
+const MarketplaceEmbed = lazy(() => import('./pages/MarketplaceEmbed'));
+const AutomatizacionesProgramados = lazy(() => import('./pages/AutomatizacionesProgramados'));
+const AutomatizacionesBatch = lazy(() => import('./pages/AutomatizacionesBatch'));
+const AutomatizacionesMonitoreo = lazy(() => import('./pages/AutomatizacionesMonitoreo'));
+const WhatsApp = lazy(() => import('./pages/WhatsApp').then((module) => ({ default: module.WhatsApp })));
+const WhatsAppTemplates = lazy(() =>
+  import('./pages/WhatsAppTemplates').then((module) => ({ default: module.WhatsAppTemplates }))
+);
+const AdminDashboard = lazy(() =>
+  import('./pages/AdminDashboard').then((module) => ({ default: module.AdminDashboard }))
+);
 
 const AppLoader = () => {
   const { authProgress } = useAuth();
@@ -79,7 +79,7 @@ const ProtectedRoute = ({
   requiredMenu,
   requireSystemAdmin = false,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   requiredMenu?: string;
   requireSystemAdmin?: boolean;
 }) => {
@@ -156,7 +156,7 @@ const ProtectedRoute = ({
   return <>{children}</>;
 };
 
-const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+const PublicRoute = ({ children }: { children: ReactNode }) => {
   const { isAuth, isLoading, authProgress, hasMenuAccess, isSystemAdmin } = useAuth();
   const isDedicatedProvisioning = authProgress?.phase === 'provisioning_dedicated_api';
 
@@ -207,13 +207,6 @@ const AppRoutes = () => {
       />
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
-      <Route path="/precios" element={<Precios />} />
-      <Route path="/email-marketing" element={<EmailMarketing />} />
-      <Route path="/email-transaccional" element={<EmailTransaccional />} />
-      <Route path="/api-email" element={<ApiEmail />} />
-      <Route path="/smtp" element={<Smtp />} />
-      <Route path="/alternativa-mailchimp" element={<AlternativaMailchimp />} />
-      <Route path="/alternativa-sendgrid" element={<AlternativaSendgrid />} />
       <Route path="/app" element={<DashboardRedirect />} />
       <Route
         path="/automatizaciones"
@@ -369,7 +362,9 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <ToastContainer>
-          <AppRoutes />
+          <Suspense fallback={<AppLoader />}>
+            <AppRoutes />
+          </Suspense>
         </ToastContainer>
       </AuthProvider>
     </BrowserRouter>

@@ -2222,7 +2222,7 @@ Content-Type: application/json`}
         }
         path="/docs"
         canonicalUrl="https://sendcraft.net/docs"
-        noIndex={!publicView}
+        noIndex
         keywords={publicView ? ['documentación api', 'api sendcraft', 'conectores email'] : undefined}
       />
       <aside className="w-64 bg-slate-800/30 border-r border-slate-700 overflow-y-auto">

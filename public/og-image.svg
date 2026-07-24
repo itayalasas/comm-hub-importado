@@ -44,6 +44,6 @@
 
   <g transform="translate(350 430)">
     <rect width="300" height="54" rx="27" fill="rgba(16,185,129,0.14)" stroke="rgba(16,185,129,0.28)"/>
-    <text x="28" y="35" fill="#D1FAE5" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="600">SEO-ready y lista para crecer</text>
+    <text x="28" y="35" fill="#D1FAE5" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="600">API, SMTP y PDF integrados</text>
   </g>
 </svg>
