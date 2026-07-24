@@ -18,6 +18,8 @@ const allowedTables = [
   "environments",
   "pdf_generation_logs",
   "tenant_dedicated_api_servers",
+  "tenant_webchat_widget_configs",
+  "tenant_webchat_conversations",
   "user_preferences",
   "predefined_variables",
   "pending_communications",

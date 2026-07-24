@@ -43,6 +43,7 @@ import { sortPlansByOrder, usePlans, type Plan } from '../hooks/usePlans';
 import { resolveAuthLaunchConfig } from '../lib/config';
 import { buildLegacyRegisterUrl } from '../lib/subscriptionCheckout';
 import { Seo } from '../components/Seo';
+import { WebChatFloatingButton, WebChatSnippetCard, WebChatWidgetPanel } from '../components/WebChatWidget';
 
 /* ─── Data ─────────────────────────────────────────────────────── */
 const FEATURES = [
@@ -727,8 +728,8 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   );
 }
 
-const SUPPORT_API_URL = 'https://api.flowbridge.site/functions/v1/api-gateway/dcd7ec42-e7fb-46fa-93d3-ccdf3e053795';
-const SUPPORT_API_KEY = 'pub_5bc238047db11edae7d4ecb2805f0057a2505c706e625c9a243b6e95bf33cd67';
+const SUPPORT_API_URL = 'https://satzkpynnuloncwgxeev.supabase.co/functions/v1/webchat-contact-form';
+const SUPPORT_API_KEY = 'wc_7e4ac6fb-9202-4fdf-86bb-a3ec8c4c270b';
 
 /* ─── Support Modal ─────────────────────────────────────────────── */
 type SupportForm = { name: string; email: string; phone: string; subject: string; message: string };
@@ -886,6 +887,8 @@ function SupportModal({ onClose }: { onClose: () => void }) {
 }
 
 /* ─── Page ──────────────────────────────────────────────────────── */
+void SupportModal;
+
 export const Home = () => {
   const navigate = useNavigate();
   const { plans, loading: plansLoading } = usePlans();
@@ -1591,6 +1594,22 @@ export const Home = () => {
         </div>
       </section>
 
+      <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Snippet del Widget</div>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Integra el chat en tu sitio con un solo snippet
+            </h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              La vista previa muestra el widget compacto y el snippet completo se copia con un clic, sin exponer URLs sensibles en pantalla.
+            </p>
+          </div>
+
+          <WebChatSnippetCard onOpenWidget={() => setSupportOpen(true)} />
+        </div>
+      </section>
+
       <section id="pricing" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-14">
@@ -1721,7 +1740,8 @@ export const Home = () => {
         </div>
       </footer>
 
-      {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
+      <WebChatFloatingButton onClick={() => setSupportOpen(true)} />
+      <WebChatWidgetPanel open={supportOpen} onClose={() => setSupportOpen(false)} />
     </div>
   );
 };
