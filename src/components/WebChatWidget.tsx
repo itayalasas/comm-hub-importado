@@ -1999,6 +1999,35 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
     return () => window.clearTimeout(timeout);
   }, [widgetNotice]);
 
+  const handleAttachmentInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.currentTarget.files || []);
+    event.currentTarget.value = '';
+
+    if (files.length === 0) {
+      return;
+    }
+
+    try {
+      const nextAttachments = await Promise.all(files.map((file) => readFileAsChatAttachment(file)));
+      setPendingAttachments((current) => [...current, ...nextAttachments]);
+    } catch (error) {
+      logWebchatError('attachment read failed', error);
+      setWidgetNotice({
+        kind: 'warning',
+        title: 'No pudimos leer un archivo',
+        message: 'Revisá el archivo seleccionado e intentá de nuevo.',
+      });
+    }
+  };
+
+  const handleRemoveAttachment = (attachmentId: string) => {
+    setPendingAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+  };
+
+  const handleOpenAttachmentPicker = () => {
+    attachmentInputRef.current?.click();
+  };
+
   useEffect(() => {
     if (!open) {
       return;
