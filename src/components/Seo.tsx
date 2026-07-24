@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 const BRAND_NAME = 'SendCraft';
-const DEFAULT_IMAGE = '/og-image.svg';
+const DEFAULT_IMAGE = '/og-image.png';
 
 export interface SeoProps {
   title: string;
@@ -87,7 +87,7 @@ export function Seo({
     const fullTitle = title.includes(BRAND_NAME) ? title : `${title} | ${BRAND_NAME}`;
     const resolvedPath = path || window.location.pathname;
     const resolvedCanonical = resolveAbsoluteUrl(canonicalUrl, resolvedPath);
-    const resolvedImage = resolveAbsoluteUrl(image, '/og-image.svg');
+    const resolvedImage = resolveAbsoluteUrl(image, DEFAULT_IMAGE);
 
     document.title = fullTitle;
 
@@ -104,17 +104,22 @@ export function Seo({
     setLinkRel('canonical', resolvedCanonical);
 
     setMetaProperty('og:site_name', BRAND_NAME);
+    setMetaProperty('og:locale', 'es_UY');
     setMetaProperty('og:type', type);
     setMetaProperty('og:title', fullTitle);
     setMetaProperty('og:description', description);
     setMetaProperty('og:url', resolvedCanonical);
     setMetaProperty('og:image', resolvedImage);
-    setMetaProperty('og:image:alt', `${BRAND_NAME} preview image`);
+    setMetaProperty('og:image:type', 'image/png');
+    setMetaProperty('og:image:width', '1200');
+    setMetaProperty('og:image:height', '630');
+    setMetaProperty('og:image:alt', `${BRAND_NAME}: plataforma de comunicaciones para empresas`);
 
     setMetaName('twitter:card', 'summary_large_image');
     setMetaName('twitter:title', fullTitle);
     setMetaName('twitter:description', description);
     setMetaName('twitter:image', resolvedImage);
+    setMetaName('twitter:image:alt', `${BRAND_NAME}: plataforma de comunicaciones para empresas`);
 
     const existingScript = document.getElementById('seo-structured-data');
     if (existingScript) {

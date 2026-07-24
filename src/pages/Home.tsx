@@ -38,7 +38,7 @@ import {
   Package,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { sortPlansByOrder, usePlans, type Plan } from '../hooks/usePlans';
 import { resolveAuthLaunchConfig } from '../lib/config';
 import { buildLegacyRegisterUrl } from '../lib/subscriptionCheckout';
@@ -907,10 +907,11 @@ export const Home = () => {
   return (
     <div className="min-h-screen bg-[#050d1a] text-white overflow-x-hidden">
       <Seo
-        title="La plataforma de comunicaciones para aplicaciones modernas"
-        description="SendCraft centraliza email transaccional, campañas de marketing, SMTP, API REST y generación de PDF en una sola plataforma para desarrolladores, startups y empresas SaaS."
+        title="SendCraft | Email, PDF y automatizaciones para empresas"
+        description="Centraliza correos transaccionales, campañas, SMTP, API REST, automatizaciones y generación de PDF en una plataforma segura y fácil de integrar."
         path="/"
         canonicalUrl="https://sendcraft.net/"
+        image="/og-image.png"
         keywords={[
           'email marketing',
           'correos transaccionales',
@@ -918,16 +919,30 @@ export const Home = () => {
           'smtp',
           'plataforma de email marketing',
         ]}
-        structuredData={{
-          '@context': 'https://schema.org',
-          '@type': 'SoftwareApplication',
-          name: 'SendCraft',
-          applicationCategory: 'BusinessApplication',
-          operatingSystem: 'Web',
-          description:
-            'Plataforma de email marketing y correos transaccionales con API, SMTP, automatizaciones y PDFs.',
-          url: 'https://sendcraft.net/',
-        }}
+        structuredData={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            '@id': 'https://sendcraft.net/#organization',
+            name: 'SendCraft',
+            url: 'https://sendcraft.net/',
+            logo: 'https://sendcraft.net/logo.svg',
+          },
+          {
+            '@context': 'https://schema.org',
+            '@type': 'WebApplication',
+            '@id': 'https://sendcraft.net/#application',
+            name: 'SendCraft',
+            applicationCategory: 'BusinessApplication',
+            operatingSystem: 'Web',
+            description:
+              'Plataforma de email marketing, correos transaccionales, API, SMTP, automatizaciones y generación de PDF.',
+            url: 'https://sendcraft.net/',
+            provider: {
+              '@id': 'https://sendcraft.net/#organization',
+            },
+          },
+        ]}
       />
 
       {/* Global CSS animations */}
@@ -1531,69 +1546,6 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* ── PRICING ──────────────────────────��────────────────────── */}
-      <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-14">
-            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Más contenido</div>
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Todo lo que necesitas para elegir el flujo correcto
-            </h2>
-            <p className="text-slate-400 max-w-2xl mx-auto">
-              Cada sección profundiza en un caso distinto: email marketing, transaccional, API, SMTP, comparativas y precios.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {[
-              {
-                to: '/email-marketing',
-                title: 'Email marketing',
-                desc: 'Campañas, automatizaciones y segmentación para equipos que quieren crecer.',
-              },
-              {
-                to: '/email-transaccional',
-                title: 'Email transaccional',
-                desc: 'Confirmaciones, alertas, facturas y PDF con trazabilidad.',
-              },
-              {
-                to: '/api-email',
-                title: 'API para email',
-                desc: 'Integra tu backend con una API simple y clara.',
-              },
-              {
-                to: '/smtp',
-                title: 'SMTP',
-                desc: 'Compatibilidad inmediata para sistemas y librerías existentes.',
-              },
-              {
-                to: '/alternativa-mailchimp',
-                title: 'Alternativa a Mailchimp',
-                desc: 'Comparativa para evaluar una migración con más claridad.',
-              },
-              {
-                to: '/alternativa-sendgrid',
-                title: 'Alternativa a SendGrid',
-                desc: 'Una comparativa para entender cuándo conviene cambiar de enfoque.',
-              },
-            ].map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className="group card-hover bg-white/[0.03] border border-white/8 rounded-2xl p-6 hover:border-cyan-500/20 hover:bg-white/[0.05] transition-all"
-              >
-                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold text-cyan-300 mb-4">
-                  <ChevronRight className="w-3.5 h-3.5" />
-                  Explorar
-                </div>
-                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-cyan-300 transition-colors">{item.title}</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">{item.desc}</p>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-14">
@@ -1708,10 +1660,10 @@ export const Home = () => {
               <div>
                 <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">Producto</div>
                 <ul className="space-y-2.5 text-sm">
-                  <li><Link to="/email-transaccional" className="text-slate-400 hover:text-cyan-300 transition-colors">Email transaccional</Link></li>
-                  <li><Link to="/email-marketing" className="text-slate-400 hover:text-cyan-300 transition-colors">Marketing Email</Link></li>
-                  <li><Link to="/smtp" className="text-slate-400 hover:text-cyan-300 transition-colors">SMTP</Link></li>
-                  <li><Link to="/api-email" className="text-slate-400 hover:text-cyan-300 transition-colors">PDF API</Link></li>
+                  <li><a href="#features" className="text-slate-400 hover:text-cyan-300 transition-colors">Email transaccional</a></li>
+                  <li><a href="#features" className="text-slate-400 hover:text-cyan-300 transition-colors">Email marketing</a></li>
+                  <li><a href="#developers" className="text-slate-400 hover:text-cyan-300 transition-colors">SMTP y API REST</a></li>
+                  <li><a href="#platform" className="text-slate-400 hover:text-cyan-300 transition-colors">Generación de PDF</a></li>
                 </ul>
               </div>
               <div>

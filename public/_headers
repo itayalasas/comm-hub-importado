@@ -1,0 +1,68 @@
+/login
+  X-Robots-Tag: noindex, nofollow
+
+/terms
+  X-Robots-Tag: noindex, nofollow
+
+/privacy
+  X-Robots-Tag: noindex, nofollow
+
+/docs
+  X-Robots-Tag: noindex, nofollow
+
+/app
+  X-Robots-Tag: noindex, nofollow
+
+/auth-processing
+  X-Robots-Tag: noindex, nofollow
+
+/callback
+  X-Robots-Tag: noindex, nofollow
+
+/callback.html
+  X-Robots-Tag: noindex, nofollow
+
+/subscription/*
+  X-Robots-Tag: noindex, nofollow
+
+/embed/*
+  X-Robots-Tag: noindex, nofollow
+
+/dashboard
+  X-Robots-Tag: noindex, nofollow
+
+/admin-dashboard
+  X-Robots-Tag: noindex, nofollow
+
+/templates/*
+  X-Robots-Tag: noindex, nofollow
+
+/templates
+  X-Robots-Tag: noindex, nofollow
+
+/statistics
+  X-Robots-Tag: noindex, nofollow
+
+/automatizaciones/*
+  X-Robots-Tag: noindex, nofollow
+
+/automatizaciones
+  X-Robots-Tag: noindex, nofollow
+
+/documentation
+  X-Robots-Tag: noindex, nofollow
+
+/settings/*
+  X-Robots-Tag: noindex, nofollow
+
+/settings
+  X-Robots-Tag: noindex, nofollow
+
+/api-explorer
+  X-Robots-Tag: noindex, nofollow
+
+/marketplace
+  X-Robots-Tag: noindex, nofollow
+
+/whatsapp
+  X-Robots-Tag: noindex, nofollow

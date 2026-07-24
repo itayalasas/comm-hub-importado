@@ -1,5 +1,32 @@
-# Handle callback route - static HTML first to process any params
-/callback  /callback.html  200
+/email-marketing          /  301!
+/email-transaccional      /  301!
+/api-email                /  301!
+/smtp                     /  301!
+/alternativa-mailchimp    /  301!
+/alternativa-sendgrid     /  301!
+/precios                  /  301!
 
-# SPA fallback - all other routes go to index.html
-/*    /index.html   200
+/callback                 /callback.html  200
+/login                    /index.html     200
+/terms                    /index.html     200
+/privacy                  /index.html     200
+/docs                     /index.html     200
+/app                      /index.html     200
+/auth-processing          /index.html     200
+/subscription/*           /index.html     200
+/embed/*                  /index.html     200
+/dashboard                /index.html     200
+/admin-dashboard          /index.html     200
+/templates/*              /index.html     200
+/templates                /index.html     200
+/statistics               /index.html     200
+/automatizaciones/*       /index.html     200
+/automatizaciones         /index.html     200
+/documentation            /index.html     200
+/settings/*               /index.html     200
+/settings                 /index.html     200
+/api-explorer             /index.html     200
+/marketplace              /index.html     200
+/whatsapp                 /index.html     200
+
+/*                        /404.html       404
