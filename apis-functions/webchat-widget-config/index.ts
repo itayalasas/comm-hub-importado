@@ -29,8 +29,10 @@ function getPool(): Pool {
 
   return pool;
 }
+const DEFAULT_WIDGET_ENDPOINT = "https://satzkpynnuloncwgxeev.supabase.co/functions/v1/webchat-widget";
 const DEFAULT_WIDGET_CRM_URL = "https://api.sendcraft.net/webchat-widget";
 const LEGACY_WIDGET_CRM_URL = "https://satzkpynnuloncwgxeev.supabase.co/functions/v1/webchat-widget";
+const LEGACY_WIDGET_ENDPOINT = "https://api.flowbridge.site/functions/v1/api-gateway/84509071-8288-4698-b0dd-37bb6a5627a8";
 
 type WidgetConfigRecord = {
   id?: string | null;
@@ -220,6 +222,19 @@ function normalizeWidgetCrmUrl(value: string): string {
   return normalized;
 }
 
+function normalizeWidgetEndpointUrl(value: string): string {
+  const normalized = normalizeUrl(value);
+  if (!normalized) return DEFAULT_WIDGET_ENDPOINT;
+  if (
+    normalized === DEFAULT_WIDGET_CRM_URL ||
+    normalized === LEGACY_WIDGET_CRM_URL ||
+    normalized === LEGACY_WIDGET_ENDPOINT
+  ) {
+    return DEFAULT_WIDGET_ENDPOINT;
+  }
+  return normalized;
+}
+
 function slugifySubdomain(value: string): string {
   const normalized = String(value || "")
     .trim()
@@ -262,12 +277,12 @@ function parseQuickReplies(value: unknown, fallback: string[]): string[] {
 }
 
 function getDefaultWidgetConfigDefaults(): WidgetConfigDefaults {
-  const endpoint = normalizeUrl(
+  const endpoint = normalizeWidgetEndpointUrl(
     Deno.env.get("WEBCHAT_WIDGET_ENDPOINT") ||
       Deno.env.get("VITE_WEBCHAT_WIDGET_ENDPOINT") ||
-      DEFAULT_WIDGET_CRM_URL,
+      DEFAULT_WIDGET_ENDPOINT,
   );
-  const getEndpoint = normalizeUrl(
+  const getEndpoint = normalizeWidgetEndpointUrl(
     Deno.env.get("WEBCHAT_WIDGET_GET_ENDPOINT") ||
       Deno.env.get("VITE_WEBCHAT_WIDGET_GET_ENDPOINT") ||
       endpoint,
@@ -377,14 +392,14 @@ function buildWidgetConfigFromRow(row: WidgetConfigRecord | null): NormalizedWid
   const rawWidgetConfig = firstObject(row?.widget_config);
   const rawVariables = firstObject(rawWidgetConfig?.variables);
 
-  const endpoint = normalizeWidgetCrmUrl(
+  const endpoint = normalizeWidgetEndpointUrl(
     firstString(
       rawWidgetConfig?.endpoint as string | number | null | undefined,
       rawWidgetConfig?.VITE_WIDGET_URL as string | number | null | undefined,
       defaults.endpoint,
     ),
   );
-  const getEndpoint = normalizeWidgetCrmUrl(
+  const getEndpoint = normalizeWidgetEndpointUrl(
     firstString(
       rawWidgetConfig?.getEndpoint as string | number | null | undefined,
       defaults.getEndpoint,
@@ -548,14 +563,14 @@ function normalizeWidgetConfigInput(
   ) || {};
   const rawVariables = firstObject(rawWidgetConfig.variables, body.variables);
 
-  const endpoint = normalizeWidgetCrmUrl(
+  const endpoint = normalizeWidgetEndpointUrl(
     firstString(
       rawWidgetConfig.endpoint as string | number | null | undefined,
       rawWidgetConfig.VITE_WIDGET_URL as string | number | null | undefined,
       defaults.endpoint,
     ),
   );
-  const getEndpoint = normalizeWidgetCrmUrl(
+  const getEndpoint = normalizeWidgetEndpointUrl(
     firstString(
       rawWidgetConfig.getEndpoint as string | number | null | undefined,
       rawWidgetConfig.get_endpoint as string | number | null | undefined,

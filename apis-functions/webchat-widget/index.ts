@@ -191,11 +191,19 @@ async function proxyWidgetConversationToUpstream(
     const response = await fetch(upstreamUrl.toString(), init);
     const payload = await response.text();
 
-    logWidgetEvent("proxy success", {
-      method,
-      endpoint: upstreamUrl.toString(),
-      status: response.status,
-    });
+    if (response.ok) {
+      logWidgetEvent("proxy success", {
+        method,
+        endpoint: upstreamUrl.toString(),
+        status: response.status,
+      });
+    } else {
+      logWidgetError("proxy non-2xx", new Error(`HTTP ${response.status}`), {
+        method,
+        endpoint: upstreamUrl.toString(),
+        status: response.status,
+      });
+    }
 
     return {
       response: new Response(payload, {
@@ -739,6 +747,24 @@ function rowToConversationResponse(row: ConversationRow): Record<string, unknown
   };
 }
 
+function shouldPreferUpstreamConversation(row: ConversationRow | null): boolean {
+  if (!row) return false;
+
+  const status = firstString(row.status).toLowerCase();
+  return Boolean(
+    row.handoff_requested ||
+      row.assigned_user_id ||
+      row.assigned_user_name ||
+      row.assigned_at ||
+      row.closed_at ||
+      status === "waiting_agent" ||
+      status === "taken" ||
+      status === "assigned" ||
+      status === "closed" ||
+      status === "resolved",
+  );
+}
+
 function normalizeStoredMessages(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item, index) => {
@@ -945,11 +971,12 @@ async function upsertConversation(
       : "",
   );
   const lastError = firstString(body.last_error, body.lastError);
+  const incomingAttachments = Array.isArray(body.attachments) ? body.attachments : [];
 
   let messages = existing ? normalizeStoredMessages(existing.messages) : [];
   let queuedMessages = existing ? normalizeStoredMessages(existing.queued_messages) : [];
 
-  if (action === "request_agent_handoff" && Array.isArray(body.messages) && body.messages.length > 0) {
+  if (Array.isArray(body.messages) && body.messages.length > 0) {
     messages = normalizeConversationMessages(body.messages, conversationId);
   } else if (incomingMessage) {
     messages = [
@@ -960,7 +987,7 @@ async function upsertConversation(
         senderId,
         senderName,
         message: incomingMessage,
-        attachments: Array.isArray(body.attachments) ? body.attachments : [],
+        attachments: incomingAttachments,
         createdAt: now,
       }),
     ];
@@ -995,6 +1022,7 @@ async function upsertConversation(
             ? "El usuario solicito contacto con un agente"
             : "Solicitud de agente pendiente",
         ),
+        attachments: incomingAttachments,
         createdAt: now,
       }),
     ];
@@ -1187,10 +1215,6 @@ Deno.serve(async (req: Request) => {
   }
 
   const method = req.method.toUpperCase();
-  if (method === "GET") {
-    const upstreamResult = await proxyWidgetConversationToUpstream(req, {});
-    return upstreamResult.response;
-  }
 
   let client;
 
@@ -1242,35 +1266,56 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const row = await findConversation(client, identity, sessionId, conversationId);
-      if (!row) {
-        logWidgetEvent("GET lookup miss", {
+      const localRow = await findConversation(client, identity, sessionId, conversationId);
+      if (localRow) {
+        if (!shouldPreferUpstreamConversation(localRow)) {
+          logWidgetEvent("GET lookup hit local", {
+            sessionId,
+            conversationId: firstString(localRow.conversation_id),
+            status: firstString(localRow.status),
+            assignedUserName: firstString(localRow.assigned_user_name),
+            handoffRequested: Boolean(localRow.handoff_requested),
+          });
+          return jsonResponse(rowToConversationResponse(localRow));
+        }
+
+        const upstreamResult = await proxyWidgetConversationToUpstream(req, {});
+        if (upstreamResult.response.ok && upstreamResult.payload) {
+          logWidgetEvent("GET lookup hit upstream", {
+            sessionId,
+            conversationId,
+            tenantKey: identity.tenantKey,
+            scopeKey: identity.scopeKey,
+          });
+          return jsonResponse(upstreamResult.payload);
+        }
+
+        logWidgetEvent("GET lookup fallback local", {
           sessionId,
-          conversationId,
-          tenantKey: identity.tenantKey,
-          scopeKey: identity.scopeKey,
+          conversationId: firstString(localRow.conversation_id),
+          status: firstString(localRow.status),
+          assignedUserName: firstString(localRow.assigned_user_name),
+          handoffRequested: Boolean(localRow.handoff_requested),
         });
-        return jsonResponse(
-          {
-            success: true,
-            found: false,
-            conversation: null,
-            messages: [],
-            queued_messages: [],
-          },
-          200,
-        );
+        return jsonResponse(rowToConversationResponse(localRow));
       }
 
-      logWidgetEvent("GET lookup hit", {
+      logWidgetEvent("GET lookup miss", {
         sessionId,
-        conversationId: firstString(row.conversation_id),
-        status: firstString(row.status),
-        assignedUserName: firstString(row.assigned_user_name),
-        handoffRequested: Boolean(row.handoff_requested),
+        conversationId,
+        tenantKey: identity.tenantKey,
+        scopeKey: identity.scopeKey,
       });
-
-      return jsonResponse(rowToConversationResponse(row));
+      return jsonResponse(
+        {
+          success: true,
+          found: false,
+          conversation: null,
+          messages: [],
+          queued_messages: [],
+        },
+        200,
+      );
     }
 
     if (method !== "POST") {
@@ -1330,6 +1375,21 @@ Deno.serve(async (req: Request) => {
     const existing = await findConversation(client, identity, sessionId, conversationId);
     const savedRow = await upsertConversation(client, identity, body, sessionId, existing);
     const responsePayload = rowToConversationResponse(savedRow);
+    const shouldSyncUpstream = action === "request_agent_handoff" || shouldPreferUpstreamConversation(existing);
+    const upstreamResult = shouldSyncUpstream
+      ? await proxyWidgetConversationToUpstream(req, body)
+      : null;
+    const upstreamPayload = upstreamResult?.response.ok && upstreamResult.payload
+      ? upstreamResult.payload
+      : null;
+
+    if (upstreamResult && !upstreamResult.response.ok) {
+      logWidgetError("upstream sync failed", new Error(`POST ${upstreamResult.response.status}`), {
+        sessionId,
+        conversationId,
+        action,
+      });
+    }
 
     if (action === "request_agent_handoff") {
       const conversation = responsePayload.conversation as Record<string, unknown> | undefined;
@@ -1341,19 +1401,15 @@ Deno.serve(async (req: Request) => {
         ? `Ya te estoy conectando con ${assignedAgentName}. En breve revisará tu conversación.`
         : "Ya recibimos tu solicitud. Te estamos conectando con un agente para seguir ayudándote.";
 
-      const upstreamResult = await proxyWidgetConversationToUpstream(req, body);
-      if (!upstreamResult.response.ok) {
-        return upstreamResult.response;
-      }
-
       return jsonResponse({
         ...responsePayload,
-        ...(upstreamResult.payload || {}),
+        ...(upstreamPayload || {}),
         success: true,
         reply,
         handoff: true,
         conversation_id: firstString(
-          upstreamResult.payload?.conversation_id as string | number | boolean | null | undefined,
+          upstreamPayload?.conversation_id as string | number | boolean | null | undefined,
+          upstreamPayload?.conversationId as string | number | boolean | null | undefined,
           responsePayload.conversation_id as string | number | boolean | null | undefined,
         ),
       });

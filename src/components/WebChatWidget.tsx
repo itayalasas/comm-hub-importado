@@ -1,5 +1,5 @@
 ﻿import { createPortal } from 'react-dom';
-import { AlertCircle, Bot, Check, Code2, Copy, FileText, Headset, Image as ImageIcon, Loader2, MessageSquare, Paperclip, Send, Sparkles, Trash2, UserRound, X } from 'lucide-react';
+import { AlertCircle, Bot, Check, Code2, Copy, ExternalLink, FileText, Headset, Image as ImageIcon, Loader2, MessageSquare, Paperclip, Send, Sparkles, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { getRuntimeConfig } from '../lib/config';
 
@@ -50,8 +50,10 @@ const WEBCHAT_WIDGET_CONFIG_API_URL = (
   import.meta.env.VITE_WEBCHAT_WIDGET_CONFIG_URL ||
   'https://api.sendcraft.net/webchat-widget-config'
 ).trim().replace(/\/+$/, '');
+const DEFAULT_WIDGET_ENDPOINT = 'https://satzkpynnuloncwgxeev.supabase.co/functions/v1/webchat-widget';
 const DEFAULT_WIDGET_CRM_URL = 'https://api.sendcraft.net/webchat-widget';
 const LEGACY_WIDGET_CRM_URL = 'https://satzkpynnuloncwgxeev.supabase.co/functions/v1/webchat-widget';
+const LEGACY_WIDGET_ENDPOINT = 'https://api.flowbridge.site/functions/v1/api-gateway/84509071-8288-4698-b0dd-37bb6a5627a8';
 const HANDOFF_PENDING_NOTICE: WidgetNotice = {
   kind: 'info',
   title: 'Solicitud enviada',
@@ -91,6 +93,19 @@ function normalizeWidgetCrmUrl(value: string): string {
   return normalized;
 }
 
+function normalizeWidgetEndpointUrl(value: string): string {
+  const normalized = normalizeUrl(String(value || ''));
+  if (!normalized) return DEFAULT_WIDGET_ENDPOINT;
+  if (
+    normalized === DEFAULT_WIDGET_CRM_URL ||
+    normalized === LEGACY_WIDGET_CRM_URL ||
+    normalized === LEGACY_WIDGET_ENDPOINT
+  ) {
+    return DEFAULT_WIDGET_ENDPOINT;
+  }
+  return normalized;
+}
+
 function logWebchatDebug(event: string, details?: Record<string, unknown>): void {
   if (details) {
     console.info(`[WebChatWidget] ${event}`, details);
@@ -108,8 +123,8 @@ function logWebchatError(event: string, error: unknown, details?: Record<string,
 }
 
 export const WEBCHAT_WIDGET_CONFIG: WebChatConfig = {
-  endpoint: normalizeWidgetCrmUrl(import.meta.env.VITE_WIDGET_URL || DEFAULT_WIDGET_CRM_URL),
-  getEndpoint: normalizeWidgetCrmUrl(import.meta.env.VITE_WIDGET_URL || DEFAULT_WIDGET_CRM_URL),
+  endpoint: normalizeWidgetEndpointUrl(import.meta.env.VITE_WIDGET_URL || DEFAULT_WIDGET_ENDPOINT),
+  getEndpoint: normalizeWidgetEndpointUrl(import.meta.env.VITE_WIDGET_URL || DEFAULT_WIDGET_ENDPOINT),
   domain: 'sendcraft.net',
   title: 'Asistente SendCraft',
   logoUrl: '/logo.svg',
@@ -135,11 +150,11 @@ export const WEBCHAT_WIDGET_CONFIG: WebChatConfig = {
   crmUrl: normalizeWidgetCrmUrl(import.meta.env.VITE_CRM_URL || DEFAULT_WIDGET_CRM_URL),
   aiEnabled: true,
   handoffEnabled: true,
-  VITE_WIDGET_URL: 'https://api.flowbridge.site/functions/v1/api-gateway/84509071-8288-4698-b0dd-37bb6a5627a8',
+  VITE_WIDGET_URL: normalizeWidgetEndpointUrl(import.meta.env.VITE_WIDGET_URL || DEFAULT_WIDGET_ENDPOINT),
   VITE_WIDGET_APIKEY: 'pub_c37d9f0c0b339da3ff57445f0a6bae41d63236e3aecb771bc0ecf0a9aeacfda2',
   variables: {
     botProxyUrl: 'https://api.sendcraft.net/webchat-bot-proxy',
-    VITE_WIDGET_URL: normalizeWidgetCrmUrl(import.meta.env.VITE_WIDGET_URL || DEFAULT_WIDGET_CRM_URL),
+    VITE_WIDGET_URL: normalizeWidgetEndpointUrl(import.meta.env.VITE_WIDGET_URL || DEFAULT_WIDGET_ENDPOINT),
     VITE_WIDGET_APIKEY: 'pub_c37d9f0c0b339da3ff57445f0a6bae41d63236e3aecb771bc0ecf0a9aeacfda2',
     platform: 'SendCraft',
     assistantName: 'Crafty',
@@ -326,16 +341,6 @@ function senderPriority(senderType: ChatSenderType): number {
   return 1;
 }
 
-function getAttachmentSignature(attachments: ChatAttachment[]): string {
-  if (!Array.isArray(attachments) || attachments.length === 0) {
-    return '';
-  }
-
-  return attachments
-    .map((attachment) => `${normalizeSearchText(attachment.name)}:${attachment.mimeType}:${attachment.size}`)
-    .join('|');
-}
-
 function dedupeConversationMessages(messages: ChatMessage[]): ChatMessage[] {
   const byText = new Map<string, ChatMessage>();
 
@@ -344,11 +349,9 @@ function dedupeConversationMessages(messages: ChatMessage[]): ChatMessage[] {
     if (!text) continue;
 
     const senderType = message.senderType || roleToSenderType(message.role);
-    const attachmentSignature = getAttachmentSignature(message.attachments);
-    const key = `${senderType}:${text}:${attachmentSignature}`;
-    const current = byText.get(key);
+    const current = byText.get(text);
     if (!current) {
-      byText.set(key, message);
+      byText.set(text, message);
       continue;
     }
 
@@ -365,18 +368,18 @@ function dedupeConversationMessages(messages: ChatMessage[]): ChatMessage[] {
 
     if (likelyDuplicate) {
       if (nextPriority >= currentPriority) {
-        byText.set(key, message);
+        byText.set(text, message);
       }
       continue;
     }
 
     if (nextPriority > currentPriority) {
-      byText.set(key, message);
+      byText.set(text, message);
       continue;
     }
 
     if (nextPriority === currentPriority && (!Number.isNaN(nextTime) && (Number.isNaN(currentTime) || nextTime >= currentTime))) {
-      byText.set(key, message);
+      byText.set(text, message);
     }
   }
 
@@ -987,13 +990,13 @@ function normalizeWidgetConfigRecord(
   fallback: WebChatConfig,
 ): WebChatConfig {
   const variables = firstObject(record.variables) ?? {};
-  const endpoint = normalizeUrl(firstString(
+  const endpoint = normalizeWidgetEndpointUrl(firstString(
     record.endpoint as string | number | null | undefined,
     record.VITE_WIDGET_URL as string | number | null | undefined,
     variables.VITE_WIDGET_URL as string | number | null | undefined,
     fallback.endpoint,
   ));
-  const getEndpoint = normalizeUrl(firstString(
+  const getEndpoint = normalizeWidgetEndpointUrl(firstString(
     record.getEndpoint as string | number | null | undefined,
     record.get_endpoint as string | number | null | undefined,
     variables.getEndpoint as string | number | null | undefined,
@@ -1389,6 +1392,113 @@ function extractAttachmentBase64(value: string): string {
   return normalizedValue;
 }
 
+function inferMimeTypeFromFileName(name: string): string {
+  const match = String(name || '').trim().toLowerCase().match(/\.([a-z0-9]+)$/);
+  if (!match) return '';
+
+  const extension = match[1];
+  const map: Record<string, string> = {
+    pdf: 'application/pdf',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    svg: 'image/svg+xml',
+    txt: 'text/plain',
+    csv: 'text/csv',
+    json: 'application/json',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    zip: 'application/zip',
+    rar: 'application/vnd.rar',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    mp4: 'video/mp4',
+    mov: 'video/quicktime',
+  };
+
+  return map[extension] || '';
+}
+
+function resolveAttachmentMimeType(params: {
+  name?: string;
+  mimeType?: string;
+  dataUrl?: string;
+  fallback?: string;
+}): string {
+  return firstString(
+    params.mimeType,
+    extractMimeTypeFromDataUrl(params.dataUrl || ''),
+    inferMimeTypeFromFileName(params.name || ''),
+    params.fallback || 'application/octet-stream',
+  );
+}
+
+function decodeBase64ToBytes(base64: string): Uint8Array | null {
+  const normalizedBase64 = String(base64 || '').trim();
+  if (!normalizedBase64) return null;
+
+  try {
+    const binaryString = atob(normalizedBase64.replace(/\s+/g, ''));
+    const bytes = new Uint8Array(binaryString.length);
+    for (let index = 0; index < binaryString.length; index += 1) {
+      bytes[index] = binaryString.charCodeAt(index);
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+function buildAttachmentPreviewUrl(attachment: ChatAttachment): { url: string; revoke?: () => void } {
+  const rawValue = String(attachment.dataUrl || '').trim();
+  if (!rawValue) {
+    return { url: '' };
+  }
+
+  if (/^https?:\/\//i.test(rawValue)) {
+    return { url: rawValue };
+  }
+
+  const mimeType = resolveAttachmentMimeType({
+    name: attachment.name,
+    mimeType: attachment.mimeType,
+    dataUrl: rawValue,
+  });
+
+  if (/^data:/i.test(rawValue)) {
+    const base64 = extractAttachmentBase64(rawValue);
+    const bytes = decodeBase64ToBytes(base64);
+    if (bytes) {
+      const objectUrl = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer], { type: mimeType }));
+      return {
+        url: objectUrl,
+        revoke: () => URL.revokeObjectURL(objectUrl),
+      };
+    }
+
+    return { url: rawValue };
+  }
+
+  const base64 = firstString(attachment.base64, extractAttachmentBase64(rawValue));
+  const bytes = decodeBase64ToBytes(base64);
+  if (bytes) {
+    const objectUrl = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer], { type: mimeType }));
+    return {
+      url: objectUrl,
+      revoke: () => URL.revokeObjectURL(objectUrl),
+    };
+  }
+
+  return { url: buildAttachmentDataUrl(mimeType, base64) };
+}
+
 function buildAttachmentDataUrl(mimeType: string, base64: string): string {
   const normalizedBase64 = String(base64 || '').trim();
   if (!normalizedBase64) return '';
@@ -1405,7 +1515,10 @@ function normalizeChatAttachment(value: unknown): ChatAttachment | null {
     const trimmed = value.trim();
     if (!trimmed) return null;
 
-    const mimeType = extractMimeTypeFromDataUrl(trimmed) || 'application/octet-stream';
+    const mimeType = resolveAttachmentMimeType({
+      dataUrl: trimmed,
+      fallback: 'application/octet-stream',
+    });
     const dataUrl = buildAttachmentDataUrl(mimeType, trimmed);
 
     return {
@@ -1436,31 +1549,6 @@ function normalizeChatAttachment(value: unknown): ChatAttachment | null {
     record.data as string | number | boolean | null | undefined,
     record.payload as string | number | boolean | null | undefined,
   );
-  const inferredMimeType = rawDataUrl.startsWith('data:')
-    ? extractMimeTypeFromDataUrl(rawDataUrl)
-    : '';
-  const mimeType = firstString(
-    record.mimeType as string | number | boolean | null | undefined,
-    record.mime_type as string | number | boolean | null | undefined,
-    record.contentType as string | number | boolean | null | undefined,
-    record.content_type as string | number | boolean | null | undefined,
-    inferredMimeType,
-    'application/octet-stream',
-  );
-  const dataUrl = rawDataUrl
-    ? rawDataUrl.startsWith('data:') || /^https?:\/\//i.test(rawDataUrl)
-      ? rawDataUrl
-      : buildAttachmentDataUrl(mimeType, rawDataUrl || rawBase64)
-    : buildAttachmentDataUrl(mimeType, rawBase64);
-  const base64 = firstString(
-    rawBase64,
-    extractAttachmentBase64(dataUrl),
-  );
-  const size = Number(firstString(
-    record.size as string | number | boolean | null | undefined,
-    record.bytes as string | number | boolean | null | undefined,
-    record.fileSize as string | number | boolean | null | undefined,
-  ));
   const name = firstString(
     record.name as string | number | boolean | null | undefined,
     record.fileName as string | number | boolean | null | undefined,
@@ -1468,16 +1556,42 @@ function normalizeChatAttachment(value: unknown): ChatAttachment | null {
     record.file_name as string | number | boolean | null | undefined,
     'archivo',
   );
+  const mimeType = resolveAttachmentMimeType({
+    name,
+    mimeType: firstString(
+      record.mimeType as string | number | boolean | null | undefined,
+      record.mime_type as string | number | boolean | null | undefined,
+      record.contentType as string | number | boolean | null | undefined,
+      record.content_type as string | number | boolean | null | undefined,
+      record.type as string | number | boolean | null | undefined,
+      record.fileType as string | number | boolean | null | undefined,
+    ),
+    dataUrl: rawDataUrl,
+    fallback: 'application/octet-stream',
+  });
+  const dataUrl = rawDataUrl
+    ? rawDataUrl.startsWith('data:') || /^https?:\/\//i.test(rawDataUrl)
+      ? rawDataUrl
+      : buildAttachmentDataUrl(mimeType, rawDataUrl || rawBase64)
+    : buildAttachmentDataUrl(mimeType, rawBase64);
+  const base64 = rawDataUrl && /^https?:\/\//i.test(rawDataUrl)
+    ? rawBase64
+    : firstString(rawBase64, extractAttachmentBase64(dataUrl));
+  const size = Number(firstString(
+    record.size as string | number | boolean | null | undefined,
+    record.bytes as string | number | boolean | null | undefined,
+    record.fileSize as string | number | boolean | null | undefined,
+  ));
 
   if (!dataUrl && !base64) {
     return null;
   }
 
-  return {
-    id: firstString(
-      record.id as string | number | boolean | null | undefined,
-      crypto.randomUUID(),
-    ),
+    return {
+      id: firstString(
+        record.id as string | number | boolean | null | undefined,
+        crypto.randomUUID(),
+      ),
     name,
     mimeType,
     size: Number.isFinite(size) && size > 0 ? size : 0,
@@ -1498,6 +1612,12 @@ function normalizeChatAttachments(value: unknown): ChatAttachment[] {
 }
 
 function serializeChatAttachment(attachment: ChatAttachment): Record<string, unknown> {
+  const derivedBase64 = attachment.base64 || (
+    attachment.dataUrl.startsWith('data:')
+      ? extractAttachmentBase64(attachment.dataUrl)
+      : ''
+  );
+
   return {
     id: attachment.id,
     name: attachment.name,
@@ -1507,7 +1627,7 @@ function serializeChatAttachment(attachment: ChatAttachment): Record<string, unk
     size: attachment.size,
     dataUrl: attachment.dataUrl,
     data_url: attachment.dataUrl,
-    base64: attachment.base64 || extractAttachmentBase64(attachment.dataUrl),
+    base64: derivedBase64,
     kind: attachment.kind,
   };
 }
@@ -1524,7 +1644,12 @@ async function readFileAsChatAttachment(file: File): Promise<ChatAttachment> {
     reader.readAsDataURL(file);
   });
 
-  const mimeType = file.type || extractMimeTypeFromDataUrl(dataUrl) || 'application/octet-stream';
+  const mimeType = resolveAttachmentMimeType({
+    name: file.name,
+    mimeType: file.type,
+    dataUrl,
+    fallback: 'application/octet-stream',
+  });
 
   return {
     id: crypto.randomUUID(),
@@ -1543,6 +1668,45 @@ function isDefaultWelcomeMessage(messages: ChatMessage[], welcomeMessage: string
     messages[0]?.senderType === 'assistant' &&
     normalizeSearchText(messages[0]?.text || '') === normalizeSearchText(welcomeMessage)
   );
+}
+
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return 'Archivo';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  const value = unitIndex === 0 ? size : Number(size.toFixed(size >= 10 ? 0 : 1));
+  return `${value} ${units[unitIndex]}`;
+}
+
+function openAttachmentPreview(attachment: ChatAttachment): void {
+  const preview = buildAttachmentPreviewUrl(attachment);
+  const url = String(preview.url || '').trim();
+  if (!url) return;
+
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  if (preview.revoke) {
+    window.setTimeout(preview.revoke, 60_000);
+  }
+
+  if (opened) return;
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 function formatMessageTime(value: string): string {
@@ -1795,6 +1959,59 @@ function MessageBubbleEnhanced({
         }`}
       >
         <p className="whitespace-pre-wrap text-sm leading-relaxed">{repairMojibakeText(message.text)}</p>
+        {message.attachments.length > 0 ? (
+          <div className={`mt-3 space-y-2 ${isUser ? 'text-white' : 'text-slate-700'}`}>
+            {message.attachments.map((attachment) => {
+              const resolvedMimeType = resolveAttachmentMimeType({
+                name: attachment.name,
+                mimeType: attachment.mimeType,
+                dataUrl: attachment.dataUrl,
+              });
+              const isImageAttachment = attachment.kind === 'image' || resolvedMimeType.startsWith('image/');
+              return (
+                <button
+                  key={attachment.id}
+                  type="button"
+                  onClick={() => openAttachmentPreview(attachment)}
+                  className={`group w-full overflow-hidden rounded-2xl border text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                    isUser ? 'border-white/20 bg-white/10 hover:bg-white/15' : 'border-slate-200 bg-slate-50 hover:border-[#14b8a6]/30 hover:bg-white'
+                  }`}
+                  aria-label={`Abrir archivo ${attachment.name}`}
+                >
+                  {isImageAttachment ? (
+                    <img
+                      src={attachment.dataUrl}
+                      alt={attachment.name}
+                      className="max-h-44 w-full object-cover"
+                    />
+                  ) : null}
+                  <div className="flex items-center gap-3 px-3 py-2">
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                      isUser ? 'bg-white/15' : 'bg-white'
+                    }`}>
+                      {isImageAttachment ? (
+                        <ImageIcon className="h-4 w-4" />
+                      ) : (
+                        <FileText className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold">{attachment.name}</p>
+                      <p className={`text-[11px] ${isUser ? 'text-white/70' : 'text-slate-500'}`}>
+                        {resolvedMimeType || 'application/octet-stream'} · {formatFileSize(attachment.size)}
+                      </p>
+                    </div>
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors ${
+                      isUser ? 'bg-white/10 text-white/80 group-hover:bg-white/20' : 'bg-white text-slate-500 group-hover:text-[#0f9a98]'
+                    }`}>
+                      <ExternalLink className="h-4 w-4" />
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <p className={`mt-1 text-[11px] ${isUser ? 'text-white/70' : 'text-slate-400'}`}>
           {formatMessageTime(message.createdAt)}
         </p>
@@ -2084,16 +2301,17 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
           setConversationId(nextConversationId);
         }
 
-        const isDefaultWelcome =
-          messagesRef.current.length === 1 &&
-          messagesRef.current[0]?.senderType === 'assistant' &&
-          normalizeSearchText(messagesRef.current[0]?.text || '') ===
-            normalizeSearchText(WEBCHAT_WIDGET_CONFIG.welcomeMessage);
+        const shouldShowGreeting =
+          !snapshot.isTaken &&
+          !isWaitingForAgentSnapshot(snapshot) &&
+          !snapshot.isClosed;
 
         if (fetchedMessages.length > 0) {
           setMessages(nextMessages);
-        } else if (messagesRef.current.length === 0 || isDefaultWelcome) {
+        } else if (shouldShowGreeting && messagesRef.current.length === 0) {
           setMessages([createMessage('assistant', loadedConfig.welcomeMessage)]);
+        } else if (!shouldShowGreeting && isDefaultWelcomeMessage(messagesRef.current, loadedConfig.welcomeMessage)) {
+          setMessages([]);
         }
 
         setStatus('ready');
@@ -2106,13 +2324,7 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
         window.CRM_WEBCHAT_CONFIG = cloneWidgetConfig(fallbackConfig);
         setStatus('error');
 
-        const isDefaultWelcome =
-          messagesRef.current.length === 1 &&
-          messagesRef.current[0]?.senderType === 'assistant' &&
-          normalizeSearchText(messagesRef.current[0]?.text || '') ===
-            normalizeSearchText(WEBCHAT_WIDGET_CONFIG.welcomeMessage);
-
-        if (messagesRef.current.length === 0 || isDefaultWelcome) {
+        if (messagesRef.current.length === 0) {
           setMessages([createMessage('assistant', fallbackConfig.welcomeMessage)]);
         }
       }
@@ -2277,6 +2489,18 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
 
     if (fetchedMessages.length > 0) {
       setMessages(nextMessages);
+    } else if (
+      (snapshot.isTaken || isWaitingForAgentSnapshot(snapshot)) &&
+      isDefaultWelcomeMessage(messagesRef.current, activeConfig.welcomeMessage)
+    ) {
+      setMessages([]);
+    } else if (
+      !snapshot.isTaken &&
+      !isWaitingForAgentSnapshot(snapshot) &&
+      !snapshot.isClosed &&
+      messagesRef.current.length === 0
+    ) {
+      setMessages([createMessage('assistant', activeConfig.welcomeMessage)]);
     }
 
     return { fetchedMessages, snapshot, payload };
@@ -2305,12 +2529,14 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
       identity,
     );
     const manualContactRequest = isManualContactRequest(text);
-    const userMessage = createMessage('user', text);
+    const attachmentsToSend = pendingAttachments;
+    const userMessage = createMessage('user', text, attachmentsToSend);
     const conversationHistory = serializeConversationHistory([...messagesRef.current, userMessage], historyStartIndexRef.current);
     const conversationReferenceId = isClosedConversation ? null : conversationId || null;
 
     setMessages((prev) => [...prev, userMessage]);
     setDraft('');
+    setPendingAttachments([]);
     setIsSending(true);
     setStatus('loading');
 
@@ -2332,6 +2558,8 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
           conversation_id: conversationReferenceId,
           message: text,
           sender_type: 'visitor',
+          messages: conversationHistory,
+          attachments: attachmentsToSend.map(serializeChatAttachment),
           visitor: {
             name: visitorProfile.name || 'Visitante',
             email: visitorProfile.email || '',
@@ -2441,31 +2669,27 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
         handoff: assistantHandoff,
         replyPreview: previewText(assistantReply),
       });
-      const assistantMessageRecord = assistantReply
-        ? {
-            role: 'assistant' as const,
-            text: assistantReply,
-            created_at: new Date().toISOString(),
-          }
-        : null;
-      const handoffConversationHistory = assistantMessageRecord
-        ? [...conversationHistory, assistantMessageRecord]
+      const assistantMessage = assistantReply ? createMessage('assistant', assistantReply) : null;
+      const assistantConversationHistory = assistantMessage
+        ? serializeConversationHistory([...messagesRef.current, userMessage, assistantMessage], historyStartIndexRef.current)
         : conversationHistory;
       const assistantHandoffReason = manualContactRequest ? 'manual_contact' : 'auto_fallback';
 
       if (assistantReply && !assistantHandoff) {
-        setMessages((prev) => mergeChatMessages(prev, [createMessage('assistant', assistantReply)]));
+        setMessages((prev) => mergeChatMessages(prev, [assistantMessage as ChatMessage]));
         setRuntimeQuickReplies(assistantQuickReplies);
 
         try {
-        await fetch(widgetRequestUrl.toString(), {
-          method: 'POST',
-          headers: buildWidgetRequestHeaders('post', currentConfig),
-          body: JSON.stringify({
-            session_id: nextSessionId,
-            conversation_id: nextConversationId || conversationReferenceId,
+          await fetch(widgetRequestUrl.toString(), {
+            method: 'POST',
+            headers: buildWidgetRequestHeaders('post', currentConfig),
+            body: JSON.stringify({
+              session_id: nextSessionId,
+              conversation_id: nextConversationId || conversationReferenceId,
               message: assistantReply,
               sender_type: 'assistant',
+              messages: assistantConversationHistory,
+              attachments: [],
               visitor: {
                 name: visitorProfile.name || 'Visitante',
                 email: visitorProfile.email || '',
@@ -2479,7 +2703,6 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
               scope_key: identity.scopeKey,
               tenant_name: identity.tenantName,
               subdomain: identity.subdomain,
-              messages: conversationHistory,
             }),
           });
         } catch {
@@ -2527,10 +2750,11 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
           sourceDomain: window.location.hostname,
           identity,
           visitor: visitorProfile,
-          message: extractHandoffMessage(handoffConversationHistory),
+          message: extractHandoffMessage(assistantConversationHistory),
           assistantReply,
           quickReplies: assistantQuickReplies,
-          conversationHistory: handoffConversationHistory,
+          conversationHistory: assistantConversationHistory,
+          attachments: attachmentsToSend,
         });
 
         try {
@@ -2580,7 +2804,9 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
 
       const faqAnswer = resolveFaqAnswer(text);
       if (faqAnswer) {
-        setMessages((prev) => mergeChatMessages(prev, [createMessage('assistant', faqAnswer)]));
+        const faqMessage = createMessage('assistant', faqAnswer);
+        const faqConversationHistory = serializeConversationHistory([...messagesRef.current, userMessage, faqMessage], historyStartIndexRef.current);
+        setMessages((prev) => mergeChatMessages(prev, [faqMessage]));
         setRuntimeQuickReplies([...currentConfig.quickReplies]);
         await fetch(widgetRequestUrl.toString(), {
           method: 'POST',
@@ -2590,6 +2816,8 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
             conversation_id: nextConversationId || conversationReferenceId,
             message: faqAnswer,
             sender_type: 'assistant',
+            messages: faqConversationHistory,
+            attachments: [],
             visitor: {
               name: visitorProfile.name || 'Visitante',
               email: visitorProfile.email || '',
@@ -2603,7 +2831,6 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
             scope_key: identity.scopeKey,
             tenant_name: identity.tenantName,
             subdomain: identity.subdomain,
-            messages: conversationHistory,
           }),
         }).catch(() => undefined);
         setStatus('ready');
@@ -2657,7 +2884,8 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
         message: text,
         assistant_reply: assistantReply || null,
         quickReplies: assistantQuickReplies,
-        messages: handoffConversationHistory,
+        messages: assistantConversationHistory,
+        attachments: attachmentsToSend.map(serializeChatAttachment),
       };
 
       try {
@@ -2685,6 +2913,7 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
     } catch {
       setStatus('error');
       setHandoffPending(false);
+      setPendingAttachments(attachmentsToSend);
       setWidgetNotice({
         kind: 'error',
         title: 'No pudimos enviar',
@@ -2735,8 +2964,11 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
     }
 
     const visitorProfile = readStoredVisitorProfile();
+    const attachmentsToSend = pendingAttachments;
+    const conversationHistory = serializeConversationHistory(messagesRef.current, historyStartIndexRef.current);
     setHandoffPending(true);
     setWidgetNotice(HANDOFF_PENDING_NOTICE);
+    setPendingAttachments([]);
     logWebchatDebug('manual handoff UI state', {
       sessionId: nextSessionId,
       conversationId,
@@ -2754,11 +2986,10 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
           sourceDomain: window.location.hostname,
           identity,
           visitor: visitorProfile,
-          message: extractHandoffMessage(
-            serializeConversationHistory(messagesRef.current, historyStartIndexRef.current),
-          ),
+          message: extractHandoffMessage(conversationHistory),
           quickReplies: runtimeQuickReplies.length > 0 ? runtimeQuickReplies : currentConfig.quickReplies,
-          conversationHistory: serializeConversationHistory(messagesRef.current, historyStartIndexRef.current),
+          conversationHistory,
+          attachments: attachmentsToSend,
         }),
       );
 
@@ -2787,6 +3018,7 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
         conversationId,
       });
       setHandoffPending(false);
+      setPendingAttachments(attachmentsToSend);
       setWidgetNotice({
         kind: 'error',
         title: 'No pudimos conectar',
@@ -2892,6 +3124,42 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
             </div>
           </div>
 
+          {pendingAttachments.length > 0 ? (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {pendingAttachments.map((attachment) => {
+                const isImageAttachment = attachment.kind === 'image' || attachment.mimeType.startsWith('image/');
+                return (
+                  <div
+                    key={attachment.id}
+                    className="flex max-w-full items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 ring-1 ring-slate-200">
+                      {isImageAttachment ? (
+                        <ImageIcon className="h-4 w-4" />
+                      ) : (
+                        <FileText className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-slate-700">{attachment.name}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {attachment.mimeType || 'application/octet-stream'} · {formatFileSize(attachment.size)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(attachment.id)}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                      aria-label={`Quitar ${attachment.name}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
           <form
             className="flex items-center gap-2"
             onSubmit={(event) => {
@@ -2908,6 +3176,17 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
               title="Conectar con un agente"
             >
               <Headset className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenAttachmentPicker}
+              disabled={status === 'loading' || isSending}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 transition-colors hover:border-[#14b8a6]/30 hover:text-[#0f9a98] disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Adjuntar archivo"
+              title="Adjuntar archivo"
+            >
+              <Paperclip className="h-4 w-4" />
             </button>
 
             <input
@@ -2928,6 +3207,15 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
               {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </form>
+
+          <input
+            ref={attachmentInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            onChange={handleAttachmentInputChange}
+            accept="*/*"
+          />
         </div>
       </div>
     </div>,
