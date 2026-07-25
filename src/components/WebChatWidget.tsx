@@ -1,7 +1,6 @@
 ﻿import { createPortal } from 'react-dom';
 import { AlertCircle, Bot, Check, Code2, Copy, ExternalLink, FileText, Headset, Image as ImageIcon, Loader2, MessageSquare, Paperclip, Send, Sparkles, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { getRuntimeConfig } from '../lib/config';
 
 type WebChatConfig = {
   endpoint: string;
@@ -50,7 +49,8 @@ const WEBCHAT_WIDGET_CONFIG_API_URL = (
   import.meta.env.VITE_WEBCHAT_WIDGET_CONFIG_URL ||
   'https://api.sendcraft.net/webchat-widget-config'
 ).trim().replace(/\/+$/, '');
-const DEFAULT_WIDGET_ENDPOINT = 'https://satzkpynnuloncwgxeev.supabase.co/functions/v1/webchat-widget';
+const WEBCHAT_WIDGET_PUBLIC_KEY = 'wc_7e4ac6fb-9202-4fdf-86bb-a3ec8c4c270b';
+const DEFAULT_WIDGET_ENDPOINT = 'https://api.sendcraft.net/webchat-widget';
 const DEFAULT_WIDGET_CRM_URL = 'https://api.sendcraft.net/webchat-widget';
 const LEGACY_WIDGET_CRM_URL = 'https://satzkpynnuloncwgxeev.supabase.co/functions/v1/webchat-widget';
 const LEGACY_WIDGET_ENDPOINT = 'https://api.flowbridge.site/functions/v1/api-gateway/84509071-8288-4698-b0dd-37bb6a5627a8';
@@ -61,9 +61,8 @@ const HANDOFF_PENDING_NOTICE: WidgetNotice = {
 };
 function resolveWidgetConfigApiKey(): string {
   return String(
-    getRuntimeConfig().apiKey ||
-      import.meta.env.VITE_WEBCHAT_WIDGET_CONFIG_API_KEY ||
-      '',
+    import.meta.env.VITE_WEBCHAT_WIDGET_CONFIG_API_KEY ||
+      WEBCHAT_WIDGET_PUBLIC_KEY,
   ).trim();
 }
 
@@ -142,10 +141,10 @@ export const WEBCHAT_WIDGET_CONFIG: WebChatConfig = {
     '¿Qué planes ofrecen?',
   ],
   integrationHeader: 'X-Integration-Key',
-  integrationKey: 'wc_7e4ac6fb-9202-4fdf-86bb-a3ec8c4c270b',
+  integrationKey: WEBCHAT_WIDGET_PUBLIC_KEY,
   getIntegrationHeader: 'X-Integration-Key',
-  getIntegrationKey: 'wc_7e4ac6fb-9202-4fdf-86bb-a3ec8c4c270b',
-  apiKey: 'wc_7e4ac6fb-9202-4fdf-86bb-a3ec8c4c270b',
+  getIntegrationKey: WEBCHAT_WIDGET_PUBLIC_KEY,
+  apiKey: WEBCHAT_WIDGET_PUBLIC_KEY,
   botProxyUrl: 'https://api.sendcraft.net/webchat-bot-proxy',
   crmUrl: normalizeWidgetCrmUrl(import.meta.env.VITE_CRM_URL || DEFAULT_WIDGET_CRM_URL),
   aiEnabled: true,
@@ -3222,6 +3221,4 @@ export function WebChatWidgetPanel({ open, onClose }: { open: boolean; onClose: 
     document.body,
   );
 }
-
-
 
