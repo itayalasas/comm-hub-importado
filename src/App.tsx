@@ -83,11 +83,10 @@ const ProtectedRoute = ({
   requiredMenu?: string;
   requireSystemAdmin?: boolean;
 }) => {
-  const { isAuth, isLoading, authProgress, hasMenuAccess, logout, isSystemAdmin } = useAuth();
+  const { isAuth, isLoading, hasMenuAccess, logout, isSystemAdmin } = useAuth();
   const location = useLocation();
-  const isDedicatedProvisioning = authProgress?.phase === 'provisioning_dedicated_api';
 
-  if (isLoading || (isAuth && isDedicatedProvisioning)) {
+  if (isLoading) {
     return <AppLoader />;
   }
 
@@ -157,10 +156,9 @@ const ProtectedRoute = ({
 };
 
 const PublicRoute = ({ children }: { children: ReactNode }) => {
-  const { isAuth, isLoading, authProgress, hasMenuAccess, isSystemAdmin } = useAuth();
-  const isDedicatedProvisioning = authProgress?.phase === 'provisioning_dedicated_api';
+  const { isAuth, isLoading, hasMenuAccess, isSystemAdmin } = useAuth();
 
-  if (isLoading || (isAuth && isDedicatedProvisioning)) {
+  if (isLoading) {
     return <AppLoader />;
   }
 
@@ -172,10 +170,9 @@ const PublicRoute = ({ children }: { children: ReactNode }) => {
 };
 
 const DashboardRedirect = () => {
-  const { isAuth, isLoading, authProgress, hasMenuAccess, isSystemAdmin } = useAuth();
-  const isDedicatedProvisioning = authProgress?.phase === 'provisioning_dedicated_api';
+  const { isAuth, isLoading, hasMenuAccess, isSystemAdmin } = useAuth();
 
-  if (isLoading || (isAuth && isDedicatedProvisioning)) {
+  if (isLoading) {
     return <AppLoader />;
   }
 
