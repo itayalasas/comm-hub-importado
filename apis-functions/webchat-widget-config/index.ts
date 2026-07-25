@@ -29,7 +29,7 @@ function getPool(): Pool {
 
   return pool;
 }
-const DEFAULT_WIDGET_ENDPOINT = "https://satzkpynnuloncwgxeev.supabase.co/functions/v1/webchat-widget";
+const DEFAULT_WIDGET_ENDPOINT = "https://api.sendcraft.net/webchat-widget";
 const DEFAULT_WIDGET_CRM_URL = "https://api.sendcraft.net/webchat-widget";
 const LEGACY_WIDGET_CRM_URL = "https://satzkpynnuloncwgxeev.supabase.co/functions/v1/webchat-widget";
 const LEGACY_WIDGET_ENDPOINT = "https://api.flowbridge.site/functions/v1/api-gateway/84509071-8288-4698-b0dd-37bb6a5627a8";
