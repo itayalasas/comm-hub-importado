@@ -635,17 +635,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
       }
 
-      if (storedUser || storedToken) {
-        try {
-          await refreshSubscription();
-        } catch {
-          // Keep the bootstrap state if the sync request fails.
-        }
-      }
-
       if (!cancelled) {
         setIsLoading(false);
         clearAuthProgress();
+      }
+
+      // The cached session is enough to render the application. Refreshing
+      // subscription data must not keep login or the dashboard behind a
+      // full-screen loader when the auth service is cold.
+      if (storedUser || storedToken) {
+        void refreshSubscription({ skipDedicatedProvisioning: true }).catch(() => {
+          // Keep the cached subscription state if the background sync fails.
+        });
       }
     };
 
