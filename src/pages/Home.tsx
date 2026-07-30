@@ -927,11 +927,8 @@ export const Home = () => {
         .card-hover:hover { transform: translateY(-4px); }
       `}</style>
 
-      {/* Ambient background glows */}
+      {/* Ambient background */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="glow-pulse absolute top-[-10%] left-[20%] w-[700px] h-[700px] bg-cyan-500 rounded-full blur-[140px]" />
-        <div className="glow-pulse absolute top-[40%] right-[10%] w-[500px] h-[500px] bg-blue-500 rounded-full blur-[120px]" style={{ animationDelay: '2s' }} />
-        <div className="glow-pulse absolute bottom-[10%] left-[30%] w-[600px] h-[600px] bg-teal-500 rounded-full blur-[140px]" style={{ animationDelay: '4s' }} />
         {/* Grid overlay */}
         <div className="absolute inset-0 opacity-[0.03]"
           style={{ backgroundImage: 'linear-gradient(rgba(6,182,212,1) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,1) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
@@ -944,7 +941,7 @@ export const Home = () => {
             <div className="flex items-center space-x-3">
               <Link to="/" className="relative">
                 <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-25" />
-                <img src="/logo.svg" alt="SendCraft" className="h-8 relative" />
+                <img src="/logo.svg" alt="SendCraft" width={197} height={32} fetchPriority="high" className="h-8 relative" />
               </Link>
             </div>
             <div className="hidden md:flex items-center space-x-8 text-sm text-slate-400">
@@ -966,6 +963,7 @@ export const Home = () => {
         </div>
       </nav>
 
+      <main>
       {/* ── HERO ──────────────────────────────────────────────────── */}
       <section className="relative z-10 pt-20 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
@@ -1073,7 +1071,7 @@ export const Home = () => {
                   Otros proveedores
                 </div>
                 <div className="px-6 py-5 border-b border-l border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center gap-2.5">
-                  <img src="/logo.svg" alt="SendCraft" className="h-8" />
+                  <img src="/logo.svg" alt="SendCraft" width={197} height={32} className="h-8" />
                   <span className="ml-auto hidden sm:inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
                     <Sparkles className="h-2.5 w-2.5" />
                     Recomendado
@@ -1543,6 +1541,7 @@ export const Home = () => {
           </div>
         </div>
       </section>
+      </main>
 
       {/* ── FOOTER ────────────────────────────────────────────────── */}
       <footer className="relative z-10 border-t border-white/5 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
@@ -1551,7 +1550,7 @@ export const Home = () => {
             <div className="max-w-sm">
               <Link to="/" className="relative inline-block mb-4">
                 <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-15" />
-                <img src="/logo.svg" alt="SendCraft" className="h-7 relative" />
+                <img src="/logo.svg" alt="SendCraft" width={172} height={28} className="h-7 relative" />
               </Link>
               <p className="text-slate-400 text-sm leading-relaxed">
                 La plataforma todo en uno para las comunicaciones de tu empresa. Emails, PDFs, SMTP y automatizaciones desde una única API.

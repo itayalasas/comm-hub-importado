@@ -2264,7 +2264,7 @@ Content-Type: application/json`}
         <header className="border-b border-white/10 bg-slate-950/70 backdrop-blur-sm">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
             <a href="/" className="inline-flex items-center gap-3">
-              <img src="/logo.svg" alt="SendCraft" className="h-9" />
+              <img src="/logo.svg" alt="SendCraft" width={221} height={36} className="h-9" />
               <span className="hidden sm:inline-flex flex-col">
                 <span className="text-sm font-semibold text-white">SendCraft</span>
                 <span className="text-xs text-slate-400">Documentación pública</span>

@@ -653,7 +653,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
               }
             </button>
             <Link to="/dashboard">
-              <img src="/logo.svg" alt="SendCraft" className="h-7 lg:hidden" />
+              <img src="/logo.svg" alt="SendCraft" width={172} height={28} className="h-7 lg:hidden" />
             </Link>
           </div>
           <UserMenu />
@@ -688,7 +688,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
           {/* Logo section */}
           <div className="flex flex-col items-center py-6 px-4 border-b border-slate-700/40">
             <Link to="/dashboard">
-              <img src="/logo.svg" alt="SendCraft" className="h-9 mb-1" />
+              <img src="/logo.svg" alt="SendCraft" width={221} height={36} className="h-9 mb-1" />
             </Link>
           </div>
 

@@ -37,7 +37,7 @@ export const Login = () => {
           <div className="flex items-center space-x-3 mb-16">
             <Link to="/" className="relative">
               <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-30"></div>
-              <img src="/logo.svg" alt="SendCraft" className="h-10 relative" />
+              <img src="/logo.svg" alt="SendCraft" width={246} height={40} className="h-10 relative" />
             </Link>
           </div>
 

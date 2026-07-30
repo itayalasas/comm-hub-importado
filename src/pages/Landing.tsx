@@ -89,7 +89,7 @@ export const Landing = () => {
           <div className="relative z-10 slide-1">
             <Link to="/" className="relative inline-flex">
               <div className="absolute inset-0 bg-cyan-500 blur-xl opacity-30" />
-              <img src="/logo.svg" alt="SendCraft" className="h-9 sm:h-10 relative" />
+              <img src="/logo.svg" alt="SendCraft" width={246} height={40} className="h-9 sm:h-10 relative" />
             </Link>
           </div>
 
