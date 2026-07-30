@@ -11,7 +11,9 @@ import {
   runAutomationProgram,
   saveAutomationProgram,
 } from '../lib/automationApi';
-import { CheckCircle2, Clock, Loader2, Play, Plus, RefreshCw, Trash2, PencilLine, Pause, SquarePen } from 'lucide-react';
+import { CheckCircle2, Check, Clock, Copy, Loader2, Play, Plus, RefreshCw, Trash2, PencilLine, Pause, SquarePen, ChevronDown, ChevronUp } from 'lucide-react';
+import { AutomationProgramQueuePanel } from '../components/AutomationProgramQueuePanel';
+import { translateStatus } from '../lib/statusLabels';
 
 type ProgramFormState = {
   name: string;
@@ -73,6 +75,7 @@ function toDatetimeLocalValue(value: string | null) {
 
 function ProgramCard({
   program,
+  apiKey,
   onEdit,
   onRun,
   onDelete,
@@ -80,12 +83,22 @@ function ProgramCard({
   running,
 }: {
   program: AutomationProgramRecord;
+  apiKey: string;
   onEdit: (program: AutomationProgramRecord) => void;
   onRun: (program: AutomationProgramRecord) => void;
   onDelete: (program: AutomationProgramRecord) => void;
   onTogglePause: (program: AutomationProgramRecord) => void;
   running: boolean;
 }) {
+  const [copiedId, setCopiedId] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
+
+  const copyProgramId = () => {
+    navigator.clipboard.writeText(program.id);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
+
   const statusStyles: Record<string, string> = {
     scheduled: 'bg-cyan-500/15 text-cyan-200 border-cyan-500/25',
     active: 'bg-emerald-500/15 text-emerald-200 border-emerald-500/25',
@@ -104,7 +117,7 @@ function ProgramCard({
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <h3 className="text-lg font-bold text-white">{program.name}</h3>
             <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${statusStyles[program.status] || statusStyles.draft}`}>
-              {program.status}
+              {translateStatus(program.status)}
             </span>
             <span className="rounded-full border border-slate-700 bg-slate-800/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">
               {program.channel}
@@ -134,6 +147,16 @@ function ProgramCard({
               Cron: <code className="rounded bg-slate-950/50 px-1.5 py-0.5 text-cyan-300">{program.cron_expression}</code>
             </p>
           )}
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
+            <span>ID:</span>
+            <code className="truncate rounded bg-slate-950/50 px-1.5 py-0.5 text-slate-300">{program.id}</code>
+            <button
+              onClick={copyProgramId}
+              className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white"
+            >
+              {copiedId ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -189,12 +212,25 @@ function ProgramCard({
           <Trash2 className="h-3.5 w-3.5" />
           Cancelar
         </button>
+        {program.delivery_mode === 'queued' && (
+          <button
+            onClick={() => setShowQueue((current) => !current)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-500/20"
+          >
+            {showQueue ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            {showQueue ? 'Ocultar cola' : 'Ver cola'}
+          </button>
+        )}
         {program.last_error && (
           <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">
             {program.last_error}
           </div>
         )}
       </div>
+
+      {program.delivery_mode === 'queued' && showQueue && (
+        <AutomationProgramQueuePanel apiKey={apiKey} program={program} />
+      )}
     </div>
   );
 }
@@ -621,6 +657,7 @@ export const AutomatizacionesProgramados = () => {
                     <ProgramCard
                       key={program.id}
                       program={program}
+                      apiKey={selectedApplicationApiKey}
                       onEdit={populateForm}
                       onRun={(item) => void handleRunNow(item)}
                       onDelete={(item) => void handleDelete(item)}

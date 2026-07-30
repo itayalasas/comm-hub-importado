@@ -65,6 +65,7 @@ interface AutomationProgramQueueItemRecord {
 interface CampaignJobRecord {
   id: string;
   type: string;
+  program_id: string | null;
   status: string;
   template_name: string | null;
   total: number;
@@ -72,6 +73,7 @@ interface CampaignJobRecord {
   sent: number;
   failed: number;
   error_message: string | null;
+  recipients?: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -86,6 +88,7 @@ interface EmailLogRecord {
   error_message: string | null;
   recipient_email: string;
   subject: string | null;
+  program_id: string | null;
   created_at: string;
 }
 
@@ -218,6 +221,7 @@ function buildTraceEntries(
         : `${job.sent} enviados, ${job.failed} fallidos sobre ${job.total}`,
       created_at: job.updated_at,
       job_id: job.id,
+      program_id: job.program_id ?? undefined,
     })),
     ...logs.slice(0, 10).map((log) => ({
       id: `log-${log.id}`,
@@ -235,6 +239,7 @@ function buildTraceEntries(
       created_at: log.created_at,
       recipient_email: log.recipient_email,
       log_id: log.id,
+      program_id: log.program_id ?? undefined,
     })),
   ];
 
@@ -339,80 +344,154 @@ Deno.serve(async (req: Request) => {
 
     const limit = Math.max(1, Number(url.searchParams.get("limit") || "10") || 10);
     const nowIso = new Date().toISOString();
+    const kindFilter = url.searchParams.get("kind");
+    const kindIsValid = kindFilter === "scheduled" || kindFilter === "batch";
+
+    const programParams: unknown[] = [application.id];
+    let programWhere = "WHERE application_id = $1";
+    if (kindIsValid) {
+      programParams.push(kindFilter);
+      programWhere += ` AND kind = $${programParams.length}`;
+    }
 
     const programsResult = await client.queryObject(
       `
       SELECT *
       FROM automation_programs
-      WHERE application_id = $1
+      ${programWhere}
       ORDER BY updated_at DESC
       `,
-      [application.id],
+      programParams,
     );
 
     const queueItemsResult = await client.queryObject(
       `
       SELECT
-        id,
-        application_id,
-        program_id,
-        external_reference_id,
-        recipient_email,
-        status,
-        available_at,
-        last_attempt_at,
-        sent_at,
-        last_job_id,
-        attempt_count,
-        last_error,
-        created_at,
-        updated_at
-      FROM automation_program_queue_items
-      WHERE application_id = $1
-      ORDER BY updated_at DESC
+        q.id,
+        q.application_id,
+        q.program_id,
+        q.external_reference_id,
+        q.recipient_email,
+        q.status,
+        q.available_at,
+        q.last_attempt_at,
+        q.sent_at,
+        q.last_job_id,
+        q.attempt_count,
+        q.last_error,
+        q.created_at,
+        q.updated_at
+      FROM automation_program_queue_items q
+      ${kindIsValid ? "JOIN automation_programs p ON p.id = q.program_id AND p.kind = $2" : ""}
+      WHERE q.application_id = $1
+      ORDER BY q.updated_at DESC
       `,
-      [application.id],
+      kindIsValid ? [application.id, kindFilter] : [application.id],
     );
 
     const jobsResult = await client.queryObject(
       `
       SELECT
-        id,
-        type,
-        status,
-        template_name,
-        total,
-        processed,
-        sent,
-        failed,
-        error_message,
-        created_at,
-        updated_at
-      FROM campaign_jobs
-      WHERE application_id = $1
-      ORDER BY created_at DESC
+        j.id,
+        j.type,
+        j.program_id,
+        j.status,
+        j.template_name,
+        j.total,
+        j.processed,
+        j.sent,
+        j.failed,
+        j.error_message,
+        j.created_at,
+        j.updated_at
+      FROM campaign_jobs j
+      WHERE j.application_id = $1
+      ${kindIsValid ? "AND j.program_id IN (SELECT id FROM automation_programs WHERE application_id = $1 AND kind = $2)" : ""}
+      ORDER BY j.created_at DESC
       `,
-      [application.id],
+      kindIsValid ? [application.id, kindFilter] : [application.id],
+    );
+
+    const jobsSearch = (url.searchParams.get("jobs_q") || "").trim();
+    const jobsDateFrom = url.searchParams.get("jobs_date_from");
+    const jobsDateTo = url.searchParams.get("jobs_date_to");
+    const jobsLimit = Math.max(1, Math.min(Number(url.searchParams.get("jobs_limit") || "25") || 25, 200));
+    const jobsOffset = Math.max(0, Number(url.searchParams.get("jobs_offset") || "0") || 0);
+
+    const pagedJobsParams: unknown[] = [application.id];
+    let pagedJobsWhere = "WHERE j.application_id = $1";
+
+    if (kindIsValid) {
+      pagedJobsParams.push(kindFilter);
+      pagedJobsWhere += ` AND j.program_id IN (SELECT id FROM automation_programs WHERE application_id = $1 AND kind = $${pagedJobsParams.length})`;
+    }
+
+    if (jobsSearch) {
+      pagedJobsParams.push(`%${jobsSearch}%`);
+      const idx = pagedJobsParams.length;
+      pagedJobsWhere += ` AND (j.recipients::text ILIKE $${idx} OR j.template_name ILIKE $${idx})`;
+    }
+
+    if (jobsDateFrom) {
+      pagedJobsParams.push(jobsDateFrom);
+      pagedJobsWhere += ` AND j.created_at >= $${pagedJobsParams.length}`;
+    }
+
+    if (jobsDateTo) {
+      pagedJobsParams.push(jobsDateTo);
+      pagedJobsWhere += ` AND j.created_at <= $${pagedJobsParams.length}`;
+    }
+
+    const jobsCountResult = await client.queryObject<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM campaign_jobs j ${pagedJobsWhere}`,
+      pagedJobsParams,
+    );
+    const jobsTotal = Number(jobsCountResult.rows[0]?.count || 0);
+
+    const pagedJobsResult = await client.queryObject(
+      `
+      SELECT
+        j.id,
+        j.type,
+        j.program_id,
+        j.status,
+        j.template_name,
+        j.total,
+        j.processed,
+        j.sent,
+        j.failed,
+        j.error_message,
+        j.recipients,
+        j.created_at,
+        j.updated_at
+      FROM campaign_jobs j
+      ${pagedJobsWhere}
+      ORDER BY j.created_at DESC
+      LIMIT $${pagedJobsParams.length + 1} OFFSET $${pagedJobsParams.length + 2}
+      `,
+      [...pagedJobsParams, jobsLimit, jobsOffset],
     );
 
     const logsResult = await client.queryObject(
       `
       SELECT
-        id,
-        status,
-        delivery_status,
-        opened_at,
-        clicked_at,
-        communication_type,
-        error_message,
-        recipient_email,
-        subject,
-        created_at
-      FROM email_logs
-      WHERE application_id = $1
-      ORDER BY created_at DESC
+        l.id,
+        l.status,
+        l.delivery_status,
+        l.opened_at,
+        l.clicked_at,
+        l.communication_type,
+        l.error_message,
+        l.recipient_email,
+        l.subject,
+        l.program_id,
+        l.created_at
+      FROM email_logs l
+      WHERE l.application_id = $1
+      ${kindIsValid ? "AND l.program_id IN (SELECT id FROM automation_programs WHERE application_id = $1 AND kind = $2)" : ""}
+      ORDER BY l.created_at DESC
       `,
-      [application.id],
+      kindIsValid ? [application.id, kindFilter] : [application.id],
     );
 
     const allPrograms = (programsResult.rows as AutomationProgramRecord[]).map(
@@ -420,6 +499,10 @@ Deno.serve(async (req: Request) => {
     );
 
     const allJobs = (jobsResult.rows as CampaignJobRecord[]).map((job) =>
+      toJobSummary(job)
+    );
+
+    const pagedJobs = (pagedJobsResult.rows as CampaignJobRecord[]).map((job) =>
       toJobSummary(job)
     );
 
@@ -483,7 +566,12 @@ Deno.serve(async (req: Request) => {
         },
         summary,
         recent_programs: programs,
-        recent_jobs: jobs,
+        recent_jobs: pagedJobs,
+        jobs_pagination: {
+          total: jobsTotal,
+          limit: jobsLimit,
+          offset: jobsOffset,
+        },
         recent_queue_items: queueItems,
         traces,
       },

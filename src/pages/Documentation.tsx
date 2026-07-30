@@ -465,7 +465,7 @@ export default function Documentation({ publicView = false }: DocumentationProps
       title: 'Crear Programacion',
       method: 'POST',
       path: '/automation-programs',
-      description: 'Registra una programacion para ejecutarse mas adelante. Puede trabajar con datos fijos o quedar lista para recibir items externos ligados a la aplicacion y al programa.',
+      description: 'Registra una programacion para ejecutarse mas adelante. Puede trabajar con datos fijos o quedar lista para recibir items externos ligados a la aplicacion y al programa. La respuesta incluye el program.id, tambien visible y copiable desde la UI (Automatizaciones > Programados / En lote), necesario para encolar items externos. Caso de uso tipico: kind=scheduled, delivery_mode=queued, cron_expression="0 0 * * *" para procesar en una sola corrida diaria todo lo que otro sistema fue encolando durante el dia (por ejemplo, facturas generadas).',
       authentication: 'API Key (x-api-key header)',
       headers: [
         { name: 'x-api-key', type: 'string', required: true, description: 'API key de la aplicacion' },
@@ -779,7 +779,7 @@ export default function Documentation({ publicView = false }: DocumentationProps
       title: 'Disparar Scheduler',
       method: 'POST',
       path: '/automation-scheduler',
-      description: 'Procesa las programaciones vencidas y dispara el envio usando la API publica de notificaciones. Si el programa tiene cron_expression, calcula la siguiente ejecucion y la deja preparada. Cuando la programacion usa cola externa, consume los items pendientes de ese programa.',
+      description: 'Procesa las programaciones vencidas y dispara el envio usando la API publica de notificaciones. Si el programa tiene cron_expression, calcula la siguiente ejecucion y la deja preparada. Cuando la programacion usa cola externa, consume TODOS los items pendientes vencidos de ese programa en la misma corrida (no solo un lote de options.queue_limit), acotado por options.max_drain_items (default 2000) como tope de seguridad. Importante: este endpoint no se dispara solo. Necesita un disparador externo (cron externo tipo Azure Logic App, GitHub Actions con "schedule:", cron-job.org, etc.) que llame periodicamente a este POST con el token configurado; sin eso, los programas con cron_expression no se ejecutan automaticamente aunque queden guardados como "scheduled".',
       authentication: 'Bearer token o x-scheduler-token',
       headers: [
         { name: 'Authorization', type: 'string', required: false, description: 'Bearer <AUTOMATION_SCHEDULER_TOKEN>' },

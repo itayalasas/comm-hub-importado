@@ -217,16 +217,6 @@ export function clearDedicatedFunctionsBaseUrlState(): void {
   localStorage.removeItem(DEDICATED_FUNCTIONS_BASE_URL_STORAGE_KEY);
 }
 
-function shouldLogConfig(): boolean {
-  return typeof window !== 'undefined' && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-}
-
-function maskSecret(value: string): string {
-  if (!value) return '';
-  if (value.length <= 12) return '***';
-  return `${value.slice(0, 6)}...${value.slice(-4)}`;
-}
-
 function trimBaseUrl(value: string): string {
   return (value || '').trim().replace(/\/+$/, '');
 }
@@ -305,31 +295,6 @@ export function buildFunctionsUrl(endpoint: string, baseUrl?: string): string {
     .replace(/^(functions\/v1\/)+/i, '');
 
   return `${resolvedBaseUrl}/${cleanedPath}`;
-}
-
-function formatEnvValue(key: string, value: string): string {
-  if (!value) return '';
-  if (/(KEY|TOKEN|SECRET|ANON|PASSWORD)/i.test(key)) {
-    return maskSecret(value);
-  }
-  return value;
-}
-
-function buildConfigRows(config: EnvConfig) {
-  return Object.entries(config.variables).map(([key, value]) => ({
-    variable: key,
-    value: formatEnvValue(key, value),
-  }));
-}
-
-function logLoadedConfig(source: 'remote' | 'fallback', config: EnvConfig) {
-  if (!shouldLogConfig()) return;
-
-  console.groupCollapsed(`[config] Variables cargadas desde /get-env (${source})`);
-  console.log('project_name:', config.project_name || '(sin nombre)');
-  console.log('updated_at:', config.updated_at);
-  console.table(buildConfigRows(config));
-  console.groupEnd();
 }
 
 function readFallbackEnv(key: string): string {
@@ -541,11 +506,9 @@ class ConfigManager {
         };
 
         this.config = resolvedConfig;
-        logLoadedConfig('remote', resolvedConfig);
       } catch {
         const fallbackConfig = buildFallbackConfig();
         this.config = fallbackConfig;
-        logLoadedConfig('fallback', fallbackConfig);
       }
     })();
 
@@ -709,18 +672,6 @@ export function getRuntimeConfig() {
     authRefreshUrl: snapshot.variables.AUTH_REFRESH_URL || '',
     authLogoutUrl: snapshot.variables.AUTH_LOGOUT_URL || '',
   };
-}
-
-export function logRuntimeConfig(context = 'runtime') {
-  if (!shouldLogConfig()) return;
-
-  const snapshot = configManager.getSnapshot();
-
-  console.group(`[config] Variables al autenticar (${context})`);
-  console.log('project_name:', snapshot.project_name || '(sin nombre)');
-  console.log('updated_at:', snapshot.updated_at);
-  console.table(buildConfigRows(snapshot));
-  console.groupEnd();
 }
 
 export async function resolveAuthLaunchConfig(): Promise<ReturnType<typeof getRuntimeConfig>> {

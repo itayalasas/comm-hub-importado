@@ -183,19 +183,23 @@ function buildNotifyBaseUrl(): string {
 }
 
 function buildNotifyPayload(program: AutomationProgramRecord) {
-  return buildAutomationNotifyPayload(program);
+  const payload = buildAutomationNotifyPayload(program);
+  payload.program_id = program.id;
+  return payload;
 }
 
 function buildQueuedNotifyPayload(
   program: AutomationProgramRecord,
   queueItem: AutomationProgramQueueItemRecord,
 ) {
-  return buildAutomationNotifyPayload(program, {
+  const payload = buildAutomationNotifyPayload(program, {
     recipient_email: queueItem.recipient_email,
     recipient_data: queueItem.recipient_data,
     shared_data: queueItem.shared_data,
     options: queueItem.options,
   });
+  payload.program_id = program.id;
+  return payload;
 }
 
 function parseQueueLimit(options: Record<string, unknown>): number {
@@ -209,6 +213,15 @@ function parseQueueLimit(options: Record<string, unknown>): number {
     return 25;
   }
   return Math.min(Math.floor(parsed), 100);
+}
+
+function parseMaxDrainItems(options: Record<string, unknown>): number {
+  const rawValue = options.max_drain_items ?? 2000;
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 2000;
+  }
+  return Math.min(Math.floor(parsed), 10000);
 }
 
 async function claimDueQueueItems(
@@ -396,61 +409,74 @@ async function dispatchProgram(
 
   if (program.delivery_mode === "queued") {
     const queueLimit = parseQueueLimit(program.options);
-    const queueItems = await claimDueQueueItems(client, program.application_id, program.id, queueLimit);
+    const maxDrainItems = parseMaxDrainItems(program.options);
     const nowIso = new Date().toISOString();
     let lastJobId: string | null = null;
     let sent = 0;
     let failed = 0;
+    let claimed = 0;
     let firstError: string | null = null;
 
-    for (const queueItem of queueItems) {
-      try {
-        const response = await fetch(notifyUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": application.api_key,
-          },
-          body: JSON.stringify(buildQueuedNotifyPayload(program, queueItem)),
-        });
+    // Drena toda la cola vencida en esta corrida (en lotes de queueLimit), acotado
+    // por maxDrainItems para no colgar la invocacion si se acumulo demasiado volumen.
+    while (claimed < maxDrainItems) {
+      const batchLimit = Math.min(queueLimit, maxDrainItems - claimed);
+      const queueItems = await claimDueQueueItems(client, program.application_id, program.id, batchLimit);
+      if (queueItems.length === 0) break;
+      claimed += queueItems.length;
 
-        const body = await response.json().catch(() => ({})) as Record<string, unknown>;
-        if (!response.ok || body?.error || body?.success === false) {
-          const message = String(
-            (body?.error && typeof body.error === "object" && (body.error as { message?: string }).message) ||
-            body?.message ||
-            body?.error ||
-            `notify failed (${response.status})`,
-          );
-          throw new Error(message);
-        }
+      for (const queueItem of queueItems) {
+        try {
+          const response = await fetch(notifyUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": application.api_key,
+            },
+            body: JSON.stringify(buildQueuedNotifyPayload(program, queueItem)),
+          });
 
-        lastJobId = typeof body.job_id === "string" ? body.job_id : null;
-        sent += 1;
-        await updateQueueItemStatus(client, program.application_id, program.id, queueItem.id, "sent", {
-          jobId: lastJobId,
-          timestamp: nowIso,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (!firstError) {
-          firstError = message;
+          const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+          if (!response.ok || body?.error || body?.success === false) {
+            const baseMessage = String(
+              (body?.error && typeof body.error === "object" && (body.error as { message?: string }).message) ||
+              body?.message ||
+              body?.error ||
+              `notify failed (${response.status})`,
+            );
+            const message = body?.detail ? `${baseMessage}: ${body.detail}` : baseMessage;
+            throw new Error(message);
+          }
+
+          lastJobId = typeof body.job_id === "string" ? body.job_id : null;
+          sent += 1;
+          await updateQueueItemStatus(client, program.application_id, program.id, queueItem.id, "sent", {
+            jobId: lastJobId,
+            timestamp: nowIso,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!firstError) {
+            firstError = message;
+          }
+          failed += 1;
+          await updateQueueItemStatus(client, program.application_id, program.id, queueItem.id, "failed", {
+            message,
+            timestamp: nowIso,
+          });
         }
-        failed += 1;
-        await updateQueueItemStatus(client, program.application_id, program.id, queueItem.id, "failed", {
-          message,
-          timestamp: nowIso,
-        });
       }
+
+      if (queueItems.length < batchLimit) break;
     }
 
     return {
       job_id: lastJobId,
-      queue_items: queueItems.length,
+      queue_items: claimed,
       queue_sent: sent,
       queue_failed: failed,
       message: failed > 0
-        ? (firstError || `Queue dispatch failed (${failed}/${queueItems.length})`)
+        ? (firstError || `Queue dispatch failed (${failed}/${claimed})`)
         : undefined,
     };
   }
@@ -466,12 +492,13 @@ async function dispatchProgram(
 
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok || body?.error) {
-    const message = String(
+    const baseMessage = String(
       (body?.error && typeof body.error === "object" && (body.error as { message?: string }).message) ||
       body?.message ||
       body?.error ||
       `notify failed (${response.status})`,
     );
+    const message = body?.detail ? `${baseMessage}: ${body.detail}` : baseMessage;
     throw new Error(message);
   }
 

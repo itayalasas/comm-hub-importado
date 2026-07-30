@@ -8,13 +8,17 @@ import {
   AutomationProgramRecord,
   deleteAutomationProgram,
   loadAutomationPrograms,
+  runAutomationProgram,
   saveAutomationProgram,
   sendAutomationBatch,
 } from '../lib/automationApi';
-import { CheckCircle2, Loader2, Play, Plus, RefreshCw, Trash2, PencilLine, SquarePen, Send, Clock } from 'lucide-react';
+import { CheckCircle2, Check, Copy, ChevronDown, ChevronUp, Loader2, Play, Plus, RefreshCw, Trash2, PencilLine, SquarePen, Send, Clock } from 'lucide-react';
+import { AutomationProgramQueuePanel } from '../components/AutomationProgramQueuePanel';
+import { translateStatus } from '../lib/statusLabels';
 
 type BatchFormState = {
   name: string;
+  delivery_mode: 'static' | 'queued';
   channel: 'email' | 'email_pdf' | 'pdf';
   template_name: string;
   pdf_template_name: string;
@@ -26,6 +30,7 @@ type BatchFormState = {
 
 const emptyForm = (): BatchFormState => ({
   name: '',
+  delivery_mode: 'static',
   channel: 'email_pdf',
   template_name: 'welcome',
   pdf_template_name: 'factura_pdf',
@@ -57,85 +62,140 @@ function formatDate(value: string | null) {
 
 const BatchCard = ({
   program,
+  apiKey,
   onUse,
   onEdit,
   onDelete,
+  onRun,
   running,
 }: {
   program: AutomationProgramRecord;
+  apiKey: string;
   onUse: (program: AutomationProgramRecord) => void;
   onEdit: (program: AutomationProgramRecord) => void;
   onDelete: (program: AutomationProgramRecord) => void;
+  onRun: (program: AutomationProgramRecord) => void;
   running: boolean;
-}) => (
-  <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-4">
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-base font-semibold text-white">{program.name}</h3>
-          <span className="rounded-full border border-slate-700 bg-slate-800/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">
-            {program.channel}
-          </span>
+}) => {
+  const [copiedId, setCopiedId] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
+  const isQueued = program.delivery_mode === 'queued';
+
+  return (
+    <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold text-white">{program.name}</h3>
+            <span className="rounded-full border border-slate-700 bg-slate-800/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+              {program.channel}
+            </span>
+            <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+              isQueued
+                ? 'border-cyan-500/25 bg-cyan-500/10 text-cyan-200'
+                : 'border-slate-700 bg-slate-800/70 text-slate-300'
+            }`}>
+              {isQueued ? 'Cola externa' : 'Datos fijos'}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            {program.recipients_count ?? program.recipients.length} destinatarios · {formatDate(program.updated_at)}
+          </p>
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
+            <span>ID:</span>
+            <code className="truncate rounded bg-slate-950/50 px-1.5 py-0.5 text-slate-300">{program.id}</code>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(program.id);
+                setCopiedId(true);
+                setTimeout(() => setCopiedId(false), 2000);
+              }}
+              className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white"
+            >
+              {copiedId ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+            </button>
+          </div>
         </div>
-        <p className="mt-1 text-xs text-slate-500">
-          {program.recipients_count ?? program.recipients.length} destinatarios · {formatDate(program.updated_at)}
-        </p>
+        <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
+          {translateStatus(program.status)}
+        </span>
       </div>
-      <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
-        {program.status}
-      </span>
-    </div>
 
-    <div className="mt-4 flex flex-wrap gap-2">
-      <button
-        onClick={() => onUse(program)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-400"
-      >
-        <Play className="h-3.5 w-3.5" />
-        Enviar ahora
-      </button>
-      <button
-        onClick={() => onEdit(program)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
-      >
-        <PencilLine className="h-3.5 w-3.5" />
-        Editar
-      </button>
-      <button
-        onClick={() => onDelete(program)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/20"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-        Cancelar
-      </button>
-    </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {isQueued ? (
+          <button
+            onClick={() => onRun(program)}
+            disabled={running}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+            Procesar cola ahora
+          </button>
+        ) : (
+          <button
+            onClick={() => onUse(program)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-400"
+          >
+            <Play className="h-3.5 w-3.5" />
+            Enviar ahora
+          </button>
+        )}
+        <button
+          onClick={() => onEdit(program)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+        >
+          <PencilLine className="h-3.5 w-3.5" />
+          Editar
+        </button>
+        <button
+          onClick={() => onDelete(program)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/20"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Cancelar
+        </button>
+        {isQueued && (
+          <button
+            onClick={() => setShowQueue((current) => !current)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-500/20"
+          >
+            {showQueue ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            {showQueue ? 'Ocultar cola' : 'Ver cola'}
+          </button>
+        )}
+      </div>
 
-    <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-      <div className="rounded-xl border border-slate-700/70 bg-slate-950/40 p-3">
-        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Ejecuciones</p>
-        <p className="mt-1 font-semibold text-white">{program.run_count ?? 0}</p>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+        <div className="rounded-xl border border-slate-700/70 bg-slate-950/40 p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Ejecuciones</p>
+          <p className="mt-1 font-semibold text-white">{program.run_count ?? 0}</p>
+        </div>
+        <div className="rounded-xl border border-slate-700/70 bg-slate-950/40 p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Ultimo job</p>
+          <p className="mt-1 truncate font-semibold text-white">{program.last_job_id || 'Sin job'}</p>
+        </div>
+        <div className="rounded-xl border border-slate-700/70 bg-slate-950/40 p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Ultima ejecucion</p>
+          <p className="mt-1 font-semibold text-white">{formatDate(program.last_run_at)}</p>
+        </div>
+        <div className="rounded-xl border border-slate-700/70 bg-slate-950/40 p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Error</p>
+          <p className="mt-1 truncate font-semibold text-white">{program.last_error || 'Ninguno'}</p>
+        </div>
       </div>
-      <div className="rounded-xl border border-slate-700/70 bg-slate-950/40 p-3">
-        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Ultimo job</p>
-        <p className="mt-1 truncate font-semibold text-white">{program.last_job_id || 'Sin job'}</p>
-      </div>
-      <div className="rounded-xl border border-slate-700/70 bg-slate-950/40 p-3">
-        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Ultima ejecucion</p>
-        <p className="mt-1 font-semibold text-white">{formatDate(program.last_run_at)}</p>
-      </div>
-      <div className="rounded-xl border border-slate-700/70 bg-slate-950/40 p-3">
-        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Error</p>
-        <p className="mt-1 truncate font-semibold text-white">{program.last_error || 'Ninguno'}</p>
-      </div>
-    </div>
 
-    {running && (
-      <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
-        Procesando...
-      </div>
-    )}
-  </div>
-);
+      {running && (
+        <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+          Procesando...
+        </div>
+      )}
+
+      {isQueued && showQueue && (
+        <AutomationProgramQueuePanel apiKey={apiKey} program={program} />
+      )}
+    </div>
+  );
+};
 
 export const AutomatizacionesBatch = () => {
   const toast = useToast();
@@ -147,6 +207,7 @@ export const AutomatizacionesBatch = () => {
   const [loadingPrograms, setLoadingPrograms] = useState(false);
   const [sending, setSending] = useState(false);
   const [deletingProgramId, setDeletingProgramId] = useState<string | null>(null);
+  const [runningProgramId, setRunningProgramId] = useState<string | null>(null);
   const [lastJobId, setLastJobId] = useState<string | null>(null);
 
   const selectedApplicationLabel = useMemo(() => selectedApplication?.name || 'Selecciona una aplicacion', [selectedApplication]);
@@ -193,6 +254,7 @@ export const AutomatizacionesBatch = () => {
     setEditingId(program.id);
     setForm({
       name: program.name || '',
+      delivery_mode: program.delivery_mode || 'static',
       channel: program.channel as BatchFormState['channel'],
       template_name: program.template_name || '',
       pdf_template_name: program.pdf_template_name || '',
@@ -218,7 +280,7 @@ export const AutomatizacionesBatch = () => {
       setSaving(true);
       const apiKey = requireApplicationApiKey();
       const recipients = parseJson<AutomationProgramRecord['recipients']>(form.recipients, []);
-      if (!Array.isArray(recipients) || recipients.length === 0) {
+      if (form.delivery_mode === 'static' && (!Array.isArray(recipients) || recipients.length === 0)) {
         throw new Error('La lista de destinatarios no puede estar vacia');
       }
 
@@ -232,6 +294,7 @@ export const AutomatizacionesBatch = () => {
         name: form.name.trim(),
         kind: 'batch',
         status: (currentProgram?.status ?? 'active') as AutomationProgramRecord['status'],
+        delivery_mode: form.delivery_mode,
         channel: form.channel,
         template_name: form.channel === 'email' || form.channel === 'email_pdf' ? form.template_name.trim() : null,
         pdf_template_name: form.channel === 'email_pdf' || form.channel === 'pdf' ? form.pdf_template_name.trim() : null,
@@ -260,6 +323,11 @@ export const AutomatizacionesBatch = () => {
   const sendNow = async () => {
     if (!selectedApplication) {
       toast.error('Selecciona una aplicacion primero');
+      return;
+    }
+
+    if (form.delivery_mode === 'queued') {
+      toast.error('Este lote usa cola externa; usa "Procesar cola ahora" sobre el lote guardado');
       return;
     }
 
@@ -295,6 +363,20 @@ export const AutomatizacionesBatch = () => {
       toast.error(error instanceof Error ? error.message : 'No se pudo enviar el lote');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleRunNow = async (program: AutomationProgramRecord) => {
+    try {
+      setRunningProgramId(program.id);
+      const apiKey = requireApplicationApiKey();
+      const result = await runAutomationProgram(apiKey, program.id);
+      toast.success(`Job creado: ${result.job_id || 'sin id'}`);
+      await refreshPrograms();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo procesar la cola');
+    } finally {
+      setRunningProgramId(null);
     }
   };
 
@@ -376,6 +458,21 @@ export const AutomatizacionesBatch = () => {
                 </select>
               </label>
 
+              <label className="space-y-2 sm:col-span-2">
+                <span className="text-sm font-medium text-slate-300">Modo de entrega</span>
+                <select
+                  value={form.delivery_mode}
+                  onChange={(e) => setForm((current) => ({ ...current, delivery_mode: e.target.value as BatchFormState['delivery_mode'] }))}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition-colors focus:border-cyan-500/60"
+                >
+                  <option value="static">Datos fijos</option>
+                  <option value="queued">Cola externa</option>
+                </select>
+                <p className="text-xs text-slate-500">
+                  En cola externa, el lote espera items que se envian luego desde otro sistema identificando aplicacion y programacion; usa "Procesar cola ahora" para dispararlo.
+                </p>
+              </label>
+
               <label className="space-y-2">
                 <span className="text-sm font-medium text-slate-300">Template email</span>
                 <input
@@ -414,6 +511,9 @@ export const AutomatizacionesBatch = () => {
                   rows={7}
                   className="w-full rounded-2xl border border-slate-700 bg-slate-950/60 px-4 py-3 font-mono text-xs text-slate-100 outline-none transition-colors focus:border-cyan-500/60"
                 />
+                <p className="text-xs text-slate-500">
+                  En modo cola externa este campo puede quedar vacio si los datos llegan mas tarde desde otro sistema.
+                </p>
               </label>
 
               <label className="space-y-2 sm:col-span-2">
@@ -438,14 +538,16 @@ export const AutomatizacionesBatch = () => {
             </div>
 
             <div className="mt-5 flex flex-wrap gap-3">
-              <button
-                onClick={() => void sendNow()}
-                disabled={sending || !selectedApplicationApiKey}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                Enviar ahora
-              </button>
+              {form.delivery_mode === 'static' && (
+                <button
+                  onClick={() => void sendNow()}
+                  disabled={sending || !selectedApplicationApiKey}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Enviar ahora
+                </button>
+              )}
               <button
                 onClick={() => void persistProgram()}
                 disabled={saving || !selectedApplicationApiKey}
@@ -506,11 +608,13 @@ export const AutomatizacionesBatch = () => {
                     <BatchCard
                       key={program.id}
                       program={program}
+                      apiKey={selectedApplicationApiKey}
                       onUse={() => {
                         setEditingId(program.id);
                         setForm((current) => ({
                           ...current,
                           name: program.name,
+                          delivery_mode: program.delivery_mode || 'static',
                           channel: program.channel as BatchFormState['channel'],
                           template_name: program.template_name || '',
                           pdf_template_name: program.pdf_template_name || '',
@@ -522,7 +626,8 @@ export const AutomatizacionesBatch = () => {
                       }}
                       onEdit={populateForm}
                       onDelete={(item) => void handleDelete(item)}
-                      running={deletingProgramId === program.id}
+                      onRun={(item) => void handleRunNow(item)}
+                      running={deletingProgramId === program.id || runningProgramId === program.id}
                     />
                   ))
                 )}

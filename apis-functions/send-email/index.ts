@@ -127,6 +127,7 @@ export default async function handler(req: Request) {
       _pdf_attachment,
       _pdf_info,
       _existing_log_id,
+      program_id,
     } = requestData;
 
     let finalPdfBase64 = _pdf_attachment?.content || pdf_base64;
@@ -366,6 +367,7 @@ export default async function handler(req: Request) {
         INSERT INTO email_logs (
           application_id,
           template_id,
+          program_id,
           recipient_email,
           subject,
           status,
@@ -373,12 +375,13 @@ export default async function handler(req: Request) {
           pdf_generated,
           metadata
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
         RETURNING *
         `,
         [
           application.id,
           template.id,
+          program_id ?? null,
           recipient_email,
           emailSubject,
           'pending',

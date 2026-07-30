@@ -27,7 +27,6 @@ import {
   GraduationCap,
   Building2,
   Rocket,
-  Code2,
   Webhook,
   KeyRound,
   Terminal,
@@ -38,12 +37,12 @@ import {
   Package,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { sortPlansByOrder, usePlans, type Plan } from '../hooks/usePlans';
 import { resolveAuthLaunchConfig } from '../lib/config';
 import { buildLegacyRegisterUrl } from '../lib/subscriptionCheckout';
 import { Seo } from '../components/Seo';
-import { WebChatFloatingButton, WebChatSnippetCard, WebChatWidgetPanel } from '../components/WebChatWidget';
+import { WebChatFloatingButton, WebChatWidgetPanel } from '../components/WebChatWidget';
 
 /* ─── Data ─────────────────────────────────────────────────────── */
 const FEATURES = [
@@ -64,46 +63,6 @@ const colorMap: Record<string, { bg: string; border: string; text: string; glow:
   blue: { bg: 'bg-blue-500/10', border: 'border-blue-500/20', text: 'text-blue-400', glow: 'group-hover:shadow-blue-500/20' },
   teal: { bg: 'bg-teal-500/10', border: 'border-teal-500/20', text: 'text-teal-400', glow: 'group-hover:shadow-teal-500/20' },
 };
-
-/* ─── All-in-one platform chips ─────────────────────────────────── */
-const PLATFORM_CHIPS = [
-  'Email Transaccional',
-  'Campañas de Marketing',
-  'SMTP',
-  'API REST',
-  'Generación de PDF',
-  'Plantillas HTML',
-  'Automatizaciones',
-  'Estadísticas en tiempo real',
-];
-
-/* ─── Core capabilities ─────────────────────────────────────────── */
-const CAPABILITIES = [
-  {
-    icon: Mail,
-    title: 'Correos transaccionales',
-    desc: 'Confirma cuentas, recupera contraseñas, envía facturas y notificaciones generadas por tu aplicación.',
-    color: 'cyan' as const,
-  },
-  {
-    icon: TrendingUp,
-    title: 'Campañas de marketing',
-    desc: 'Diseña campañas profesionales, segmenta tus contactos y mide aperturas, clics y conversiones.',
-    color: 'blue' as const,
-  },
-  {
-    icon: FileText,
-    title: 'Generación de PDF',
-    desc: 'Genera contratos, facturas, reportes y certificados directamente desde HTML mediante una API sencilla.',
-    color: 'teal' as const,
-  },
-  {
-    icon: Code2,
-    title: 'API para desarrolladores',
-    desc: 'Integra en minutos con REST API o SMTP, con ejemplos para Node.js, Java, .NET, PHP y Python.',
-    color: 'cyan' as const,
-  },
-];
 
 /* ─── Comparison table ──────────────────────────────────────────── */
 const COMPARISON_ROWS = [
@@ -642,8 +601,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
       try {
         await resolveAuthLaunchConfig();
         window.location.href = buildRegisterUrl(plan.id);
-      } catch (error) {
-        console.error(error);
+      } catch {
         setIsRedirecting(false);
       }
     })();
@@ -984,10 +942,10 @@ export const Home = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <div className="relative">
+              <Link to="/" className="relative">
                 <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-25" />
                 <img src="/logo.svg" alt="SendCraft" className="h-8 relative" />
-              </div>
+              </Link>
             </div>
             <div className="hidden md:flex items-center space-x-8 text-sm text-slate-400">
               <a href="#platform" className="hover:text-white transition-colors hover:text-cyan-300">Plataforma</a>
@@ -1096,59 +1054,6 @@ export const Home = () => {
 
       
 
-      {/* ── ALL-IN-ONE PLATFORM ───────────────────────────────────── */}
-      <section id="platform" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-5xl mx-auto text-center">
-          <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Todo integrado</div>
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 text-balance">
-            ¿Por qué usar varias plataformas cuando puedes tener una sola?
-          </h2>
-          <p className="text-slate-400 max-w-2xl mx-auto mb-12 leading-relaxed">
-            Con SendCraft reemplazas múltiples servicios y simplificas toda la infraestructura de comunicaciones de tu aplicación.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            {PLATFORM_CHIPS.map((chip) => (
-              <div
-                key={chip}
-                className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-sm text-slate-300 hover:border-cyan-500/30 hover:bg-cyan-500/5 transition-all"
-              >
-                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center">
-                  <Check className="w-2.5 h-2.5 text-cyan-400" />
-                </span>
-                {chip}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CAPABILITIES ──────────────────────────────────────────── */}
-      <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8 bg-white/[0.015]">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">¿Qué puedes hacer?</div>
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 text-balance">
-              Todo lo que necesitas para comunicarte con tus clientes
-            </h2>
-            <p className="text-slate-400 max-w-2xl mx-auto">Cuatro capacidades centrales, una sola integración.</p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {CAPABILITIES.map(({ icon: Icon, title, desc, color }) => {
-              const c = colorMap[color];
-              return (
-                <div key={title} className="card-hover group border border-white/6 rounded-2xl p-6 bg-white/[0.02] hover:border-cyan-500/25 hover:bg-white/[0.04] transition-all">
-                  <div className={`w-12 h-12 ${c.bg} border ${c.border} rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
-                    <Icon className={`w-6 h-6 ${c.text}`} />
-                  </div>
-                  <h3 className="text-base font-bold text-white mb-2">{title}</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
       {/* ── WHY SENDCRAFT (COMPARISON) ────────────────────────────── */}
       <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
@@ -1160,28 +1065,38 @@ export const Home = () => {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/8 overflow-hidden bg-white/[0.02]">
-            <div className="grid grid-cols-2">
-              <div className="px-6 py-4 border-b border-white/8 text-slate-400 text-sm font-semibold">Otros proveedores</div>
-              <div className="px-6 py-4 border-b border-l border-cyan-500/20 bg-cyan-500/5 text-cyan-300 text-sm font-bold flex items-center gap-2">
-                <img src="/logo.svg" alt="SendCraft" className="h-4" />
-                SendCraft
-              </div>
-            </div>
-            {COMPARISON_ROWS.map(({ others, sendcraft }, i) => (
-              <div key={others} className={`grid grid-cols-2 ${i !== COMPARISON_ROWS.length - 1 ? 'border-b border-white/6' : ''}`}>
-                <div className="px-6 py-4 flex items-center gap-2.5 text-sm text-slate-500">
-                  <X className="w-4 h-4 text-slate-600 flex-shrink-0" />
-                  {others}
+          <div className="relative">
+            <div className="absolute -inset-8 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-cyan-500/10 rounded-[2rem] blur-3xl" />
+            <div className="relative rounded-2xl border border-white/10 overflow-hidden bg-white/[0.03] shadow-2xl shadow-cyan-500/5">
+              <div className="grid grid-cols-2">
+                <div className="px-6 py-5 border-b border-white/8 text-slate-500 text-sm font-semibold flex items-center">
+                  Otros proveedores
                 </div>
-                <div className="px-6 py-4 border-l border-cyan-500/15 bg-cyan-500/[0.04] flex items-center gap-2.5 text-sm text-white font-medium">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
-                    <Check className="w-3 h-3 text-emerald-400" />
+                <div className="px-6 py-5 border-b border-l border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center gap-2.5">
+                  <img src="/logo.svg" alt="SendCraft" className="h-8" />
+                  <span className="ml-auto hidden sm:inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
+                    <Sparkles className="h-2.5 w-2.5" />
+                    Recomendado
                   </span>
-                  {sendcraft}
                 </div>
               </div>
-            ))}
+              {COMPARISON_ROWS.map(({ others, sendcraft }, i) => (
+                <div key={others} className={`group grid grid-cols-2 ${i !== COMPARISON_ROWS.length - 1 ? 'border-b border-white/6' : ''}`}>
+                  <div className="flex items-center gap-3 px-6 py-4 text-sm text-slate-500">
+                    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5">
+                      <X className="h-3 w-3 text-slate-600" />
+                    </span>
+                    {others}
+                  </div>
+                  <div className="flex items-center gap-3 border-l border-cyan-500/15 bg-cyan-500/[0.03] px-6 py-4 text-sm font-medium text-white transition-colors group-hover:bg-cyan-500/[0.07]">
+                    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border border-emerald-500/25 bg-emerald-500/15">
+                      <Check className="h-3 w-3 text-emerald-400" />
+                    </span>
+                    {sendcraft}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -1204,8 +1119,8 @@ export const Home = () => {
             </div>
 
             {STEPS.map(({ step, title, desc, icon: Icon, visual }, i) => (
-              <div key={step} className={`card-hover group slide-up delay-${(i + 1) * 200}`}>
-                <div className="bg-white/[0.03] border border-white/8 rounded-2xl p-6 hover:border-cyan-500/30 hover:bg-white/[0.05] transition-all group-hover:shadow-xl group-hover:shadow-cyan-500/5">
+              <div key={step} className={`h-full card-hover group slide-up delay-${(i + 1) * 200}`}>
+                <div className="h-full flex flex-col bg-white/[0.03] border border-white/8 rounded-2xl p-6 hover:border-cyan-500/30 hover:bg-white/[0.05] transition-all group-hover:shadow-xl group-hover:shadow-cyan-500/5">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/25 flex items-center justify-center">
                       <Icon className="w-5 h-5 text-cyan-400" />
@@ -1433,7 +1348,7 @@ export const Home = () => {
       </section>
 
       {/* ── BENEFITS / REPLACE MULTIPLE SERVICES ──────────────────── */}
-      <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
+      <section id="platform" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
           <div>
             <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Beneficios</div>
@@ -1502,8 +1417,8 @@ export const Home = () => {
               {
                 icon: Mail,
                 title: 'Email',
-                value: 'soporte@sendcraft.app',
-                href: 'mailto:soporte@sendcraft.app',
+                value: 'administrador@sendcraft.net',
+                href: 'mailto:administrador@sendcraft.net',
                 desc: 'Respondemos en menos de 24 h',
               },
               {
@@ -1546,21 +1461,7 @@ export const Home = () => {
         </div>
       </section>
 
-      <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-14">
-            <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Snippet del Widget</div>
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Integra el chat en tu sitio con un solo snippet
-            </h2>
-            <p className="text-slate-400 max-w-2xl mx-auto">
-              La vista previa muestra el widget compacto y el snippet completo se copia con un clic, sin exponer URLs sensibles en pantalla.
-            </p>
-          </div>
-
-          <WebChatSnippetCard onOpenWidget={() => setSupportOpen(true)} />
-        </div>
-      </section>
+     
 
       <section id="pricing" className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
@@ -1648,10 +1549,10 @@ export const Home = () => {
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-2 gap-10 pb-12 border-b border-white/6">
             <div className="max-w-sm">
-              <div className="relative inline-block mb-4">
+              <Link to="/" className="relative inline-block mb-4">
                 <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-15" />
                 <img src="/logo.svg" alt="SendCraft" className="h-7 relative" />
-              </div>
+              </Link>
               <p className="text-slate-400 text-sm leading-relaxed">
                 La plataforma todo en uno para las comunicaciones de tu empresa. Emails, PDFs, SMTP y automatizaciones desde una única API.
               </p>

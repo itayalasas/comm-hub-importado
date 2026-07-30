@@ -186,12 +186,6 @@ export async function startManagedSubscriptionCheckout({
     app_user_id: appUserId,
   };
 
-  console.log('[subscription-start-checkout] request', {
-    url,
-    body,
-    requestedEmail: email ?? null,
-  });
-
   const response = await fetchJsonWithTimeout(url, {
     method: 'POST',
     headers: {

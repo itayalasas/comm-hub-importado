@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Shield, Check, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 export const Login = () => {
   const { login, register } = useAuth();
@@ -13,8 +13,7 @@ export const Login = () => {
     setPendingAction('login');
     try {
       await login();
-    } catch (error) {
-      console.error(error);
+    } catch {
       setPendingAction(null);
     }
   };
@@ -24,8 +23,7 @@ export const Login = () => {
     setPendingAction('register');
     try {
       await register();
-    } catch (error) {
-      console.error(error);
+    } catch {
       setPendingAction(null);
     }
   };
@@ -37,10 +35,10 @@ export const Login = () => {
 
         <div className="relative z-10">
           <div className="flex items-center space-x-3 mb-16">
-            <div className="relative">
+            <Link to="/" className="relative">
               <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-30"></div>
               <img src="/logo.svg" alt="SendCraft" className="h-10 relative" />
-            </div>
+            </Link>
           </div>
 
           <div>

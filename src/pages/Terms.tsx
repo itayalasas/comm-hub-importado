@@ -4,7 +4,7 @@ import { Seo } from '../components/Seo';
 
 const LAST_UPDATED = '5 de mayo de 2026';
 const COMPANY = 'SendCraft';
-const CONTACT_EMAIL = 'legal@sendcraft.app';
+const CONTACT_EMAIL = 'administrador@sendcraft.net';
 
 export const Terms = () => {
   const navigate = useNavigate();

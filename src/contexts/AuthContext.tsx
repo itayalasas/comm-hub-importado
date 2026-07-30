@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import {
   configManager,
   getLocalAuthLaunchConfig,
-  logRuntimeConfig,
   resolveAuthLaunchConfig,
 } from '../lib/config';
 import { authClient } from '../lib/auth';
@@ -988,7 +987,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       updateAuthProgress('authenticating', 'Procesando tu autenticación...');
       await configManager.loadConfig();
-      logRuntimeConfig('login');
 
       const finalizeLogin = (
         resolvedUser: User,

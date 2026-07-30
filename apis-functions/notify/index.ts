@@ -22,6 +22,7 @@ interface Recipient {
 
 interface NotifyRequest {
   type: "email" | "email_pdf" | "pdf";
+  program_id?: string;
   template_name?: string;
   attachment?: {
     pdf_template_name: string;
@@ -98,6 +99,7 @@ async function dispatchEmail(
   recipient: Recipient,
   templateName: string,
   sharedData: Record<string, unknown>,
+  programId: string | undefined,
 ): Promise<RecipientResult> {
   try {
     const data = mergeData(sharedData, recipient.data);
@@ -112,6 +114,7 @@ async function dispatchEmail(
         recipient_email: recipient.email,
         template_name: templateName,
         data,
+        program_id: programId,
       }),
     });
 
@@ -139,6 +142,7 @@ async function dispatchEmailWithPdf(
   pdfTemplateName: string,
   pdfFilename: string | undefined,
   sharedData: Record<string, unknown>,
+  programId: string | undefined,
 ): Promise<RecipientResult> {
   try {
     const mergedData = mergeData(sharedData, recipient.data);
@@ -151,6 +155,7 @@ async function dispatchEmailWithPdf(
       },
       body: JSON.stringify({
         recipient_email: recipient.email,
+        program_id: programId,
         email: {
           template_name: templateName,
           data: mergedData,
@@ -191,6 +196,7 @@ async function dispatchPdf(
   pdfTemplateName: string,
   pdfFilename: string | undefined,
   sharedData: Record<string, unknown>,
+  programId: string | undefined,
 ): Promise<RecipientResult> {
   try {
     const data = mergeData(sharedData, recipient.data);
@@ -206,6 +212,7 @@ async function dispatchPdf(
         filename: pdfFilename,
         data,
         recipient_email: recipient.email,
+        program_id: programId,
       }),
     });
 
@@ -258,6 +265,7 @@ async function getJobById(jobId: string, applicationId: string) {
       SELECT
         id,
         type,
+        program_id,
         status,
         total,
         processed,
@@ -293,6 +301,7 @@ async function createCampaignJob(
       INSERT INTO campaign_jobs (
         application_id,
         type,
+        program_id,
         template_name,
         pdf_template_name,
         pdf_filename_pattern,
@@ -308,10 +317,11 @@ async function createCampaignJob(
         $3,
         $4,
         $5,
-        $6::jsonb,
+        $6,
         $7::jsonb,
-        $8,
-        $9::jsonb,
+        $8::jsonb,
+        $9,
+        $10::jsonb,
         'pending'
       )
       RETURNING id
@@ -319,6 +329,7 @@ async function createCampaignJob(
       [
         applicationId,
         payload.type,
+        payload.program_id ?? null,
         payload.template_name ?? null,
         payload.attachment?.pdf_template_name ?? null,
         payload.attachment?.filename ?? null,
@@ -413,6 +424,7 @@ async function processJob(
                 recipient,
                 payload.template_name!,
                 sharedData,
+                payload.program_id,
               ),
             maxRetries,
             retryDelayMs,
@@ -430,6 +442,7 @@ async function processJob(
                 payload.attachment!.pdf_template_name,
                 payload.attachment?.filename,
                 sharedData,
+                payload.program_id,
               ),
             maxRetries,
             retryDelayMs,
@@ -445,6 +458,7 @@ async function processJob(
               payload.attachment!.pdf_template_name,
               payload.attachment?.filename,
               sharedData,
+              payload.program_id,
             ),
           maxRetries,
           retryDelayMs,
@@ -479,7 +493,7 @@ async function processJob(
   }
 
   await updateCampaignJob(jobId, {
-    status: "done",
+    status: sent === 0 && failed > 0 ? "failed" : "done",
     processed: allResults.length,
     sent,
     failed,
@@ -580,9 +594,14 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Failed to create job" }, 500);
     }
 
-    EdgeRuntime.waitUntil(
-      processJob(job.id, payload, apiKey, functionsBaseUrl),
-    );
+    const backgroundProcessing = processJob(job.id, payload, apiKey, functionsBaseUrl).catch((err) => {
+      console.error(`processJob failed for job ${job.id}:`, err);
+    });
+
+    const maybeEdgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+    if (maybeEdgeRuntime?.waitUntil) {
+      maybeEdgeRuntime.waitUntil(backgroundProcessing);
+    }
 
     return json({
       job_id: job.id,

@@ -104,8 +104,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
       try {
         await resolveAuthLaunchConfig();
         window.location.href = buildRegisterUrl(plan.id);
-      } catch (error) {
-        console.error(error);
+      } catch {
         setIsRedirecting(false);
       }
     })();

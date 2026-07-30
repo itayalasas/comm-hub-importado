@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Building2, Check, FileText, Loader2, Mail, Shield, Star, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PricingPlansSection } from '../components/PricingPlansSection';
@@ -37,8 +37,7 @@ export const Landing = () => {
     setPendingAction('login');
     try {
       await login();
-    } catch (error) {
-      console.error(error);
+    } catch {
       setPendingAction(null);
     }
   };
@@ -47,8 +46,7 @@ export const Landing = () => {
     setPendingAction('register');
     try {
       await register();
-    } catch (error) {
-      console.error(error);
+    } catch {
       setPendingAction(null);
     }
   };
@@ -89,10 +87,10 @@ export const Landing = () => {
           </div>
 
           <div className="relative z-10 slide-1">
-            <div className="relative inline-flex">
+            <Link to="/" className="relative inline-flex">
               <div className="absolute inset-0 bg-cyan-500 blur-xl opacity-30" />
               <img src="/logo.svg" alt="SendCraft" className="h-9 sm:h-10 relative" />
-            </div>
+            </Link>
           </div>
 
           <div className="relative z-10">

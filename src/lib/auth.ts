@@ -5,10 +5,6 @@ import { buildFunctionsUrl, getRuntimeConfig } from './config';
 
 let _accessToken: string | null = null;
 
-function shouldLogAuth(): boolean {
-  return typeof window !== 'undefined' && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-}
-
 function resolveBaseUrl(baseUrl: string): string {
   const direct = (baseUrl || '').trim().replace(/\/+$/, '');
   if (direct) return direct;
@@ -24,12 +20,6 @@ function resolveBaseUrl(baseUrl: string): string {
 function buildAuthEndpoint(baseUrl: string, endpoint: string): string {
   const resolvedBaseUrl = resolveBaseUrl(baseUrl);
   if (!resolvedBaseUrl) {
-      if (shouldLogAuth()) {
-        console.error(`[auth] Missing base URL for ${endpoint}`, {
-          baseUrl,
-          runtimeBaseUrl: getRuntimeConfig().authUrl || getRuntimeConfig().publicFunctionsBaseUrlRaw,
-        });
-      }
     throw new Error(`Missing base URL for ${endpoint}`);
   }
 

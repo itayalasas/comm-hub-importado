@@ -208,19 +208,23 @@ function buildProgramSummary(
 }
 
 function buildNotifyPayload(program: AutomationProgramRecord) {
-  return buildAutomationNotifyPayload(program);
+  const payload = buildAutomationNotifyPayload(program);
+  payload.program_id = program.id;
+  return payload;
 }
 
 function buildQueuedNotifyPayload(
   program: AutomationProgramRecord,
   queueItem: AutomationProgramQueueItemRecord,
 ) {
-  return buildAutomationNotifyPayload(program, {
+  const payload = buildAutomationNotifyPayload(program, {
     recipient_email: queueItem.recipient_email,
     recipient_data: queueItem.recipient_data,
     shared_data: queueItem.shared_data,
     options: queueItem.options,
   });
+  payload.program_id = program.id;
+  return payload;
 }
 
 function getRouteParts(pathname: string): string[] {
@@ -438,6 +442,15 @@ function parseQueueLimit(options: Record<string, unknown>): number {
     return 25;
   }
   return Math.min(Math.floor(parsed), 100);
+}
+
+function parseMaxDrainItems(options: Record<string, unknown>): number {
+  const rawValue = options.max_drain_items ?? 2000;
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 2000;
+  }
+  return Math.min(Math.floor(parsed), 10000);
 }
 
 function normalizeQueueItemInput(input: QueueItemInput) {
@@ -684,11 +697,12 @@ async function runStaticProgram(
   const body = await response.json().catch(() => ({}));
 
   if (!response.ok || body?.error || body?.success === false) {
-    const message =
+    const baseMessage =
       body?.error?.message ||
       body?.error ||
       body?.message ||
       `notify failed (${response.status})`;
+    const message = body?.detail ? `${baseMessage}: ${body.detail}` : baseMessage;
     const isRecurring = program.kind === "scheduled" && !!program.cron_expression;
     const failedStatus: ProgramStatus =
       program.status === "paused"
@@ -794,7 +808,7 @@ async function runQueuedProgram(
     : `${notifyBaseUrl}/notify`;
 
   const queueLimit = parseQueueLimit(program.options);
-  const queueItems = await claimDueQueueItems(client, applicationId, program.id, queueLimit);
+  const maxDrainItems = parseMaxDrainItems(program.options);
   const nowIso = new Date().toISOString();
   const isRecurring = program.kind === "scheduled" && !!program.cron_expression;
   const nextRunAt = program.status === "paused"
@@ -819,81 +833,94 @@ async function runQueuedProgram(
 
   let sent = 0;
   let failed = 0;
+  let claimed = 0;
   let lastJobId: string | null = null;
   let firstError: string | null = null;
 
-  for (const queueItem of queueItems) {
-    try {
-      const response = await fetch(notifyUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-        },
-        body: JSON.stringify(buildQueuedNotifyPayload(program, queueItem)),
-      });
+  // Drena toda la cola vencida en esta corrida (en lotes de queueLimit), no solo un lote,
+  // acotado por maxDrainItems para no colgar la invocacion si se acumulo demasiado volumen.
+  while (claimed < maxDrainItems) {
+    const batchLimit = Math.min(queueLimit, maxDrainItems - claimed);
+    const queueItems = await claimDueQueueItems(client, applicationId, program.id, batchLimit);
+    if (queueItems.length === 0) break;
+    claimed += queueItems.length;
 
-      const body = await response.json().catch(() => ({})) as Record<string, unknown>;
-      if (!response.ok || body?.error || body?.success === false) {
-        const message = String(
-          (body?.error && typeof body.error === "object" && (body.error as { message?: string }).message) ||
-          body?.message ||
-          body?.error ||
-          `notify failed (${response.status})`,
+    for (const queueItem of queueItems) {
+      try {
+        const response = await fetch(notifyUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+          },
+          body: JSON.stringify(buildQueuedNotifyPayload(program, queueItem)),
+        });
+
+        const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+        if (!response.ok || body?.error || body?.success === false) {
+          const baseMessage = String(
+            (body?.error && typeof body.error === "object" && (body.error as { message?: string }).message) ||
+            body?.message ||
+            body?.error ||
+            `notify failed (${response.status})`,
+          );
+          const message = body?.detail ? `${baseMessage}: ${body.detail}` : baseMessage;
+          throw new Error(message);
+        }
+
+        lastJobId = typeof body.job_id === "string" ? body.job_id : null;
+        sent += 1;
+        items.push({
+          queue_item_id: queueItem.id,
+          recipient_email: queueItem.recipient_email,
+          status: "sent",
+          job_id: lastJobId,
+        });
+
+        await client.queryObject(
+          `
+          UPDATE automation_program_queue_items
+          SET status = 'sent',
+              sent_at = $1,
+              last_job_id = $2,
+              last_error = NULL,
+              updated_at = $3
+          WHERE id = $4
+            AND application_id = $5
+            AND program_id = $6
+          `,
+          [nowIso, lastJobId, nowIso, queueItem.id, applicationId, program.id],
         );
-        throw new Error(message);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!firstError) {
+          firstError = message;
+        }
+        failed += 1;
+        items.push({
+          queue_item_id: queueItem.id,
+          recipient_email: queueItem.recipient_email,
+          status: "failed",
+          job_id: null,
+          message,
+        });
+
+        await client.queryObject(
+          `
+          UPDATE automation_program_queue_items
+          SET status = 'failed',
+              last_error = $1,
+              updated_at = $2
+          WHERE id = $3
+            AND application_id = $4
+            AND program_id = $5
+          `,
+          [message, nowIso, queueItem.id, applicationId, program.id],
+        );
       }
-
-      lastJobId = typeof body.job_id === "string" ? body.job_id : null;
-      sent += 1;
-      items.push({
-        queue_item_id: queueItem.id,
-        recipient_email: queueItem.recipient_email,
-        status: "sent",
-        job_id: lastJobId,
-      });
-
-      await client.queryObject(
-        `
-        UPDATE automation_program_queue_items
-        SET status = 'sent',
-            sent_at = $1,
-            last_job_id = $2,
-            last_error = NULL,
-            updated_at = $3
-        WHERE id = $4
-          AND application_id = $5
-          AND program_id = $6
-        `,
-        [nowIso, lastJobId, nowIso, queueItem.id, applicationId, program.id],
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!firstError) {
-        firstError = message;
-      }
-      failed += 1;
-      items.push({
-        queue_item_id: queueItem.id,
-        recipient_email: queueItem.recipient_email,
-        status: "failed",
-        job_id: null,
-        message,
-      });
-
-      await client.queryObject(
-        `
-        UPDATE automation_program_queue_items
-        SET status = 'failed',
-            last_error = $1,
-            updated_at = $2
-        WHERE id = $3
-          AND application_id = $4
-          AND program_id = $5
-        `,
-        [message, nowIso, queueItem.id, applicationId, program.id],
-      );
     }
+
+    if (queueItems.length < batchLimit) break;
   }
 
   const queueMessage = failed > 0
@@ -929,7 +956,7 @@ async function runQueuedProgram(
   return {
     job_id: lastJobId,
     program: updateResult.rows[0] as AutomationProgramRecord,
-    queued_items: queueItems.length,
+    queued_items: claimed,
     sent,
     failed,
     items,

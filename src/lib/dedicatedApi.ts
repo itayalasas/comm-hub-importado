@@ -502,10 +502,7 @@ async function loadDedicatedApiStoreResolution(
       deployment: row.deployment || undefined,
       error: row.last_error || undefined,
     };
-  } catch (error) {
-    if (import.meta.env.DEV) {
-      console.warn('[dedicatedApi] Failed to load persisted dedicated API server:', error);
-    }
+  } catch {
     return null;
   }
 }
@@ -766,10 +763,8 @@ export async function resolveDedicatedApiBaseUrl(
 
     try {
       await persistDedicatedApiStoreResolution(identity, reusedResolution);
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.warn('[dedicatedApi] Failed to backfill persisted dedicated API server:', error);
-      }
+    } catch {
+      // ignore persistence failures
     }
 
     return reusedResolution;
@@ -801,10 +796,8 @@ export async function resolveDedicatedApiBaseUrl(
 
       try {
         await persistDedicatedApiStoreResolution(identity, reusedResolution);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.warn('[dedicatedApi] Failed to backfill persisted dedicated API server:', error);
-        }
+      } catch {
+        // ignore persistence failures
       }
 
       return reusedResolution;
@@ -839,10 +832,8 @@ export async function resolveDedicatedApiBaseUrl(
 
           try {
             await persistDedicatedApiStoreResolution(identity, reusedResolution);
-          } catch (error) {
-            if (import.meta.env.DEV) {
-              console.warn('[dedicatedApi] Failed to backfill persisted dedicated API server:', error);
-            }
+          } catch {
+            // ignore persistence failures
           }
 
           return reusedResolution;
@@ -897,10 +888,8 @@ export async function resolveDedicatedApiBaseUrl(
               ...reusedResolution,
               error: undefined,
             });
-          } catch (error) {
-            if (import.meta.env.DEV) {
-              console.warn('[dedicatedApi] Failed to backfill persisted dedicated API server:', error);
-            }
+          } catch {
+            // ignore persistence failures
           }
 
           return reusedResolution;
@@ -931,10 +920,8 @@ export async function resolveDedicatedApiBaseUrl(
 
           try {
             await persistDedicatedApiStoreResolution(identity, reusedResolution);
-          } catch (error) {
-            if (import.meta.env.DEV) {
-              console.warn('[dedicatedApi] Failed to backfill persisted dedicated API server:', error);
-            }
+          } catch {
+            // ignore persistence failures
           }
 
           return reusedResolution;
@@ -979,10 +966,8 @@ export async function resolveDedicatedApiBaseUrl(
 
       try {
         await persistDedicatedApiStoreResolution(identity, nextResolution);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.warn('[dedicatedApi] Failed to persist dedicated API server:', error);
-        }
+      } catch {
+        // ignore persistence failures
       }
 
       return nextResolution;
@@ -1003,10 +988,8 @@ export async function resolveDedicatedApiBaseUrl(
             ...reusedResolution,
             error: undefined,
           });
-        } catch (persistError) {
-          if (import.meta.env.DEV) {
-            console.warn('[dedicatedApi] Failed to backfill persisted dedicated API server:', persistError);
-          }
+        } catch {
+          // ignore persistence failures
         }
 
         return reusedResolution;

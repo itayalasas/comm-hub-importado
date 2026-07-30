@@ -149,6 +149,7 @@ export interface AutomationMonitoringPayload {
   recent_jobs: Array<{
     id: string;
     type: string;
+    program_id?: string | null;
     status: string;
     template_name: string | null;
     total: number;
@@ -156,10 +157,16 @@ export interface AutomationMonitoringPayload {
     sent: number;
     failed: number;
     error_message: string | null;
+    recipients?: AutomationRecipient[];
     created_at: string;
     updated_at: string;
     trace_level?: 'info' | 'success' | 'warning' | 'error';
   }>;
+  jobs_pagination?: {
+    total: number;
+    limit: number;
+    offset: number;
+  };
   recent_queue_items?: AutomationProgramQueueItemRecord[];
   traces: Array<{
     id: string;
@@ -345,8 +352,30 @@ export async function deleteAutomationProgram(apiKey: string, programId: string)
   return data.program;
 }
 
-export async function loadAutomationMonitoring(apiKey: string, limit = 20) {
-  const response = await fetch(buildFunctionsUrl(`automation-monitoring?limit=${encodeURIComponent(String(limit))}`), {
+export interface AutomationMonitoringJobsFilters {
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  jobsLimit?: number;
+  jobsOffset?: number;
+}
+
+export async function loadAutomationMonitoring(
+  apiKey: string,
+  limit = 20,
+  kind?: 'scheduled' | 'batch',
+  jobsFilters?: AutomationMonitoringJobsFilters,
+) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (kind) params.set('kind', kind);
+  if (jobsFilters?.q) params.set('jobs_q', jobsFilters.q);
+  if (jobsFilters?.dateFrom) params.set('jobs_date_from', jobsFilters.dateFrom);
+  if (jobsFilters?.dateTo) params.set('jobs_date_to', jobsFilters.dateTo);
+  if (jobsFilters?.jobsLimit) params.set('jobs_limit', String(jobsFilters.jobsLimit));
+  if (jobsFilters?.jobsOffset) params.set('jobs_offset', String(jobsFilters.jobsOffset));
+
+  const response = await fetch(buildFunctionsUrl(`automation-monitoring?${params.toString()}`), {
     method: 'GET',
     headers: await buildHeaders(apiKey),
   });

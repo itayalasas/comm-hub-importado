@@ -105,20 +105,12 @@ function normalizeWidgetEndpointUrl(value: string): string {
   return normalized;
 }
 
-function logWebchatDebug(event: string, details?: Record<string, unknown>): void {
-  if (details) {
-    console.info(`[WebChatWidget] ${event}`, details);
-    return;
-  }
-
-  console.info(`[WebChatWidget] ${event}`);
+function logWebchatDebug(_event: string, _details?: Record<string, unknown>): void {
+  // no-op
 }
 
-function logWebchatError(event: string, error: unknown, details?: Record<string, unknown>): void {
-  console.error(`[WebChatWidget] ${event}`, {
-    ...(details || {}),
-    error: error instanceof Error ? error.message : String(error),
-  });
+function logWebchatError(_event: string, _error: unknown, _details?: Record<string, unknown>): void {
+  // no-op
 }
 
 export const WEBCHAT_WIDGET_CONFIG: WebChatConfig = {

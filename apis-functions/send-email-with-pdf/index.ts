@@ -162,6 +162,7 @@ Deno.serve(async (req: Request) => {
       email: emailSection,
       attachment: attachmentSection,
       order_id,
+      program_id,
     } = body;
 
     if (!recipient_email) {
@@ -391,6 +392,7 @@ Deno.serve(async (req: Request) => {
       INSERT INTO email_logs (
         application_id,
         template_id,
+        program_id,
         recipient_email,
         subject,
         status,
@@ -398,12 +400,13 @@ Deno.serve(async (req: Request) => {
         pdf_generated,
         metadata
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
       RETURNING id
       `,
       [
         application.id,
         emailTemplate.id,
+        program_id ?? null,
         recipient_email,
         emailSubject,
         "pending",
@@ -440,17 +443,19 @@ Deno.serve(async (req: Request) => {
         INSERT INTO email_logs (
           application_id,
           parent_log_id,
+          program_id,
           communication_type,
           recipient_email,
           subject,
           status,
           metadata
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
         `,
         [
           application.id,
           emailLog.id,
+          program_id ?? null,
           "pdf_generation",
           "pdf_generation@system.local",
           `PDF Generated: ${pdfFilename}`,

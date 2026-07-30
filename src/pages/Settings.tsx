@@ -61,8 +61,6 @@ interface EmbedCredential {
   created_at: string;
 }
 
-const isLocalHost = () => typeof window !== 'undefined' && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-
 interface WhatsAppConfig {
   id: string;
   application_id: string;
@@ -202,15 +200,6 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
   const applicationManagementFetch = async (payload: Record<string, unknown>) => {
     await configManager.loadConfig();
     const apiKey = getRuntimeConfig().apiKey || '';
-    if (isLocalHost()) {
-      console.groupCollapsed('[settings] delete-application request');
-      console.log('url:', buildFunctionsUrl('delete-application'));
-      console.log('body:', payload);
-      console.log('headers:', {
-        'x-api-key': apiKey || '(none)',
-      });
-      console.groupEnd();
-    }
 
     return fetch(buildFunctionsUrl('delete-application'), {
       method: 'POST',
@@ -631,16 +620,6 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     setShowDeleteAppModal(true);
 
     try {
-      if (isLocalHost()) {
-        console.groupCollapsed('[settings] delete-application preview requests');
-        console.log('application_id:', app.id);
-        console.log('url:', buildFunctionsUrl('delete-application'));
-        console.log('body:', {
-          application_id: app.id,
-          preview: true,
-        });
-        console.groupEnd();
-      }
       const response = await applicationManagementFetch({
         application_id: app.id,
         preview: true,

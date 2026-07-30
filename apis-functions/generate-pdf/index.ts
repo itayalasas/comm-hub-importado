@@ -18,6 +18,7 @@ interface GeneratePDFRequest {
   data: Record<string, any>;
   pending_communication_id?: string;
   order_id?: string;
+  program_id?: string;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -107,6 +108,7 @@ async function insertEmailLog(client: any, logData: any): Promise<any | null> {
     INSERT INTO email_logs (
       application_id,
       template_id,
+      program_id,
       recipient_email,
       subject,
       status,
@@ -117,12 +119,13 @@ async function insertEmailLog(client: any, logData: any): Promise<any | null> {
       pdf_generated,
       parent_log_id
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12)
     RETURNING *
     `,
     [
       logData.application_id ?? null,
       logData.template_id ?? null,
+      logData.program_id ?? null,
       logData.recipient_email ?? null,
       logData.subject ?? null,
       logData.status ?? null,
@@ -280,6 +283,7 @@ Deno.serve(async (req: Request) => {
       data,
       pending_communication_id,
       order_id,
+      program_id,
     } = requestData;
 
     if (order_id) {
@@ -534,6 +538,7 @@ Deno.serve(async (req: Request) => {
     const emailLogData: any = {
       application_id: application.id,
       template_id: pdfTemplate.id,
+      program_id: program_id ?? null,
       recipient_email: "pdf_generation@system.local",
       subject: `PDF Generated: ${filename}`,
       status: "sent",

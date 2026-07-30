@@ -145,19 +145,6 @@ function buildAlternateQueryUrl(queryApiUrl: string): string | null {
   }
 }
 
-function shouldLogQueryRequests(): boolean {
-  return typeof window !== 'undefined' && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-}
-
-function logQueryRequest(url: string, request: QueryRequest): void {
-  if (!shouldLogQueryRequests()) return;
-
-  console.groupCollapsed('[query] request');
-  console.log('url:', url);
-  console.log('request:', request);
-  console.groupEnd();
-}
-
 async function queryRequest<T>(request: QueryRequest): Promise<QueryResponse<T>> {
   await configManager.loadConfig();
   const { baseUrl: baseUrlOverride, ...requestBody } = request;
@@ -176,7 +163,6 @@ async function queryRequest<T>(request: QueryRequest): Promise<QueryResponse<T>>
 
   try {
     const execute = async (url: string) => {
-      logQueryRequest(url, requestBody);
       const response = await fetch(url, {
         method: 'POST',
         headers: buildHeaders(),
@@ -209,9 +195,6 @@ async function queryRequest<T>(request: QueryRequest): Promise<QueryResponse<T>>
     if (result.response.status === 404) {
       const alternateUrl = buildAlternateQueryUrl(queryApiUrl);
       if (alternateUrl && alternateUrl !== queryApiUrl) {
-        if (shouldLogQueryRequests()) {
-          console.warn('[query] primary endpoint returned 404, retrying alternate url:', alternateUrl);
-        }
         result = await execute(alternateUrl);
       }
     }

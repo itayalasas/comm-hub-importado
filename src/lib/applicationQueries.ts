@@ -161,16 +161,12 @@ async function assertApplicationNameAvailable(ownerId: string, tenantId: string 
 }
 
 async function bestEffortInsert(table: string, data: Record<string, unknown>): Promise<void> {
-  const result = await queryMutate({
+  await queryMutate({
     table,
     operation: 'insert',
     data,
     returning: '*',
   });
-
-  if (result.error) {
-    console.warn(`[applicationQueries] Optional insert skipped for ${table}:`, result.error.message);
-  }
 }
 
 export async function createOwnedApplication(input: CreateApplicationInput): Promise<ApplicationSummary> {

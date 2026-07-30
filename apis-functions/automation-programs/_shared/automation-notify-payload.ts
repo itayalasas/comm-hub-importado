@@ -7,6 +7,7 @@ export interface AutomationNotifyRecipient {
 }
 
 export interface AutomationNotifySource {
+  id: string;
   channel: Channel;
   template_name: string | null;
   pdf_template_name: string | null;
@@ -59,6 +60,7 @@ export function buildAutomationNotifyPayload(
 
   const payload: Record<string, unknown> = {
     type: source.channel,
+    program_id: source.id,
     recipients,
     shared_data: {
       ...(source.shared_data ?? {}),
