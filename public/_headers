@@ -25,6 +25,9 @@
 /subscription/*
   X-Robots-Tag: noindex, nofollow
 
+  /wallet/*
+  X-Robots-Tag: noindex, nofollow
+
 /embed/*
   X-Robots-Tag: noindex, nofollow
 
