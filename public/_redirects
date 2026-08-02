@@ -14,6 +14,7 @@
 /app                      /index.html     200
 /auth-processing          /index.html     200
 /subscription/*           /index.html     200
+/wallet/*                 /index.html     200
 /embed/*                  /index.html     200
 /dashboard                /index.html     200
 /admin-dashboard          /index.html     200
