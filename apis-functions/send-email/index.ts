@@ -2,6 +2,7 @@
 import nodemailer from 'npm:nodemailer@^9';
 import { Pool } from 'https://deno.land/x/postgres@v0.19.3/mod.ts';
 import { resendFetchWithRetry } from './_shared/resend-client.ts';
+import { enforceUsageQuota } from './_shared/usage-enforcement.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -98,7 +99,7 @@ export default async function handler(req: Request) {
 
     const applicationResult = await client.queryObject<any>(
       `
-      SELECT id, name
+      SELECT id, name, tenant_id, user_id
       FROM applications
       WHERE api_key = $1
       LIMIT 1
@@ -399,6 +400,34 @@ export default async function handler(req: Request) {
       );
 
       logEntry = logResult.rows[0];
+    }
+
+    const quotaCheck = await enforceUsageQuota({
+      client,
+      tenantId: application.tenant_id ?? null,
+      userId: application.user_id ?? null,
+      usageFeatureCode: 'total_de_correos_mensuales',
+      overageFeatureCode: 'email_overage_price',
+      communicationTypes: ['email', 'email_with_pdf'],
+      idempotencyKey: `email_log:${logEntry.id}`,
+    });
+
+    if (!quotaCheck.allowed) {
+      await client.queryObject(
+        `
+        UPDATE email_logs
+        SET status = 'failed', error_message = $1
+        WHERE id = $2
+        `,
+        [quotaCheck.blockedReason || 'insufficient_wallet_balance', logEntry.id],
+      );
+
+      return jsonResponse({
+        success: false,
+        error: 'Saldo insuficiente para cubrir el excedente del plan',
+        code: 'INSUFFICIENT_BALANCE',
+        log_id: logEntry.id,
+      }, 402);
     }
 
     const existingMetadata =

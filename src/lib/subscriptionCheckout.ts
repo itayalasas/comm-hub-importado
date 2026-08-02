@@ -48,7 +48,7 @@ export interface CheckoutStatusResult {
   [key: string]: any;
 }
 
-async function fetchJsonWithTimeout(
+export async function fetchJsonWithTimeout(
   url: string,
   init: RequestInit,
   timeoutMs = CHECKOUT_REQUEST_TIMEOUT_MS,
@@ -201,6 +201,64 @@ export async function startManagedSubscriptionCheckout({
   }
 
   return result.data as StartManagedCheckoutResult;
+}
+
+export interface CancelManagedSubscriptionArgs {
+  applicationId: string;
+  apiKey: string;
+  subscriptionId?: string;
+  providerSubscriptionId?: string;
+  tenantId?: string;
+  appUserId?: string;
+  cancelReason?: string;
+  endpoint?: string;
+}
+
+export interface CancelManagedSubscriptionResult {
+  cancelled?: boolean;
+  provider_status?: string;
+  subscription?: any;
+  has_access?: boolean;
+  license?: any;
+  available_plans?: any[];
+  [key: string]: any;
+}
+
+export async function cancelManagedSubscription({
+  applicationId,
+  apiKey,
+  subscriptionId,
+  providerSubscriptionId,
+  tenantId,
+  appUserId,
+  cancelReason,
+  endpoint,
+}: CancelManagedSubscriptionArgs): Promise<CancelManagedSubscriptionResult> {
+  const url = resolveCheckoutEndpoint(endpoint, 'subscription-cancel');
+
+  const response = await fetchJsonWithTimeout(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      application_id: applicationId,
+      api_key: apiKey,
+      subscription_id: subscriptionId,
+      provider_subscription_id: providerSubscriptionId,
+      tenant_id: tenantId,
+      app_user_id: appUserId,
+      cancel_reason: cancelReason,
+    }),
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok || !result?.success) {
+    throw new Error(result?.error?.message || 'No se pudo cancelar la suscripción');
+  }
+
+  return result.data as CancelManagedSubscriptionResult;
 }
 
 export async function getManagedCheckoutStatus({

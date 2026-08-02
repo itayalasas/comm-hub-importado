@@ -3,6 +3,7 @@ import { Pool } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { renderTemplate } from "./_shared/template-engine.ts";
 import { renderHtmlToPdfBase64 } from "./_shared/pdf-renderer.ts";
 import { resendFetchWithRetry } from "./_shared/resend-client.ts";
+import { enforceUsageQuota } from "./_shared/usage-enforcement.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -138,7 +139,7 @@ Deno.serve(async (req: Request) => {
 
     const appResult = await client.queryObject(
       `
-      SELECT id, name
+      SELECT id, name, tenant_id, user_id
       FROM applications
       WHERE api_key = $1
       LIMIT 1
@@ -271,6 +272,42 @@ Deno.serve(async (req: Request) => {
           error: `PDF template '${attachmentSection.pdf_template_name}' not found`,
         },
         404,
+      );
+    }
+
+    const combinedIdempotencyKey = order_id
+      ? `${application.id}:${order_id}`
+      : crypto.randomUUID();
+
+    const [emailQuotaCheck, pdfQuotaCheck] = await Promise.all([
+      enforceUsageQuota({
+        client,
+        tenantId: application.tenant_id ?? null,
+        userId: application.user_id ?? null,
+        usageFeatureCode: "total_de_correos_mensuales",
+        overageFeatureCode: "email_overage_price",
+        communicationTypes: ["email", "email_with_pdf"],
+        idempotencyKey: `email_log:${combinedIdempotencyKey}`,
+      }),
+      enforceUsageQuota({
+        client,
+        tenantId: application.tenant_id ?? null,
+        userId: application.user_id ?? null,
+        usageFeatureCode: "pdf_generations_monthly",
+        overageFeatureCode: "pdf_overage_price",
+        communicationTypes: ["pdf_generation"],
+        idempotencyKey: `pdf_gen:${combinedIdempotencyKey}`,
+      }),
+    ]);
+
+    if (!emailQuotaCheck.allowed || !pdfQuotaCheck.allowed) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Saldo insuficiente para cubrir el excedente del plan",
+          code: "INSUFFICIENT_BALANCE",
+        },
+        402,
       );
     }
 

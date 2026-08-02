@@ -2,6 +2,7 @@
 import { Pool } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { renderTemplate } from "./_shared/template-engine.ts";
 import { renderHtmlToPdfBase64 } from "./_shared/pdf-renderer.ts";
+import { enforceUsageQuota } from "./_shared/usage-enforcement.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -210,7 +211,7 @@ Deno.serve(async (req: Request) => {
 
     const appResult = await client.queryObject(
       `
-      SELECT id, name
+      SELECT id, name, tenant_id, user_id
       FROM applications
       WHERE api_key = $1
       LIMIT 1
@@ -527,6 +528,57 @@ Deno.serve(async (req: Request) => {
       pdfTemplate.pdf_filename_pattern || "document.pdf",
       processedData,
     );
+
+    const pdfIdempotencyKey = order_id
+      ? `pdf_gen:${application.id}:${order_id}`
+      : `pdf_gen:${crypto.randomUUID()}`;
+
+    const quotaCheck = await enforceUsageQuota({
+      client,
+      tenantId: application.tenant_id ?? null,
+      userId: application.user_id ?? null,
+      usageFeatureCode: "pdf_generations_monthly",
+      overageFeatureCode: "pdf_overage_price",
+      communicationTypes: ["pdf_generation"],
+      idempotencyKey: pdfIdempotencyKey,
+    });
+
+    if (!quotaCheck.allowed) {
+      await insertEmailLog(client, {
+        application_id: application.id,
+        template_id: pdfTemplate.id,
+        recipient_email: "unknown@error.com",
+        subject: `Error: Saldo insuficiente para PDF '${filename}'`,
+        status: "failed",
+        error_message: quotaCheck.blockedReason || "insufficient_wallet_balance",
+        communication_type: "pdf_generation",
+        metadata: {
+          endpoint: "generate-pdf",
+          error_type: "insufficient_balance",
+          order_id,
+          filename,
+        },
+      });
+
+      if (order_id) {
+        await client.queryObject(
+          `
+          DELETE FROM pdf_generation_locks
+          WHERE order_id = $1
+          `,
+          [order_id],
+        );
+      }
+
+      return jsonResponse(
+        {
+          success: false,
+          error: "Saldo insuficiente para cubrir el excedente del plan",
+          code: "INSUFFICIENT_BALANCE",
+        },
+        402,
+      );
+    }
 
     const pdfResult = await renderHtmlToPdfBase64(htmlContent, {
       title: filename,

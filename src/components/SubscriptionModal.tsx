@@ -1,11 +1,16 @@
 ﻿import { createPortal } from 'react-dom';
-import { X, CreditCard, Calendar, Check, Minus, Clock, AlertTriangle, Zap, Users, FileText, LayoutGrid, Mail, FileOutput, RefreshCw, XCircle } from 'lucide-react';
+import { X, CreditCard, Calendar, Check, Minus, Clock, AlertTriangle, Zap, Users, FileText, LayoutGrid, Mail, FileOutput, RefreshCw, XCircle, Wallet, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UpgradeModal } from './UpgradeModal';
 import { usePlans } from '../hooks/usePlans';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
-import { buildFunctionsUrl } from '../lib/config';
-import { useState } from 'react';
+import { resolveAuthLaunchConfig } from '../lib/config';
+import { cancelManagedSubscription } from '../lib/subscriptionCheckout';
+import { getWalletBalance, startWalletTopupCheckout, storePendingWalletTopup } from '../lib/walletCheckout';
+import { useToast } from './Toast';
+import { useEffect, useState } from 'react';
+
+const WALLET_TOPUP_PRESETS = [200, 500, 1000, 2000];
 
 interface SubscriptionModalProps {
   onClose: () => void;
@@ -68,6 +73,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const { subscription, user, applyCheckoutStatus, subscriptionHasAccess, isSystemAdmin } = useAuth();
   const { plans } = usePlans();
   const { applicationCount, templateCount, emailsThisMonth, pdfsThisMonth } = useSubscriptionLimits();
+  const toast = useToast();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -77,10 +83,123 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
   const [cancelReason, setCancelReason] = useState<string>('');
   const [cancelReasonDetails, setCancelReasonDetails] = useState('');
 
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletCurrency, setWalletCurrency] = useState('UYU');
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [showTopupModal, setShowTopupModal] = useState(false);
+  const [topupAmount, setTopupAmount] = useState<number | null>(null);
+  const [topupCustomAmount, setTopupCustomAmount] = useState('');
+  const [toppingUp, setToppingUp] = useState(false);
+  const [topupError, setTopupError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isSystemAdmin || !subscription || (!user?.tenant_id && !user?.sub)) return;
+
+    let cancelled = false;
+    setWalletLoading(true);
+
+    (async () => {
+      try {
+        const { authAppId, authApiKey } = await resolveAuthLaunchConfig();
+        if (!authAppId || !authApiKey) return;
+
+        const result = await getWalletBalance({
+          applicationId: authAppId,
+          apiKey: authApiKey,
+          tenantId: user?.tenant_id,
+          appUserId: user?.sub,
+        });
+
+        if (!cancelled) {
+          setWalletBalance(result.balance);
+          setWalletCurrency(result.currency || 'UYU');
+        }
+      } catch {
+        // Silencioso: si falla la consulta de saldo, simplemente no mostramos la tarjeta.
+      } finally {
+        if (!cancelled) setWalletLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSystemAdmin, subscription, user?.tenant_id, user?.sub]);
+
+  const resetTopupForm = () => {
+    setTopupAmount(null);
+    setTopupCustomAmount('');
+    setTopupError(null);
+  };
+  const openTopupModal = () => {
+    resetTopupForm();
+    setShowTopupModal(true);
+  };
+  const closeTopupModal = () => {
+    if (toppingUp) return;
+    setShowTopupModal(false);
+    resetTopupForm();
+  };
+  const effectiveTopupAmount = topupCustomAmount.trim()
+    ? Number(topupCustomAmount)
+    : topupAmount;
+  const canSubmitTopup =
+    !toppingUp &&
+    typeof effectiveTopupAmount === 'number' &&
+    Number.isFinite(effectiveTopupAmount) &&
+    effectiveTopupAmount > 0;
+
+  const handleStartTopup = async () => {
+    if (!canSubmitTopup || !effectiveTopupAmount) return;
+    setToppingUp(true);
+    setTopupError(null);
+    try {
+      const { authAppId, authApiKey } = await resolveAuthLaunchConfig();
+      if (!authAppId || !authApiKey) {
+        throw new Error('No se encontraron las credenciales de la aplicación.');
+      }
+
+      const returnUrl = `${window.location.origin}/wallet/result`;
+      const result = await startWalletTopupCheckout({
+        applicationId: authAppId,
+        apiKey: authApiKey,
+        amount: effectiveTopupAmount,
+        currency: walletCurrency,
+        returnUrl,
+        email: user?.email || undefined,
+        tenantId: user?.tenant_id,
+        appUserId: user?.sub,
+      });
+
+      if (result.checkout_session_id) {
+        storePendingWalletTopup({
+          checkout_session_id: result.checkout_session_id,
+          amount: effectiveTopupAmount,
+          created_at: Date.now(),
+        });
+      }
+
+      if (result.checkout_url) {
+        window.location.href = result.checkout_url;
+        return;
+      }
+
+      throw new Error('No se recibió una URL de pago.');
+    } catch (error) {
+      const errMessage = error instanceof Error ? error.message : 'No pudimos iniciar la recarga.';
+      setTopupError(errMessage);
+      toast.error(errMessage);
+    } finally {
+      setToppingUp(false);
+    }
+  };
+
   const isAdmin = isSystemAdmin || user?.role === 'administrador' || user?.role === 'admin';
   const activeUsersCount = user?.active_users_count ?? 0;
 
   const features = subscription?.entitlements?.features ?? [];
+  const numericFeatures = features.filter((feature) => feature.value_type !== 'boolean');
+  const booleanFeatures = features.filter((feature) => feature.value_type === 'boolean');
   const currentPlanById = plans.find((plan) => plan.id === subscription?.plan_id) ?? null;
   const currentPlanByName = plans.find((plan) => plan.name === subscription?.plan_name) ?? null;
   const currentPlan = currentPlanById ?? currentPlanByName;
@@ -190,16 +309,20 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
     setCancelling(true);
     setCancelError(null);
     try {
-      const res = await fetch(buildFunctionsUrl('cancel-subscription'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mp_preapproval_id: subscription.mp_preapproval_id }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok || body?.success === false) {
-        throw new Error(body?.message || body?.error || `Error ${res.status}`);
+      const { authAppId, authApiKey } = await resolveAuthLaunchConfig();
+      if (!authAppId || !authApiKey) {
+        throw new Error('No se encontraron las credenciales de suscripción.');
       }
-      const responseData = body?.data ?? body ?? {};
+
+      const responseData = await cancelManagedSubscription({
+        applicationId: authAppId,
+        apiKey: authApiKey,
+        subscriptionId: subscription.id,
+        providerSubscriptionId: subscription.mp_preapproval_id,
+        tenantId: user?.tenant_id,
+        appUserId: user?.sub,
+        cancelReason: cancelReasonText,
+      });
       const responseSubscription = responseData.subscription ?? responseData.license ?? {};
       const activeUntil: string | undefined =
         responseSubscription?.current_period_end ??
@@ -271,12 +394,21 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
     return 'text-cyan-400';
   };
 
+  const USAGE_WARNING_THRESHOLD = 90;
+  const nearLimitFeatures = numericFeatures.filter((feature) => {
+    const rawUsage = getRealUsage(feature.code);
+    if (rawUsage < 0) return false;
+    const planMax = parseInt(feature.value, 10);
+    if (isNaN(planMax) || planMax <= 0) return false;
+    return getUsagePercent(rawUsage, planMax) >= USAGE_WARNING_THRESHOLD;
+  });
+
   const modalContent = !showUpgradeModal && (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-4"
       style={{ margin: 0, left: 0, right: 0 }}
     >
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
         <div className="sticky top-0 bg-slate-900 border-b border-slate-700/80 px-6 py-4 flex items-center justify-between rounded-t-2xl">
@@ -338,6 +470,37 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
             </div>
           ) : (
             <>
+            {nearLimitFeatures.length > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 mb-5">
+                <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-300">
+                    Estás cerca del límite de tu plan
+                  </p>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    {nearLimitFeatures.map((f) => FEATURE_LABEL[f.code] ?? f.name).join(', ')}. Recargá saldo para cubrir el excedente automáticamente o actualizá tu plan.
+                  </p>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={openTopupModal}
+                    className="px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+                  >
+                    Recargar saldo
+                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setShowUpgradeModal(true)}
+                      className="px-3 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+                    >
+                      Actualizar plan
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="lg:grid lg:grid-cols-[320px_1fr] lg:items-start lg:gap-5 space-y-5 lg:space-y-0">
+            <div className="space-y-5">
               {/* Plan header card */}
               <div className={`rounded-xl p-5 border ${
                 isCancellationPending
@@ -435,9 +598,36 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                 )}
               </div>
 
+              {/* Wallet balance */}
+              {(walletLoading || walletBalance !== null) && (
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center flex-shrink-0">
+                    <Wallet className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-slate-400 mb-0.5">Saldo de billetera</p>
+                    {walletLoading ? (
+                      <p className="text-sm text-slate-500">Cargando...</p>
+                    ) : (
+                      <p className="text-sm text-white font-semibold">
+                        {walletCurrency} {(walletBalance ?? 0).toLocaleString('es-UY')}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={openTopupModal}
+                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 rounded-lg text-xs font-semibold transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Recargar saldo
+                  </button>
+                </div>
+              )}
+            </div>
+
               {/* Features with real usage */}
               {features.length > 0 && (
-                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 h-full">
                   <div className="flex items-center gap-2 mb-1">
                     <Zap className="w-4 h-4 text-cyan-400" />
                     <h4 className="text-sm font-bold text-white">Límites y uso actual</h4>
@@ -452,38 +642,29 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                       Uso actual
                     </span>
                   </div>
-                  <div className="space-y-4">
-                    {features.map((feature) => {
-                      const isBool = feature.value_type === 'boolean';
-                      const boolOn = isBool && (feature.value === 'true' || feature.value === '1');
-                      const label = FEATURE_LABEL[feature.code] ?? feature.name;
-                      const Icon = FEATURE_ICON[feature.code];
-                      const rawUsage = getRealUsage(feature.code);
-                      const hasUsageData = rawUsage >= 0; // -1 means no tracking for this feature
-                      const realUsage = hasUsageData ? rawUsage : 0;
-                      const usageLabel = getUsageLabel(feature.code);
-                      const planMax = !isBool ? parseInt(feature.value, 10) : null;
-                      const pct = hasUsageData && planMax !== null && planMax > 0
-                        ? getUsagePercent(realUsage, planMax)
-                        : null;
 
-                      return (
-                        <div key={feature.code}>
-                          <div className="flex items-center justify-between gap-4 mb-1.5">
-                            <div className="flex items-center gap-2 min-w-0">
-                              {Icon && <Icon className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />}
-                              <span className="text-sm text-slate-300 truncate">{label}</span>
-                            </div>
+                  {numericFeatures.length > 0 && (
+                    <div className="space-y-4 mb-4">
+                      {numericFeatures.map((feature) => {
+                        const label = FEATURE_LABEL[feature.code] ?? feature.name;
+                        const Icon = FEATURE_ICON[feature.code];
+                        const rawUsage = getRealUsage(feature.code);
+                        const hasUsageData = rawUsage >= 0; // -1 means no tracking for this feature
+                        const realUsage = hasUsageData ? rawUsage : 0;
+                        const usageLabel = getUsageLabel(feature.code);
+                        const planMax = parseInt(feature.value, 10);
+                        const pct = hasUsageData && !isNaN(planMax) && planMax > 0
+                          ? getUsagePercent(realUsage, planMax)
+                          : null;
 
-                            {isBool ? (
-                              <span className={`flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full border ${
-                                boolOn
-                                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                                  : 'bg-slate-700/60 border-slate-600 text-slate-500'
-                              }`}>
-                                {boolOn ? <Check className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
-                              </span>
-                            ) : (
+                        return (
+                          <div key={feature.code}>
+                            <div className="flex items-center justify-between gap-4 mb-1.5">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {Icon && <Icon className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />}
+                                <span className="text-sm text-slate-300 truncate">{label}</span>
+                              </div>
+
                               <div className="flex-shrink-0 flex items-center gap-2 text-right">
                                 <span className={`text-xs font-semibold ${pct !== null ? getUsageTextColor(pct) : 'text-slate-400'}`}>
                                   {realUsage.toLocaleString('es-UY')} {usageLabel}
@@ -493,24 +674,55 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
                                   {formatNumber(feature.value, feature.unit)}
                                 </span>
                               </div>
+                            </div>
+
+                            {!isNaN(planMax) && planMax > 0 && (
+                              <div className="h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${pct !== null ? getUsageColor(pct) : 'bg-slate-600'}`}
+                                  style={{ width: pct !== null ? `${pct}%` : '0%' }}
+                                />
+                              </div>
                             )}
                           </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
-                          {/* Progress bar for numeric features */}
-                          {!isBool && planMax !== null && planMax > 0 && (
-                            <div className="h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${pct !== null ? getUsageColor(pct) : 'bg-slate-600'}`}
-                                style={{ width: pct !== null ? `${pct}%` : '0%' }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {booleanFeatures.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-700/50">
+                      {booleanFeatures.map((feature) => {
+                        const boolOn = feature.value === 'true' || feature.value === '1';
+                        const label = FEATURE_LABEL[feature.code] ?? feature.name;
+                        const Icon = FEATURE_ICON[feature.code];
+
+                        return (
+                          <div
+                            key={feature.code}
+                            className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${
+                              boolOn
+                                ? 'bg-emerald-500/10 border-emerald-500/25'
+                                : 'bg-slate-900/40 border-slate-700/50'
+                            }`}
+                          >
+                            <span className={`flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full ${
+                              boolOn ? 'text-emerald-400' : 'text-slate-500'
+                            }`}>
+                              {boolOn ? <Check className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
+                            </span>
+                            <span className="text-xs text-slate-300 flex items-center gap-1.5 whitespace-nowrap">
+                              {Icon && <Icon className="w-3 h-3 text-slate-500 flex-shrink-0" />}
+                              {label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
+            </div>
 
               {/* Actions */}
               <div className="flex gap-3 pt-1">
@@ -704,6 +916,125 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
     </div>
   );
 
+  const topupModalContent = showTopupModal && (
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[210] p-4"
+      style={{ margin: 0, left: 0, right: 0 }}
+      onClick={closeTopupModal}
+    >
+      <div
+        className="bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="border-b border-slate-700/80 px-4 sm:px-5 py-3 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+              <Wallet className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-white">Recargar saldo</h3>
+              <p className="text-xs text-slate-400">Se usa para cubrir excedentes fuera de tu plan.</p>
+            </div>
+          </div>
+          <button
+            onClick={closeTopupModal}
+            disabled={toppingUp}
+            className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+
+        <div className="p-4 sm:p-5 space-y-4">
+          <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 px-3 py-2.5">
+            <p className="text-xs text-slate-400 leading-relaxed">
+              El saldo se descuenta automáticamente solo cuando superás el cupo incluido en tu plan
+              (por ejemplo, más emails o PDFs de los contratados). No reemplaza tu suscripción ni
+              tiene vencimiento mientras la cuenta esté activa.
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-slate-300 mb-2">Elegí un monto</p>
+            <div className="grid grid-cols-2 gap-2">
+              {WALLET_TOPUP_PRESETS.map((preset) => {
+                const isSelected = !topupCustomAmount && topupAmount === preset;
+                return (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      setTopupAmount(preset);
+                      setTopupCustomAmount('');
+                      setTopupError(null);
+                    }}
+                    className={`text-center rounded-xl border px-3 py-2.5 font-semibold text-sm transition-colors ${
+                      isSelected
+                        ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300'
+                        : 'border-slate-700/60 bg-slate-800/40 text-slate-300 hover:border-slate-600 hover:bg-slate-800/70'
+                    }`}
+                  >
+                    {walletCurrency} {preset.toLocaleString('es-UY')}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-2">
+              O ingresá otro monto
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={topupCustomAmount}
+              onChange={(event) => {
+                setTopupCustomAmount(event.target.value);
+                setTopupError(null);
+              }}
+              placeholder={`Monto en ${walletCurrency}`}
+              className="w-full rounded-xl border border-slate-700/60 bg-slate-900/70 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/50"
+            />
+          </div>
+
+          {topupError && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+              <p className="text-xs text-red-300">{topupError}</p>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-2 pt-1">
+            <button
+              onClick={closeTopupModal}
+              className="w-full sm:flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleStartTopup}
+              disabled={!canSubmitTopup}
+              className="w-full sm:flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {toppingUp ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Redirigiendo...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  Continuar a Mercado Pago
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const modalRoot = document.getElementById('modal-root');
   if (!modalRoot) return null;
 
@@ -711,6 +1042,7 @@ export const SubscriptionModal = ({ onClose }: SubscriptionModalProps) => {
     <>
       {modalContent && createPortal(modalContent, modalRoot)}
       {cancelModalContent && createPortal(cancelModalContent, modalRoot)}
+      {topupModalContent && createPortal(topupModalContent, modalRoot)}
       <UpgradeModal
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}

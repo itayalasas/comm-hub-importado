@@ -11,6 +11,7 @@ const AuthProcessing = lazy(() =>
   import('./pages/AuthProcessing').then((module) => ({ default: module.AuthProcessing }))
 );
 const SubscriptionResult = lazy(() => import('./pages/SubscriptionResult'));
+const WalletTopupResult = lazy(() => import('./pages/WalletTopupResult'));
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const Templates = lazy(() => import('./pages/Templates').then((module) => ({ default: module.Templates })));
 const Statistics = lazy(() => import('./pages/Statistics').then((module) => ({ default: module.Statistics })));
@@ -212,6 +213,7 @@ const AppRoutes = () => {
       <Route path="/callback" element={<Callback />} />
       <Route path="/auth-processing" element={<AuthProcessing />} />
       <Route path="/subscription/result" element={<SubscriptionResult />} />
+      <Route path="/wallet/result" element={<WalletTopupResult />} />
       <Route path="/embed/marketplace" element={<MarketplaceEmbed />} />
       <Route path="/docs" element={<Documentation publicView />} />
       <Route
