@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useMemo, useState, type ComponentType } from 'react';
+import { createPortal } from 'react-dom';
 import { Layout } from '../components/Layout';
 import { PageLoader } from '../components/PageLoader';
 import { AutomationPageHeader } from '../components/AutomationPageHeader';
 import { useApplicationPicker } from '../hooks/useApplicationPicker';
 import { useToast } from '../components/Toast';
-import { AutomationMonitoringPayload, loadAutomationMonitoring, runAutomationProgram } from '../lib/automationApi';
+import { AutomationMonitoringPayload, loadAutomationMonitoring, retryAutomationJob, runAutomationProgram } from '../lib/automationApi';
 import { translateStatus } from '../lib/statusLabels';
-import { Activity, AlertTriangle, ChevronDown, ChevronUp, Clock, Eye, Loader2, MousePointerClick, Play, RefreshCw, Server, Send, Workflow } from 'lucide-react';
+import { Activity, AlertTriangle, ChevronDown, ChevronUp, Clock, Eye, Loader2, MousePointerClick, Play, RefreshCw, RotateCcw, Server, Send, Workflow, X } from 'lucide-react';
 
 const StatCard = ({
   icon: Icon,
@@ -49,6 +50,138 @@ type MonitoringJob = AutomationMonitoringPayload['recent_jobs'][number];
 type MonitoringProgram = AutomationMonitoringPayload['recent_programs'][number];
 type MonitoringQueueItem = NonNullable<AutomationMonitoringPayload['recent_queue_items']>[number];
 
+const JobLogModal = ({
+  job,
+  relatedProgram,
+  relatedQueueItems,
+  runningProgramId,
+  onRunProgram,
+  onClose,
+}: {
+  job: MonitoringJob;
+  relatedProgram: MonitoringProgram | undefined;
+  relatedQueueItems: MonitoringQueueItem[];
+  runningProgramId: string | null;
+  onRunProgram: (programId: string) => void;
+  onClose: () => void;
+}) => {
+  const modalRoot = document.getElementById('modal-root');
+  if (!modalRoot) return null;
+
+  const recipients = Array.isArray(job.recipients) ? job.recipients : [];
+  const results = Array.isArray(job.results) ? job.results : [];
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700/80 bg-slate-900 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-slate-700/80 bg-slate-900 px-6 py-4">
+          <div>
+            <h3 className="text-lg font-bold text-white">Log del job</h3>
+            <p className="text-xs text-slate-500">{job.id}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-5 p-6">
+          {job.error_message && (
+            <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
+              <p className="text-sm text-red-200">{job.error_message}</p>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold uppercase tracking-[0.14em] ${
+              job.trace_level === 'error'
+                ? 'border-red-500/20 bg-red-500/10 text-red-200'
+                : job.trace_level === 'success'
+                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                  : job.trace_level === 'info'
+                    ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-200'
+                    : 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+            }`}>
+              {translateStatus(job.status)}
+            </span>
+            <span>{job.type}</span>
+            <span>{job.template_name || 'Sin template'}</span>
+            <span>{formatDate(job.created_at)}</span>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Solicitud (request)</p>
+              <div className="mt-2 space-y-2 rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-300">
+                <p><span className="text-slate-500">Destinatarios ({recipients.length}):</span></p>
+                <div className="max-h-32 overflow-y-auto">
+                  {recipients.length > 0 ? recipients.map((r: any, i: number) => (
+                    <div key={i} className="text-slate-300">{r.email}</div>
+                  )) : <span className="text-slate-500">Sin datos</span>}
+                </div>
+                {job.program_id && (
+                  <p><span className="text-slate-500">Programa:</span> {job.program_id}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Resultado (response)</p>
+              <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-300">
+                <p>{job.processed}/{job.total} procesados · {job.sent} ok / {job.failed} fail</p>
+                {results.length > 0 && (
+                  <div className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                    {results.map((r: any, i: number) => (
+                      <div
+                        key={i}
+                        className={`rounded px-2 py-1 ${r.status === 'failed' ? 'bg-red-500/10 text-red-200' : 'text-slate-400'}`}
+                      >
+                        {r.email} — {r.status === 'failed' ? (r.error || 'failed') : 'sent'}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Programa de origen</p>
+              {relatedProgram && (
+                <button
+                  onClick={() => onRunProgram(relatedProgram.id)}
+                  disabled={runningProgramId === relatedProgram.id}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {runningProgramId === relatedProgram.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Play className="h-3 w-3" />
+                  )}
+                  Ejecutar
+                </button>
+              )}
+            </div>
+            {relatedProgram ? (
+              <p className="mt-2 text-xs text-slate-400">{relatedProgram.name} · {relatedQueueItems.length} item(s) de cola relacionados</p>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">Sin programa asociado (envio directo por /notify).</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>,
+    modalRoot,
+  );
+};
+
 const JobRow = ({
   job,
   isExpanded,
@@ -57,6 +190,8 @@ const JobRow = ({
   relatedQueueItems,
   runningProgramId,
   onRunProgram,
+  retryingJobId,
+  onRetryJob,
   generatedAt,
   indent,
 }: {
@@ -67,6 +202,8 @@ const JobRow = ({
   relatedQueueItems: MonitoringQueueItem[];
   runningProgramId: string | null;
   onRunProgram: (programId: string) => void;
+  retryingJobId: string | null;
+  onRetryJob: (jobId: string) => void;
   generatedAt?: string;
   indent?: boolean;
 }) => (
@@ -107,64 +244,40 @@ const JobRow = ({
       </td>
       <td className="px-4 py-3 text-slate-400">{formatDate(job.created_at)}</td>
       <td className="px-4 py-3 text-right">
-        <button
-          onClick={onToggle}
-          className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/70 px-2 py-1 text-xs text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-        >
-          {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          Ver detalle
-        </button>
+        <div className="flex items-center justify-end gap-2">
+          {job.failed > 0 && (
+            <button
+              onClick={() => onRetryJob(job.id)}
+              disabled={retryingJobId === job.id}
+              className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-200 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {retryingJobId === job.id ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3 w-3" />
+              )}
+              Reprocesar
+            </button>
+          )}
+          <button
+            onClick={onToggle}
+            className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/70 px-2 py-1 text-xs text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+          >
+            <Eye className="h-3 w-3" />
+            Log
+          </button>
+        </div>
       </td>
     </tr>
     {isExpanded && (
-      <tr>
-        <td colSpan={5} className="bg-slate-950/60 px-4 py-4">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Job</p>
-              <pre className="mt-2 max-h-72 overflow-auto rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-300">
-                {JSON.stringify(job, null, 2)}
-              </pre>
-            </div>
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Programa de origen</p>
-                {relatedProgram && (
-                  <button
-                    onClick={() => onRunProgram(relatedProgram.id)}
-                    disabled={runningProgramId === relatedProgram.id}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {runningProgramId === relatedProgram.id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Play className="h-3 w-3" />
-                    )}
-                    Ejecutar
-                  </button>
-                )}
-              </div>
-              {relatedProgram ? (
-                <pre className="mt-2 max-h-72 overflow-auto rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-300">
-                  {JSON.stringify(relatedProgram, null, 2)}
-                </pre>
-              ) : (
-                <p className="mt-2 text-xs text-slate-500">Sin programa asociado (envio directo por /notify).</p>
-              )}
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Items de cola de este job</p>
-              {relatedQueueItems.length > 0 ? (
-                <pre className="mt-2 max-h-72 overflow-auto rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-300">
-                  {JSON.stringify(relatedQueueItems, null, 2)}
-                </pre>
-              ) : (
-                <p className="mt-2 text-xs text-slate-500">Este job no vino de un item de cola.</p>
-              )}
-            </div>
-          </div>
-        </td>
-      </tr>
+      <JobLogModal
+        job={job}
+        relatedProgram={relatedProgram}
+        relatedQueueItems={relatedQueueItems}
+        runningProgramId={runningProgramId}
+        onRunProgram={onRunProgram}
+        onClose={onToggle}
+      />
     )}
   </Fragment>
 );
@@ -175,10 +288,10 @@ export const AutomatizacionesMonitoreo = () => {
   const [payload, setPayload] = useState<AutomationMonitoringPayload | null>(null);
   const [loadingMonitoring, setLoadingMonitoring] = useState(false);
   const [kindFilter, setKindFilter] = useState<'scheduled' | 'batch' | 'all'>('scheduled');
-  const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
   const [runningProgramId, setRunningProgramId] = useState<string | null>(null);
+  const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
   const [jobsSearchInput, setJobsSearchInput] = useState('');
   const [jobsSearch, setJobsSearch] = useState('');
   const [jobsDateFrom, setJobsDateFrom] = useState('');
@@ -238,6 +351,24 @@ export const AutomatizacionesMonitoreo = () => {
     }
   };
 
+  const handleRetryJob = async (jobId: string) => {
+    try {
+      setRetryingJobId(jobId);
+      const apiKey = requireApplicationApiKey();
+      const result = await retryAutomationJob(apiKey, jobId);
+      toast.success(
+        result.failed
+          ? `Reintento: ${result.sent ?? 0} ok / ${result.failed} fail`
+          : `Reintento enviado (job ${result.job_id})`,
+      );
+      await refreshMonitoring();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo reprocesar el job');
+    } finally {
+      setRetryingJobId(null);
+    }
+  };
+
   useEffect(() => {
     if (selectedApplicationApiKey) {
       void refreshMonitoring();
@@ -256,64 +387,6 @@ export const AutomatizacionesMonitoreo = () => {
   const applyJobsSearch = () => {
     setJobsOffset(0);
     setJobsSearch(jobsSearchInput.trim());
-  };
-
-  const recentErrors = useMemo(() => {
-    if (!payload) return [];
-
-    type ErrorEntry = {
-      id: string;
-      kind: 'job' | 'queue_item' | 'program';
-      title: string;
-      message: string;
-      timestamp: string;
-      program_id?: string | null;
-      raw: unknown;
-    };
-
-    const entries: ErrorEntry[] = [
-      ...payload.recent_jobs
-        .filter((job) => !!job.error_message)
-        .map((job) => ({
-          id: `job-error-${job.id}`,
-          kind: 'job' as const,
-          title: `Job ${job.type}`,
-          message: job.error_message as string,
-          timestamp: job.updated_at,
-          program_id: job.program_id,
-          raw: job,
-        })),
-      ...(payload.recent_queue_items || [])
-        .filter((item) => !!item.last_error)
-        .map((item) => ({
-          id: `queue-error-${item.id}`,
-          kind: 'queue_item' as const,
-          title: item.external_reference_id || item.recipient_email,
-          message: item.last_error as string,
-          timestamp: item.updated_at,
-          program_id: item.program_id,
-          raw: item,
-        })),
-      ...payload.recent_programs
-        .filter((program) => !!program.last_error)
-        .map((program) => ({
-          id: `program-error-${program.id}`,
-          kind: 'program' as const,
-          title: program.name,
-          message: program.last_error as string,
-          timestamp: program.updated_at,
-          program_id: program.id,
-          raw: program,
-        })),
-    ];
-
-    return entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-  }, [payload]);
-
-  const ERROR_KIND_LABELS: Record<'job' | 'queue_item' | 'program', string> = {
-    job: 'Job',
-    queue_item: 'Item de cola (destinatario puntual)',
-    program: 'Resumen del programa (la corrida completa)',
   };
 
   const programsById = useMemo(() => {
@@ -443,61 +516,6 @@ export const AutomatizacionesMonitoreo = () => {
               <StatCard icon={AlertTriangle} label="Cola fallida" value={summary?.queue_failed ?? 0} tone="border-red-500/20 text-red-300" />
             </div>
 
-            {recentErrors.length > 0 && (
-              <div className="rounded-3xl border border-red-500/30 bg-red-500/5 p-5">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="flex items-center gap-2 text-lg font-semibold text-red-100">
-                      <AlertTriangle className="h-5 w-5" />
-                      Errores recientes
-                    </h2>
-                    <p className="text-sm text-red-200/70">Fallos de jobs, items de cola y programas, mas recientes primero.</p>
-                    <p className="mt-1 text-xs text-red-200/50">
-                      Una misma falla puede aparecer dos veces: una vez desde el item de cola (el destinatario puntual) y otra desde el resumen del programa (la corrida completa).
-                    </p>
-                  </div>
-                  <div className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs text-red-200">
-                    {recentErrors.length} registros
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {recentErrors.map((entry) => {
-                    const isExpanded = expandedErrorId === entry.id;
-                    return (
-                      <div key={entry.id} className="rounded-xl border border-red-500/20 bg-slate-950/40 p-3 text-sm">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="font-medium text-white">{entry.title}</p>
-                            <p className="mt-1 text-xs text-red-200">{entry.message}</p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                            <span className="rounded-full bg-slate-900/70 px-2 py-1">{ERROR_KIND_LABELS[entry.kind]}</span>
-                            <span>{formatDate(entry.timestamp)}</span>
-                            {entry.program_id && (
-                              <span className="rounded-full bg-slate-900/70 px-2 py-1">programa {entry.program_id}</span>
-                            )}
-                            <button
-                              onClick={() => setExpandedErrorId(isExpanded ? null : entry.id)}
-                              className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/70 px-2 py-1 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-                            >
-                              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                              Ver detalle
-                            </button>
-                          </div>
-                        </div>
-                        {isExpanded && (
-                          <pre className="mt-3 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-300">
-                            {JSON.stringify(entry.raw, null, 2)}
-                          </pre>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             <div className="rounded-3xl border border-slate-700 bg-slate-900/60 p-5">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -600,6 +618,8 @@ export const AutomatizacionesMonitoreo = () => {
                               relatedQueueItems={queueItemsByJobId.get(job.id) || []}
                               runningProgramId={runningProgramId}
                               onRunProgram={(id) => void handleRunProgram(id)}
+                              retryingJobId={retryingJobId}
+                              onRetryJob={(id) => void handleRetryJob(id)}
                               generatedAt={summary?.generated_at}
                             />
                           );
@@ -664,6 +684,8 @@ export const AutomatizacionesMonitoreo = () => {
                                 relatedQueueItems={queueItemsByJobId.get(job.id) || []}
                                 runningProgramId={runningProgramId}
                                 onRunProgram={(id) => void handleRunProgram(id)}
+                                retryingJobId={retryingJobId}
+                                onRetryJob={(id) => void handleRetryJob(id)}
                                 generatedAt={summary?.generated_at}
                                 indent
                               />

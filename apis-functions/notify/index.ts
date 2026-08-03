@@ -7,7 +7,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, x-api-key",
 };
 
-const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") || "", connectionTimeoutMillis: 5000 }, 3, true);
+// Subido de 3 a 6: cada job en curso abre varias conexiones cortas
+// (createCampaignJob + updateCampaignJob por lote + update final), y con
+// varios jobs en simultaneo (una corrida de N items) el pool chico se
+// agotaba - eso quedaba como jobs trabados en "processing" sin ningun error
+// visible porque la escritura final del status nunca alcanzaba a correr.
+const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") || "", connectionTimeoutMillis: 5000 }, 6, true);
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -256,6 +261,38 @@ async function getApplicationByApiKey(apiKey: string) {
   }
 }
 
+async function getFullJobById(jobId: string, applicationId: string) {
+  const client = await pool.connect();
+
+  try {
+    const result = await client.queryObject(
+      `
+      SELECT
+        id,
+        type,
+        program_id,
+        template_name,
+        pdf_template_name,
+        pdf_filename_pattern,
+        shared_data,
+        recipients,
+        options,
+        results,
+        status
+      FROM campaign_jobs
+      WHERE id = $1
+        AND application_id = $2
+      LIMIT 1
+      `,
+      [jobId, applicationId],
+    );
+
+    return result.rows[0] ?? null;
+  } finally {
+    client.release();
+  }
+}
+
 async function getJobById(jobId: string, applicationId: string) {
   const client = await pool.connect();
 
@@ -355,34 +392,211 @@ async function updateCampaignJob(
     failed?: number;
     results?: RecipientResult[];
   },
-) {
-  const client = await pool.connect();
+  attempt = 1,
+): Promise<void> {
+  const maxAttempts = 3;
 
   try {
-    await client.queryObject(
-      `
-      UPDATE campaign_jobs
-      SET
-        status = COALESCE($2, status),
-        processed = COALESCE($3, processed),
-        sent = COALESCE($4, sent),
-        failed = COALESCE($5, failed),
-        results = COALESCE($6::jsonb, results),
-        updated_at = NOW()
-      WHERE id = $1
-      `,
-      [
-        jobId,
-        data.status ?? null,
-        data.processed ?? null,
-        data.sent ?? null,
-        data.failed ?? null,
-        data.results ? JSON.stringify(data.results) : null,
-      ],
+    const client = await pool.connect();
+
+    try {
+      await client.queryObject(
+        `
+        UPDATE campaign_jobs
+        SET
+          status = COALESCE($2, status),
+          processed = COALESCE($3, processed),
+          sent = COALESCE($4, sent),
+          failed = COALESCE($5, failed),
+          results = COALESCE($6::jsonb, results),
+          updated_at = NOW()
+        WHERE id = $1
+        `,
+        [
+          jobId,
+          data.status ?? null,
+          data.processed ?? null,
+          data.sent ?? null,
+          data.failed ?? null,
+          data.results ? JSON.stringify(data.results) : null,
+        ],
+      );
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    if (attempt >= maxAttempts) {
+      console.error(
+        `updateCampaignJob failed after ${maxAttempts} attempts for job ${jobId} (status=${data.status ?? "unchanged"}):`,
+        err,
+      );
+      throw err;
+    }
+
+    console.error(
+      `updateCampaignJob attempt ${attempt} failed for job ${jobId}, retrying:`,
+      err,
     );
-  } finally {
-    client.release();
+    await sleep(300 * attempt);
+    return updateCampaignJob(jobId, data, attempt + 1);
   }
+}
+
+function dispatchRecipientWithRetry(
+  payload: NotifyRequest,
+  recipient: Recipient,
+  sharedData: Record<string, unknown>,
+  apiKey: string,
+  functionsBaseUrl: string,
+  maxRetries: number,
+  retryDelayMs: number,
+): Promise<RecipientResult> {
+  if (payload.type === "email") {
+    return dispatchWithRetry(
+      () =>
+        dispatchEmail(
+          functionsBaseUrl,
+          apiKey,
+          recipient,
+          payload.template_name!,
+          sharedData,
+          payload.program_id,
+        ),
+      maxRetries,
+      retryDelayMs,
+    );
+  }
+
+  if (payload.type === "email_pdf") {
+    return dispatchWithRetry(
+      () =>
+        dispatchEmailWithPdf(
+          functionsBaseUrl,
+          apiKey,
+          recipient,
+          payload.template_name!,
+          payload.attachment!.pdf_template_name,
+          payload.attachment?.filename,
+          sharedData,
+          payload.program_id,
+        ),
+      maxRetries,
+      retryDelayMs,
+    );
+  }
+
+  return dispatchWithRetry(
+    () =>
+      dispatchPdf(
+        functionsBaseUrl,
+        apiKey,
+        recipient,
+        payload.attachment!.pdf_template_name,
+        payload.attachment?.filename,
+        sharedData,
+        payload.program_id,
+      ),
+    maxRetries,
+    retryDelayMs,
+  );
+}
+
+// Reemplaza en baseResults la entrada de cada email reintentado por su nuevo
+// resultado (conserva el resto tal cual), en vez de pisar todo el array -
+// asi el job original acumula el conteo real de ok/fail en vez de perder
+// los resultados de los destinatarios que no se reintentaron.
+function mergeRetryResults(
+  baseResults: RecipientResult[],
+  retryResults: RecipientResult[],
+): RecipientResult[] {
+  const retryByEmail = new Map(
+    retryResults.map((r) => [r.email.toLowerCase(), r]),
+  );
+  const knownEmails = new Set(baseResults.map((r) => r.email.toLowerCase()));
+
+  const merged = baseResults.map((r) => {
+    const updated = retryByEmail.get(r.email.toLowerCase());
+    return updated ?? r;
+  });
+
+  for (const r of retryResults) {
+    if (!knownEmails.has(r.email.toLowerCase())) {
+      merged.push(r);
+    }
+  }
+
+  return merged;
+}
+
+async function processRetryJob(
+  jobId: string,
+  baseResults: RecipientResult[],
+  payload: NotifyRequest,
+  apiKey: string,
+  functionsBaseUrl: string,
+) {
+  const sharedData = payload.shared_data ?? {};
+  const options = { ...DEFAULT_NOTIFY_OPTIONS, ...(payload.options ?? {}) };
+  const concurrency = Math.min(options.concurrency, 20);
+  const stopOnError = options.stop_on_error;
+  const batchDelayMs = options.batch_delay_ms;
+  const maxRetries = options.max_retries;
+  const retryDelayMs = options.retry_delay_ms;
+
+  await updateCampaignJob(jobId, { status: "processing" });
+
+  let mergedResults = baseResults;
+  let earlyStop = false;
+
+  for (
+    let i = 0;
+    i < payload.recipients.length && !earlyStop;
+    i += concurrency
+  ) {
+    const batch = payload.recipients.slice(i, i + concurrency);
+
+    const batchResults = await Promise.all(
+      batch.map((recipient) =>
+        dispatchRecipientWithRetry(
+          payload,
+          recipient,
+          sharedData,
+          apiKey,
+          functionsBaseUrl,
+          maxRetries,
+          retryDelayMs,
+        )
+      ),
+    );
+
+    mergedResults = mergeRetryResults(mergedResults, batchResults);
+
+    if (stopOnError && batchResults.some((r) => r.status === "failed")) {
+      earlyStop = true;
+    }
+
+    await updateCampaignJob(jobId, {
+      processed: mergedResults.length,
+      sent: mergedResults.filter((r) => r.status === "sent").length,
+      failed: mergedResults.filter((r) => r.status === "failed").length,
+      results: mergedResults,
+    });
+
+    if (i + concurrency < payload.recipients.length) {
+      await sleep(batchDelayMs);
+    }
+  }
+
+  const finalSent = mergedResults.filter((r) => r.status === "sent").length;
+  const finalFailed = mergedResults.filter((r) => r.status === "failed").length;
+
+  await updateCampaignJob(jobId, {
+    status: finalSent === 0 && finalFailed > 0 ? "failed" : "done",
+    processed: mergedResults.length,
+    sent: finalSent,
+    failed: finalFailed,
+    results: mergedResults,
+  });
 }
 
 async function processJob(
@@ -414,56 +628,17 @@ async function processJob(
     const batch = payload.recipients.slice(i, i + concurrency);
 
     const batchResults = await Promise.all(
-      batch.map((recipient) => {
-        if (payload.type === "email") {
-          return dispatchWithRetry(
-            () =>
-              dispatchEmail(
-                functionsBaseUrl,
-                apiKey,
-                recipient,
-                payload.template_name!,
-                sharedData,
-                payload.program_id,
-              ),
-            maxRetries,
-            retryDelayMs,
-          );
-        }
-
-        if (payload.type === "email_pdf") {
-          return dispatchWithRetry(
-            () =>
-              dispatchEmailWithPdf(
-                functionsBaseUrl,
-                apiKey,
-                recipient,
-                payload.template_name!,
-                payload.attachment!.pdf_template_name,
-                payload.attachment?.filename,
-                sharedData,
-                payload.program_id,
-              ),
-            maxRetries,
-            retryDelayMs,
-          );
-        }
-
-        return dispatchWithRetry(
-          () =>
-            dispatchPdf(
-              functionsBaseUrl,
-              apiKey,
-              recipient,
-              payload.attachment!.pdf_template_name,
-              payload.attachment?.filename,
-              sharedData,
-              payload.program_id,
-            ),
+      batch.map((recipient) =>
+        dispatchRecipientWithRetry(
+          payload,
+          recipient,
+          sharedData,
+          apiKey,
+          functionsBaseUrl,
           maxRetries,
           retryDelayMs,
-        );
-      }),
+        )
+      ),
     );
 
     for (const r of batchResults) {
@@ -550,7 +725,90 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Method not allowed" }, 405);
     }
 
-    const payload: NotifyRequest = await req.json();
+    const rawBody = await req.json().catch(() => ({})) as Record<string, unknown>;
+
+    if (rawBody?.retry_job_id) {
+      const originalJobId = String(rawBody.retry_job_id);
+      const originalJob = await getFullJobById(originalJobId, application.id);
+
+      if (!originalJob) {
+        return json({ error: "Job not found" }, 404);
+      }
+
+      const originalResults = Array.isArray(originalJob.results)
+        ? originalJob.results as RecipientResult[]
+        : [];
+      const failedEmails = new Set(
+        originalResults
+          .filter((r) => r.status === "failed")
+          .map((r) => r.email.toLowerCase()),
+      );
+      const originalRecipients = Array.isArray(originalJob.recipients)
+        ? originalJob.recipients as Recipient[]
+        : [];
+      // Solo se reintentan los destinatarios que fallaron (si hay results
+      // guardados para distinguirlos); si el job es viejo y no tiene results,
+      // se reintenta la lista completa como fallback.
+      const recipientsToRetry = failedEmails.size > 0
+        ? originalRecipients.filter((r) => failedEmails.has(r.email.toLowerCase()))
+        : originalRecipients;
+
+      if (recipientsToRetry.length === 0) {
+        return json({ error: "No hay destinatarios fallidos para reintentar en este job" }, 400);
+      }
+
+      const retryPayload: NotifyRequest = {
+        type: originalJob.type,
+        program_id: originalJob.program_id ?? undefined,
+        template_name: originalJob.template_name ?? undefined,
+        attachment: originalJob.pdf_template_name
+          ? {
+            pdf_template_name: originalJob.pdf_template_name,
+            filename: originalJob.pdf_filename_pattern ?? undefined,
+          }
+          : undefined,
+        recipients: recipientsToRetry,
+        shared_data: (originalJob.shared_data as Record<string, unknown>) ?? {},
+        options: (originalJob.options as NotifyRequest["options"]) ?? {},
+      };
+
+      // El reintento actualiza el MISMO job (no crea uno nuevo): se re-envia
+      // solo a los destinatarios fallidos y sus resultados se mezclan con los
+      // del job original, acumulando el conteo real de ok/fail en ese registro.
+      if (retryPayload.recipients.length <= 1) {
+        await processRetryJob(originalJobId, originalResults, retryPayload, apiKey, functionsBaseUrl).catch((err) => {
+          console.error(`processRetryJob failed for job ${originalJobId}:`, err);
+        });
+
+        const finishedJob = await getJobById(originalJobId, application.id);
+
+        return json({
+          job_id: originalJobId,
+          status: finishedJob?.status ?? "done",
+          total: finishedJob?.total ?? recipientsToRetry.length,
+          sent: finishedJob?.sent ?? 0,
+          failed: finishedJob?.failed ?? 0,
+        });
+      }
+
+      const retryBackgroundProcessing = processRetryJob(originalJobId, originalResults, retryPayload, apiKey, functionsBaseUrl).catch((err) => {
+        console.error(`processRetryJob failed for job ${originalJobId}:`, err);
+      });
+
+      const maybeEdgeRuntimeForRetry = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+      if (maybeEdgeRuntimeForRetry?.waitUntil) {
+        maybeEdgeRuntimeForRetry.waitUntil(retryBackgroundProcessing);
+      }
+
+      return json({
+        job_id: originalJobId,
+        status: "processing",
+        total: recipientsToRetry.length,
+        message: `Retry started. Use GET /notify/${originalJobId} to check progress.`,
+      }, 202);
+    }
+
+    const payload = rawBody as unknown as NotifyRequest;
 
     if (!payload.type || !["email", "email_pdf", "pdf"].includes(payload.type)) {
       return json({ error: "type must be 'email', 'email_pdf', or 'pdf'" }, 400);
@@ -592,6 +850,28 @@ Deno.serve(async (req: Request) => {
 
     if (!job) {
       return json({ error: "Failed to create job" }, 500);
+    }
+
+    // Los llamados de a un destinatario (el drenado de cola de programas
+    // manda uno por vez, ya esperando cada respuesta en su propio loop) se
+    // procesan sincronicamente: no hay ninguna ganancia en mandarlos a
+    // segundo plano, y el waitUntil quedaba expuesto a que el runtime corte
+    // la tarea antes de terminar, dejando el job trabado en "processing"
+    // para siempre aunque el envio ya haya salido.
+    if (payload.recipients.length <= 1) {
+      await processJob(job.id, payload, apiKey, functionsBaseUrl).catch((err) => {
+        console.error(`processJob failed for job ${job.id}:`, err);
+      });
+
+      const finishedJob = await getJobById(job.id, application.id);
+
+      return json({
+        job_id: job.id,
+        status: finishedJob?.status ?? "done",
+        total: payload.recipients.length,
+        sent: finishedJob?.sent ?? 0,
+        failed: finishedJob?.failed ?? 0,
+      });
     }
 
     const backgroundProcessing = processJob(job.id, payload, apiKey, functionsBaseUrl).catch((err) => {

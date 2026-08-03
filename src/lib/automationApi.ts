@@ -158,6 +158,13 @@ export interface AutomationMonitoringPayload {
     failed: number;
     error_message: string | null;
     recipients?: AutomationRecipient[];
+    results?: Array<{
+      email: string;
+      status: 'sent' | 'failed';
+      log_id?: string;
+      pdf_log_id?: string;
+      error?: string;
+    }> | null;
     created_at: string;
     updated_at: string;
     trace_level?: 'info' | 'success' | 'warning' | 'error';
@@ -399,5 +406,23 @@ export async function sendAutomationBatch(apiKey: string, input: NotifyBatchInpu
   });
 
   const data = await parseJson<{ job_id: string; status: string; total: number; message: string }>(response);
+  return data;
+}
+
+export async function retryAutomationJob(apiKey: string, jobId: string) {
+  const response = await fetch(buildFunctionsUrl('notify'), {
+    method: 'POST',
+    headers: await buildHeaders(apiKey, true),
+    body: JSON.stringify({ retry_job_id: jobId }),
+  });
+
+  const data = await parseJson<{
+    job_id: string;
+    status: string;
+    total: number;
+    sent?: number;
+    failed?: number;
+    message?: string;
+  }>(response);
   return data;
 }

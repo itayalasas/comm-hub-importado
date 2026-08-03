@@ -62,6 +62,14 @@ interface AutomationProgramQueueItemRecord {
   updated_at: string;
 }
 
+interface RecipientResult {
+  email: string;
+  status: "sent" | "failed";
+  log_id?: string;
+  pdf_log_id?: string;
+  error?: string;
+}
+
 interface CampaignJobRecord {
   id: string;
   type: string;
@@ -74,6 +82,7 @@ interface CampaignJobRecord {
   failed: number;
   error_message: string | null;
   recipients?: unknown;
+  results?: RecipientResult[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -139,8 +148,25 @@ function toProgramSummary(program: AutomationProgramRecord, nowIso: string) {
 }
 
 function toJobSummary(job: CampaignJobRecord) {
+  // El campo error_message casi nunca se completa (notify/processJob nunca
+  // lo escribe); el detalle real de cada falla vive en results[].error. Acá
+  // armamos un resumen legible a partir de eso para que "Ver detalle" tenga
+  // algo que mostrar incluso cuando error_message quedo vacio.
+  const failedResults = Array.isArray(job.results)
+    ? job.results.filter((r) => r.status === "failed" && r.error)
+    : [];
+
+  const derivedErrorMessage = job.error_message
+    ? job.error_message
+    : failedResults.length > 0
+      ? failedResults.length === 1
+        ? failedResults[0].error!
+        : `${failedResults[0].error} (+${failedResults.length - 1} error${failedResults.length - 1 === 1 ? "" : "es"} mas)`
+      : null;
+
   return {
     ...job,
+    error_message: derivedErrorMessage,
     trace_level: job.status === "failed"
       ? "error"
       : job.status === "done"
@@ -462,6 +488,7 @@ Deno.serve(async (req: Request) => {
         j.failed,
         j.error_message,
         j.recipients,
+        j.results,
         j.created_at,
         j.updated_at
       FROM campaign_jobs j
