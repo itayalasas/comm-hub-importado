@@ -73,6 +73,141 @@ export default function Documentation({ publicView = false }: DocumentationProps
 
   const endpoints: EndpointSection[] = [
     {
+      id: 'list-templates',
+      title: 'Listar Templates',
+      method: 'GET',
+      path: '/list-templates',
+      description: 'Devuelve los templates activos (de email y/o PDF) creados en la aplicación dueña del API key. Por cada template detecta automáticamente las variables {{...}} usadas en el HTML (y en el subject o en el pdf_filename_pattern segun el tipo), asi podés saber que "data" mandarle en /send-email, /send-email-with-pdf, /generate-pdf o /notify sin tener que abrir el editor de templates.',
+      authentication: 'API Key (x-api-key header)',
+      headers: [
+        { name: 'x-api-key', type: 'string', required: true, description: 'Tu API key de la aplicación' },
+      ],
+      parameters: [
+        { name: 'type', type: 'string', required: false, description: 'Filtra por tipo de template: email o pdf' },
+      ],
+      responses: [
+        {
+          code: '200',
+          description: 'Listado de templates activos',
+          example: {
+            application: { id: 'uuid-app', name: 'SendCraft Demo' },
+            total: 2,
+            templates: [
+              {
+                id: 'uuid-template-1',
+                name: 'welcome',
+                type: 'email',
+                variables: ['client_name', 'cta_url'],
+                variable_count: 2,
+                subject: 'Bienvenido {{client_name}}',
+                subject_variables: ['client_name'],
+                created_at: '2026-01-10T12:00:00Z',
+                updated_at: '2026-01-10T12:00:00Z',
+              },
+              {
+                id: 'uuid-template-2',
+                name: 'invoice_template',
+                type: 'pdf',
+                variables: ['issuer.razon_social', 'items', 'response_payload.reference'],
+                variable_count: 3,
+                pdf_filename_pattern: 'factura-{{response_payload.reference}}.pdf',
+                created_at: '2026-01-12T09:30:00Z',
+                updated_at: '2026-01-12T09:30:00Z',
+              },
+            ],
+          },
+        },
+        {
+          code: '400',
+          description: 'Filtro type invalido',
+          example: { error: 'Invalid type filter. Allowed values: email, pdf' },
+        },
+        {
+          code: '401',
+          description: 'API key invalida o inactiva',
+          example: { error: 'Invalid or inactive API key' },
+        },
+      ],
+    },
+    {
+      id: 'create-template',
+      title: 'Crear Template',
+      method: 'POST',
+      path: '/create-template',
+      description: 'Crea un template (de email o de PDF) asociado a la aplicación del API key, de la misma forma en que se crea uno desde Templates en la UI. Pensado para integraciones externas (por ejemplo un CRM) que necesitan dar de alta sus propios templates sin pasar por la interfaz. Las variables {{...}} se detectan automáticamente del html_content, subject y pdf_filename_pattern. Por ahora solo crea templates de canal email (no whatsapp, que tiene su propio flujo de aprobación de Meta y vive en otra tabla).',
+      authentication: 'API Key (x-api-key header)',
+      headers: [
+        { name: 'x-api-key', type: 'string', required: true, description: 'Tu API key de la aplicación' },
+        { name: 'Content-Type', type: 'string', required: true, description: 'application/json' },
+      ],
+      requestBody: {
+        contentType: 'application/json',
+        schema: {
+          name: 'string (required)',
+          html_content: 'string (required)',
+          template_type: 'email | pdf (optional, default email)',
+          description: 'string (optional)',
+          subject: 'string (optional, usado si template_type=email)',
+          pdf_filename_pattern: 'string (optional, usado si template_type=pdf, soporta {{variables}})',
+          pdf_template_id: 'string (optional, liga un template de email a un template de PDF existente para enviarlo como comunicación pendiente)',
+          has_attachment: 'boolean (optional, default false)',
+          attachment_variable: 'string (optional, requerido si has_attachment=true)',
+          has_logo: 'boolean (optional, default false)',
+          logo_variable: 'string (optional, requerido si has_logo=true)',
+          has_qr: 'boolean (optional, default false)',
+          qr_variable: 'string (optional, requerido si has_qr=true)',
+          is_active: 'boolean (optional, default true)',
+        },
+        example: {
+          name: 'welcome',
+          template_type: 'email',
+          subject: 'Bienvenido {{client_name}}',
+          html_content: '<h1>Hola {{client_name}}</h1><p>Gracias por sumarte a {{empresa}}.</p>',
+          has_logo: true,
+          logo_variable: 'company_logo',
+        },
+      },
+      responses: [
+        {
+          code: '201',
+          description: 'Template creado exitosamente',
+          example: {
+            application: { id: 'uuid-app', name: 'SendCraft Demo' },
+            template: {
+              id: 'uuid-template',
+              name: 'welcome',
+              type: 'email',
+              subject: 'Bienvenido {{client_name}}',
+              pdf_filename_pattern: null,
+              variables: ['client_name', 'company_logo', 'empresa'],
+              variable_count: 3,
+              is_active: true,
+              created_at: '2026-09-18T12:00:00Z',
+              updated_at: '2026-09-18T12:00:00Z',
+            },
+          },
+        },
+        {
+          code: '400',
+          description: 'Campos requeridos faltantes o invalidos',
+          example: { error: 'html_content is required' },
+        },
+        {
+          code: '401',
+          description: 'API key invalida o inactiva',
+          example: { error: 'Invalid or inactive API key' },
+        },
+        {
+          code: '409',
+          description: 'Ya existe un template activo con ese nombre y tipo para esta aplicación',
+          example: {
+            error: 'A template with that name and type already exists for this application',
+            existing_template_id: 'uuid-template-existente',
+          },
+        },
+      ],
+    },
+    {
       id: 'generate-pdf',
       title: 'Generar PDF',
       method: 'POST',
