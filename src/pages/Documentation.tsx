@@ -461,6 +461,175 @@ export default function Documentation({ publicView = false }: DocumentationProps
       ],
     },
     {
+      id: 'notify-send',
+      title: 'Enviar Campaña (Lote de Notificaciones)',
+      method: 'POST',
+      path: '/notify',
+      description: 'Envía una notificación (email, email con PDF adjunto o solo PDF) a uno o muchos destinatarios en un único llamado. Es el endpoint que usan internamente las Programaciones/Automatizaciones para disparar campañas, pero puede invocarse directamente para mandar una campaña puntual. Comportamiento según cantidad de destinatarios: con 1 solo destinatario procesa el envío de forma síncrona y responde con el resultado final en el mismo request (200). Con 2 o más destinatarios crea un job en segundo plano y responde inmediatamente (202) con un job_id; hay que consultar el progreso con GET /notify/{job_id} (ver endpoint "Consultar Estado de Campaña"). Los envíos se procesan en lotes según options.concurrency, con una pausa de options.batch_delay_ms entre lotes, y cada destinatario fallido se reintenta hasta options.max_retries veces (con backoff, solo ante errores de rate limit) antes de marcarse como failed definitivamente.',
+      authentication: 'API Key (x-api-key header)',
+      headers: [
+        { name: 'x-api-key', type: 'string', required: true, description: 'API key de la aplicacion' },
+        { name: 'Content-Type', type: 'string', required: true, description: 'application/json' },
+      ],
+      requestBody: {
+        contentType: 'application/json',
+        schema: {
+          type: 'email | email_pdf | pdf (required)',
+          program_id: 'string (optional, uuid de la programacion de origen, solo informativo)',
+          template_name: 'string (required para type=email y email_pdf)',
+          attachment: {
+            pdf_template_name: 'string (required para type=email_pdf y pdf)',
+            filename: 'string (optional, soporta {{variables}})',
+          },
+          recipients: 'array (required) [{ email: string, data?: object }]',
+          shared_data: 'object (optional, datos comunes a todos los destinatarios, se combinan con el data de cada uno)',
+          options: {
+            concurrency: 'number (optional, default 1, maximo 20 envios en paralelo por lote)',
+            stop_on_error: 'boolean (optional, default false, corta el envio del resto de lotes si un lote tiene algun fallo)',
+            batch_delay_ms: 'number (optional, default 5000, pausa entre lotes)',
+            max_retries: 'number (optional, default 5, reintentos automaticos ante rate limit)',
+            retry_delay_ms: 'number (optional, default 5000, base del backoff entre reintentos)',
+          },
+          retry_job_id: 'string (alternativa a lo anterior: reintenta un job existente, ver seccion "Reintentar una campaña" mas abajo)',
+        },
+        example: {
+          type: 'email',
+          recipients: [
+            { email: 'cliente1@example.com', data: { nombre: 'Juan' } },
+            { email: 'cliente2@example.com', data: { nombre: 'Ana' } },
+          ],
+          template_name: 'campaign_promo',
+          shared_data: { empresa: 'Acme SA', promo_code: 'PROMO20' },
+          options: { concurrency: 5, batch_delay_ms: 3000 },
+        },
+      },
+      responses: [
+        {
+          code: '200',
+          description: '1 solo destinatario: se proceso de forma sincrona y ya terminó',
+          example: {
+            job_id: 'uuid-job',
+            status: 'done',
+            total: 1,
+            sent: 1,
+            failed: 0,
+          },
+        },
+        {
+          code: '202',
+          description: '2 o mas destinatarios: el job quedo creado y se procesa en segundo plano',
+          example: {
+            job_id: 'uuid-job',
+            status: 'pending',
+            total: 2,
+            message: 'Use GET /notify/uuid-job to check progress.',
+          },
+        },
+        {
+          code: '400',
+          description: 'Campos requeridos faltantes o invalidos',
+          example: { error: "type must be 'email', 'email_pdf', or 'pdf'" },
+        },
+        {
+          code: '401',
+          description: 'API key invalida',
+          example: { error: 'Invalid API key' },
+        },
+      ],
+    },
+    {
+      id: 'notify-retry',
+      title: 'Reintentar una Campaña (Reprocesar Fallidos)',
+      method: 'POST',
+      path: '/notify',
+      description: 'Reintenta unicamente los destinatarios que quedaron en status "failed" dentro de un job ya existente. A diferencia de una campaña nueva, esto NO crea un job separado: los resultados del reintento se fusionan dentro del mismo registro (mismo job_id), actualizando su processed/sent/failed y su campo results con el resultado mas reciente de cada destinatario reintentado (los que no se reintentaron quedan igual). Si el job original no tiene destinatarios failed, se reintenta la lista completa como fallback (por ejemplo, jobs viejos sin results guardados). Es la misma URL que el envio normal (/notify): se distingue porque el body solo trae retry_job_id en vez de type/recipients.',
+      authentication: 'API Key (x-api-key header)',
+      headers: [
+        { name: 'x-api-key', type: 'string', required: true, description: 'API key de la aplicacion' },
+        { name: 'Content-Type', type: 'string', required: true, description: 'application/json' },
+      ],
+      requestBody: {
+        contentType: 'application/json',
+        schema: {
+          retry_job_id: 'string (required, id del job devuelto por un /notify anterior)',
+        },
+        example: {
+          retry_job_id: 'uuid-job',
+        },
+      },
+      responses: [
+        {
+          code: '200',
+          description: 'Quedaba 1 solo destinatario fallido: se reproceso de forma sincrona',
+          example: {
+            job_id: 'uuid-job',
+            status: 'done',
+            total: 5,
+            sent: 5,
+            failed: 0,
+          },
+        },
+        {
+          code: '202',
+          description: 'Quedaban varios destinatarios fallidos: se reprocesan en segundo plano',
+          example: {
+            job_id: 'uuid-job',
+            status: 'processing',
+            total: 3,
+            message: 'Retry started. Use GET /notify/uuid-job to check progress.',
+          },
+        },
+        {
+          code: '400',
+          description: 'El job no tiene destinatarios fallidos para reintentar',
+          example: { error: 'No hay destinatarios fallidos para reintentar en este job' },
+        },
+        {
+          code: '404',
+          description: 'El job no existe o no pertenece a esta aplicacion',
+          example: { error: 'Job not found' },
+        },
+      ],
+    },
+    {
+      id: 'notify-status',
+      title: 'Consultar Estado de Campaña (Job)',
+      method: 'GET',
+      path: '/notify/:job_id',
+      description: 'Consulta el estado actual y el detalle de resultados de un job creado por POST /notify (envio normal o reintento). Usalo para hacer polling cuando el envio se disparo en segundo plano (respuesta 202). El campo status refleja el estado real del procesamiento, no solo si la cola lo acepto: pending (creado, aun no arranco), processing (enviando en este momento), done (termino, con o sin fallos parciales — revisa failed y results), failed (termino y todos los destinatarios fallaron), cancelled.',
+      authentication: 'API Key (x-api-key header)',
+      parameters: [
+        { name: 'job_id', type: 'string', required: true, description: 'ID del job devuelto por POST /notify' },
+      ],
+      responses: [
+        {
+          code: '200',
+          description: 'Estado y resultados del job',
+          example: {
+            id: 'uuid-job',
+            type: 'email',
+            program_id: null,
+            status: 'done',
+            total: 2,
+            processed: 2,
+            sent: 1,
+            failed: 1,
+            results: [
+              { email: 'cliente1@example.com', status: 'sent', log_id: 'uuid-log-1' },
+              { email: 'cliente2@example.com', status: 'failed', error: 'Template not found or inactive' },
+            ],
+            created_at: '2026-09-18T12:00:00Z',
+            updated_at: '2026-09-18T12:00:05Z',
+          },
+        },
+        {
+          code: '404',
+          description: 'Job no encontrado',
+          example: { error: 'Job not found' },
+        },
+      ],
+    },
+    {
       id: 'automation-programs-create',
       title: 'Crear Programacion',
       method: 'POST',
