@@ -715,9 +715,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const performLogout = async (redirectTo: string = '/') => {
-    try {
-      await authClient.logout(configManager.authFunctionsBaseUrl);
-    } catch {}
+    // No se espera esta llamada: es best-effort (limpieza server-side) y no
+    // debe bloquear el cierre de sesion si el endpoint tarda, falla o no
+    // existe. Antes quedaba "colgado" el boton de Cerrar Sesion si esta
+    // llamada no resolvia rapido.
+    Promise.resolve()
+      .then(() => authClient.logout(configManager.authFunctionsBaseUrl))
+      .catch(() => {});
     clearDedicatedApiResolutionCache();
     clearAuthProgress();
     localStorage.removeItem('user');
