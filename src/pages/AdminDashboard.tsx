@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -15,6 +17,10 @@ import {
   ArrowUpRight,
   Globe,
   BarChart3,
+  UserCog,
+  Search,
+  LogIn,
+  X,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageLoader } from '../components/PageLoader';
@@ -27,6 +33,7 @@ import {
   loadAdminAccessAnalytics,
 } from '../lib/webAccessAnalytics';
 import { SYSTEM_ADMIN_EMAIL } from '../lib/systemAdmin';
+import { configManager } from '../lib/config';
 
 type AnalyticsRange = '7d' | '30d' | '90d' | 'all';
 const RECENT_ATTEMPTS_PAGE_SIZE = 10;
@@ -227,6 +234,198 @@ const DailyBars = ({ data }: { data: AccessAnalyticsDailyStat[] }) => {
   );
 };
 
+interface UserSearchResult {
+  id: string;
+  email: string;
+  name: string;
+  status: string;
+}
+
+const ImpersonateUserSearch = () => {
+  const { impersonation, startImpersonation } = useAuth();
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      setResults([]);
+      setSearchError('');
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = setTimeout(async () => {
+      setSearching(true);
+      setSearchError('');
+      try {
+        const res = await fetch(`${configManager.functionsBaseUrl}/user-search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            application_id: configManager.authAppId,
+            api_key: configManager.authApiKey,
+            query: trimmed,
+            limit: 10,
+          }),
+        });
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success) {
+          setResults(json.data?.users || []);
+        } else {
+          setSearchError(json.error || 'No se pudo buscar usuarios');
+        }
+      } catch {
+        if (!cancelled) setSearchError('Error de conexión al buscar usuarios');
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [query]);
+
+  const closeModal = () => {
+    if (submitting) return;
+    setSelectedUser(null);
+    setReason('');
+    setSubmitError('');
+  };
+
+  const confirmImpersonation = async () => {
+    if (!selectedUser || reason.trim().length < 5) return;
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      await startImpersonation({ id: selectedUser.id, email: selectedUser.email }, reason.trim());
+      navigate('/dashboard');
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'No se pudo iniciar sesión como este usuario');
+      setSubmitting(false);
+    }
+  };
+
+  if (impersonation) {
+    return (
+      <div className="flex h-32 items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 text-sm text-slate-500">
+        Ya estás viendo la cuenta de otro usuario. Volvé a administrador para acceder a otra cuenta.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Buscar por nombre o email..."
+          className="w-full rounded-xl border border-slate-700 bg-slate-950/40 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:border-amber-500/40 focus:outline-none"
+        />
+      </div>
+
+      {searching && (
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando...
+        </div>
+      )}
+
+      {searchError && (
+        <p className="text-xs text-rose-300">{searchError}</p>
+      )}
+
+      {results.length > 0 && (
+        <div className="space-y-2">
+          {results.map((result) => (
+            <div
+              key={result.id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/40 px-4 py-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-white">{result.name || result.email}</p>
+                <p className="truncate text-xs text-slate-500">{result.email} · {result.status}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedUser(result)}
+                className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-500/20"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                Ingresar como este usuario
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedUser && createPortal(
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-white">Acceder como usuario</h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Vas a ingresar como <span className="font-semibold text-white">{selectedUser.name || selectedUser.email}</span> ({selectedUser.email}).
+                </p>
+              </div>
+              <button type="button" onClick={closeModal} className="text-slate-500 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Motivo del acceso
+            </label>
+            <textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Ej: Configurar plantilla de WhatsApp a pedido del cliente"
+              rows={3}
+              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-amber-500/40 focus:outline-none"
+            />
+
+            {submitError && <p className="mt-2 text-xs text-rose-300">{submitError}</p>}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeModal}
+                disabled={submitting}
+                className="rounded-full border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:border-slate-600 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmImpersonation}
+                disabled={submitting || reason.trim().length < 5}
+                className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                Confirmar acceso
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+};
+
 export const AdminDashboard = () => {
   const { user } = useAuth();
   const [range, setRange] = useState<AnalyticsRange>('30d');
@@ -385,6 +584,14 @@ export const AdminDashboard = () => {
             </div>
           )}
         </section>
+
+        <SectionCard
+          title="Acceder como usuario"
+          subtitle="Buscá un usuario y entrá a su cuenta para ayudarlo a configurarla o depurar un error, sin pedirle la contraseña."
+          icon={UserCog}
+        >
+          <ImpersonateUserSearch />
+        </SectionCard>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
           <StatCard

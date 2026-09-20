@@ -6,6 +6,7 @@ import {
 } from '../lib/config';
 import { authClient } from '../lib/auth';
 import { isSystemAdminEmail, isSystemAdminUser } from '../lib/systemAdmin';
+import { logAuditEvent } from '../lib/auditLog';
 import {
   clearDedicatedApiResolutionCache,
   isDedicatedApiEnabled,
@@ -88,6 +89,24 @@ interface AvailablePlan {
 
 export type { Feature, Subscription, AvailablePlan };
 
+interface ImpersonationParty {
+  id: string;
+  email: string;
+  name: string;
+  tenant_id?: string | null;
+}
+
+interface ImpersonationInfo {
+  session_id: string;
+  reason: string;
+  started_at: string;
+  expires_at: string;
+  admin: ImpersonationParty;
+  target: ImpersonationParty;
+}
+
+export type { ImpersonationInfo };
+
 type AuthProgressPhase =
   | 'bootstrapping'
   | 'authenticating'
@@ -124,6 +143,9 @@ interface AuthContextType {
   subscription: Subscription | null;
   subscriptionHasAccess: boolean | null;
   availablePlans: AvailablePlan[];
+  impersonation: ImpersonationInfo | null;
+  startImpersonation: (target: { id?: string; email?: string }, reason: string) => Promise<void>;
+  endImpersonation: () => Promise<void>;
   login: () => Promise<void>;
   register: (planId?: string) => Promise<void>;
   logout: () => void;
@@ -148,6 +170,17 @@ type SubscriptionScopeCandidate = {
 const TRIAL_MAX_DAYS = 14;
 const TRIAL_START_LOCK_STORAGE_PREFIX = 'subscription_trial_start_lock:';
 const TRIAL_LOCK_STORAGE_PREFIX = 'subscription_trial_end_lock:';
+
+const IMPERSONATION_SESSION_STORAGE_KEY = 'impersonation_session';
+const IMPERSONATION_ADMIN_SNAPSHOT_KEY = 'impersonation_admin_snapshot';
+const IMPERSONATION_SNAPSHOT_KEYS = [
+  'user',
+  'access_token',
+  'refresh_token',
+  'subscription',
+  'subscription_has_access',
+  'available_plans',
+] as const;
 
 function getSubscriptionScope(candidate?: SubscriptionScopeCandidate | null): string | null {
   if (!candidate || typeof candidate !== 'object') return null;
@@ -307,6 +340,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [availablePlans, setAvailablePlans] = useState<AvailablePlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [authProgress, setAuthProgress] = useState<AuthProgress | null>(null);
+  const [impersonation, setImpersonation] = useState<ImpersonationInfo | null>(null);
 
   const getStoredUserEmail = (): string => {
     if (typeof window === 'undefined') return '';
@@ -556,6 +590,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     let cancelled = false;
 
     const bootstrapAuthState = async () => {
+      // Warm the remote config cache as early as possible (app mount), not on
+      // first click. This is what "Iniciar sesión" needs to build the redirect
+      // URL — prefetching it here means it's usually already resolved by the
+      // time someone reaches the login button, instead of paying that round
+      // trip (plus any cold-start latency) at click time.
+      void configManager.loadConfig();
+
       const storedUser = localStorage.getItem('user');
       const storedToken = localStorage.getItem('access_token');
       const storedSubscription = localStorage.getItem('subscription');
@@ -631,6 +672,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           }
         } catch {
           localStorage.removeItem('available_plans');
+        }
+      }
+
+      const storedImpersonation = localStorage.getItem(IMPERSONATION_SESSION_STORAGE_KEY);
+      if (storedImpersonation) {
+        try {
+          const parsedImpersonation = JSON.parse(storedImpersonation);
+          if (!cancelled && parsedImpersonation && typeof parsedImpersonation === 'object') {
+            setImpersonation(parsedImpersonation as ImpersonationInfo);
+          }
+        } catch {
+          localStorage.removeItem(IMPERSONATION_SESSION_STORAGE_KEY);
         }
       }
 
@@ -715,6 +768,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const performLogout = async (redirectTo: string = '/') => {
+    if (user) {
+      void logAuditEvent({
+        action: 'logout',
+        entityType: 'session',
+        tenantId: user.tenant_id || null,
+        actor: { id: user.sub, email: user.email, name: user.name },
+      });
+    }
+
     // No se espera esta llamada: es best-effort (limpieza server-side) y no
     // debe bloquear el cierre de sesion si el endpoint tarda, falla o no
     // existe. Antes quedaba "colgado" el boton de Cerrar Sesion si esta
@@ -729,9 +791,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('subscription');
     localStorage.removeItem('subscription_has_access');
+    localStorage.removeItem(IMPERSONATION_SESSION_STORAGE_KEY);
+    sessionStorage.removeItem(IMPERSONATION_ADMIN_SNAPSHOT_KEY);
     setUser(null);
     setSubscription(null);
     setSubscriptionHasAccess(null);
+    setImpersonation(null);
     window.location.href = redirectTo;
   };
 
@@ -997,6 +1062,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         resolvedSubscription: Subscription | null,
         systemAdmin: boolean,
         accessToken: string,
+        isImpersonationSwap: boolean = false,
       ) => {
         localStorage.setItem('access_token', accessToken);
         authClient.setAccessToken(accessToken);
@@ -1004,16 +1070,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         localStorage.setItem('user', JSON.stringify(resolvedUser));
         setUser(resolvedUser);
 
-        void recordWebAccessAttempt({
-          event_type: 'login_success',
-          attempt_id: consumePendingWebAccessAttemptId() || undefined,
-          email: resolvedUser.email,
-          path: typeof window !== 'undefined' ? window.location.pathname : undefined,
-          metadata: {
-            source: 'auth.handleCallback',
-            is_system_admin: systemAdmin,
-          },
-        });
+        if (!isImpersonationSwap) {
+          void recordWebAccessAttempt({
+            event_type: 'login_success',
+            attempt_id: consumePendingWebAccessAttemptId() || undefined,
+            email: resolvedUser.email,
+            path: typeof window !== 'undefined' ? window.location.pathname : undefined,
+            metadata: {
+              source: 'auth.handleCallback',
+              is_system_admin: systemAdmin,
+            },
+          });
+
+          void logAuditEvent({
+            action: 'login',
+            entityType: 'session',
+            tenantId: resolvedUser.tenant_id || null,
+            actor: { id: resolvedUser.sub, email: resolvedUser.email, name: resolvedUser.name },
+          });
+        }
 
         if (systemAdmin || !resolvedSubscription) {
           clearAuthProgress();
@@ -1086,7 +1161,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           throw new Error('No access token available');
         }
 
-        finalizeLogin(userInfo, normalizedSubscription, systemAdmin, accessToken);
+        finalizeLogin(userInfo, normalizedSubscription, systemAdmin, accessToken, Boolean(decodedToken?.impersonation));
         return;
       }
 
@@ -1537,6 +1612,104 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const startImpersonation = async (
+    target: { id?: string; email?: string },
+    reason: string,
+  ): Promise<void> => {
+    const adminAccessToken = authClient.getAccessToken() || localStorage.getItem('access_token');
+    if (!adminAccessToken) {
+      throw new Error('No hay una sesión de administrador activa.');
+    }
+
+    await configManager.loadConfig();
+    if (!configManager.authImpersonateUrl) {
+      throw new Error('No se pudo resolver el endpoint de impersonación.');
+    }
+
+    const response = await postJson(configManager.authImpersonateUrl, {
+      action: 'start',
+      application_id: configManager.authAppId,
+      api_key: configManager.authApiKey,
+      admin_token: adminAccessToken,
+      target_user_id: target.id,
+      target_email: target.email,
+      reason,
+    });
+
+    if (!response?.success || !response?.data?.access_token) {
+      throw new Error(response?.error?.message || 'No se pudo iniciar sesión como el usuario seleccionado.');
+    }
+
+    const adminSnapshot: Record<string, string | null> = {};
+    IMPERSONATION_SNAPSHOT_KEYS.forEach((key) => {
+      adminSnapshot[key] = localStorage.getItem(key);
+    });
+    sessionStorage.setItem(IMPERSONATION_ADMIN_SNAPSHOT_KEY, JSON.stringify(adminSnapshot));
+
+    const impersonationInfo = response.data.impersonation as ImpersonationInfo;
+    localStorage.setItem(IMPERSONATION_SESSION_STORAGE_KEY, JSON.stringify(impersonationInfo));
+
+    if (response.data.refresh_token) {
+      localStorage.setItem('refresh_token', response.data.refresh_token);
+    }
+
+    await handleCallback(response.data.access_token);
+    setImpersonation(impersonationInfo);
+
+    void logAuditEvent({
+      action: 'impersonation_start',
+      entityType: 'account_access',
+      tenantId: impersonationInfo.target.tenant_id || null,
+      entityId: impersonationInfo.target.id,
+      entityLabel: impersonationInfo.target.email,
+      actor: impersonationInfo.admin,
+      metadata: { reason: impersonationInfo.reason, session_id: impersonationInfo.session_id, target_email: impersonationInfo.target.email },
+    });
+  };
+
+  const endImpersonation = async (): Promise<void> => {
+    const snapshotRaw = sessionStorage.getItem(IMPERSONATION_ADMIN_SNAPSHOT_KEY);
+    const infoRaw = localStorage.getItem(IMPERSONATION_SESSION_STORAGE_KEY);
+    const info: ImpersonationInfo | null = infoRaw ? JSON.parse(infoRaw) : null;
+    const snapshot: Record<string, string | null> | null = snapshotRaw ? JSON.parse(snapshotRaw) : null;
+
+    if (snapshot?.access_token && info) {
+      void postJson(configManager.authImpersonateUrl, {
+        action: 'end',
+        application_id: configManager.authAppId,
+        api_key: configManager.authApiKey,
+        admin_token: snapshot.access_token,
+        session_id: info.session_id,
+        target_user_id: info.target.id,
+      }).catch(() => {});
+
+      void logAuditEvent({
+        action: 'impersonation_end',
+        entityType: 'account_access',
+        tenantId: info.target.tenant_id || null,
+        entityId: info.target.id,
+        entityLabel: info.target.email,
+        actor: info.admin,
+        metadata: { session_id: info.session_id, target_email: info.target.email },
+      });
+    }
+
+    if (snapshot) {
+      IMPERSONATION_SNAPSHOT_KEYS.forEach((key) => {
+        const value = snapshot[key];
+        if (value !== null && value !== undefined) {
+          localStorage.setItem(key, value);
+        } else {
+          localStorage.removeItem(key);
+        }
+      });
+    }
+
+    sessionStorage.removeItem(IMPERSONATION_ADMIN_SNAPSHOT_KEY);
+    localStorage.removeItem(IMPERSONATION_SESSION_STORAGE_KEY);
+    window.location.href = '/admin-dashboard';
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -1548,6 +1721,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         subscription,
         subscriptionHasAccess,
         availablePlans,
+        impersonation,
+        startImpersonation,
+        endImpersonation,
         login,
         register,
         logout,

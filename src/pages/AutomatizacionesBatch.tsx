@@ -3,7 +3,9 @@ import { Layout } from '../components/Layout';
 import { PageLoader } from '../components/PageLoader';
 import { AutomationPageHeader } from '../components/AutomationPageHeader';
 import { useApplicationPicker } from '../hooks/useApplicationPicker';
+import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
+import { logAuditEvent } from '../lib/auditLog';
 import {
   AutomationProgramRecord,
   deleteAutomationProgram,
@@ -149,9 +151,10 @@ const BatchCard = ({
         </button>
         <button
           onClick={() => onDelete(program)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/20"
+          disabled={running}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           Cancelar
         </button>
         {isQueued && (
@@ -199,6 +202,7 @@ const BatchCard = ({
 
 export const AutomatizacionesBatch = () => {
   const toast = useToast();
+  const { user } = useAuth();
   const { applications, selectedApp, setSelectedApp, selectedApplication, loading } = useApplicationPicker();
   const [programs, setPrograms] = useState<AutomationProgramRecord[]>([]);
   const [form, setForm] = useState<BatchFormState>(emptyForm());
@@ -312,6 +316,18 @@ export const AutomatizacionesBatch = () => {
         }
         return [program, ...current];
       });
+
+      void logAuditEvent({
+        action: editingId ? 'update' : 'create',
+        entityType: 'automation_program',
+        entityId: program.id,
+        entityLabel: program.name,
+        applicationId: selectedApplication.id,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+        metadata: { kind: 'batch' },
+      });
+
       resetForm();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo guardar el lote');
@@ -390,6 +406,17 @@ export const AutomatizacionesBatch = () => {
         resetForm();
       }
       toast.success('Lote cancelado');
+
+      void logAuditEvent({
+        action: 'delete',
+        entityType: 'automation_program',
+        entityId: program.id,
+        entityLabel: program.name,
+        applicationId: selectedApplication?.id,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+        metadata: { kind: 'batch' },
+      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo cancelar el lote');
     } finally {

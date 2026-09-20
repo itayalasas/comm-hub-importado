@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { PageLoader } from '../components/PageLoader';
 import { TemplateEditor } from '../components/TemplateEditor';
+import { TourSpotlight } from '../components/TourSpotlight';
 import { useAuth } from '../contexts/AuthContext';
+import { useOnboardingTour } from '../contexts/OnboardingTourContext';
+import { markOnboardingTourSeen } from '../lib/onboarding';
 import { verifyApplicationOwnership } from '../lib/security';
 import { queryMutate, querySelect } from '../lib/queryApi';
+import { logAuditEvent } from '../lib/auditLog';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
-import { Plus, CreditCard as Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X, Download, Upload } from 'lucide-react';
+import { Plus, CreditCard as Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X, Download, Upload, Loader2 } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -40,6 +45,8 @@ interface Template {
 
 export const Templates = () => {
   const { user, isSystemAdmin } = useAuth();
+  const { stepIndex: tourStep, goToStep: goToTourStep, endTour } = useOnboardingTour();
+  const navigate = useNavigate();
   const toast = useToast();
   const { canCreate, canUpdate, canDelete } = usePermissions('templates');
   const { checkTemplateLimit } = useSubscriptionLimits();
@@ -47,6 +54,8 @@ export const Templates = () => {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [deletingTemplate, setDeletingTemplate] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [previewData, setPreviewData] = useState<any>({});
@@ -109,7 +118,8 @@ export const Templates = () => {
 
       if (prefsError) throw prefsError;
 
-      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
+      // Por ahora el admin de sistema no ve las apps de otros tenants aca.
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, false);
       const appList = rows.map(({ id, name }) => ({ id, name }));
       setApplications(appList);
 
@@ -261,6 +271,7 @@ export const Templates = () => {
       }
     }
 
+    setSavingTemplate(true);
     try {
       const variables = extractVariables(formData.html_content);
       const variablesPayload = buildTemplateVariables(variables);
@@ -320,16 +331,36 @@ export const Templates = () => {
         if (error) throw error;
       }
 
+      const wasCreatingNewTemplate = !editingTemplate;
       setShowEditor(false);
       loadTemplates(selectedApp);
+
+      void logAuditEvent({
+        action: wasCreatingNewTemplate ? 'create' : 'update',
+        entityType: 'template',
+        entityId: editingTemplate?.id,
+        entityLabel: formData.name,
+        applicationId: selectedApp,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+      });
+
+      if (wasCreatingNewTemplate && tourStep === 3) {
+        goToTourStep(4);
+        navigate('/api-explorer');
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al guardar el template');
+    } finally {
+      setSavingTemplate(false);
     }
   };
 
   const confirmDeleteTemplate = async () => {
     if (!deleteConfirm) return;
 
+    const target = templates.find((t) => t.id === deleteConfirm);
+    setDeletingTemplate(true);
     try {
       const { error } = await queryMutate({
         table: 'communication_templates',
@@ -341,8 +372,20 @@ export const Templates = () => {
       if (selectedApp) loadTemplates(selectedApp);
       toast.success('Template eliminado exitosamente');
       setDeleteConfirm(null);
+
+      void logAuditEvent({
+        action: 'delete',
+        entityType: 'template',
+        entityId: deleteConfirm,
+        entityLabel: target?.name,
+        applicationId: selectedApp,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+      });
     } catch {
       toast.error('Error al eliminar el template');
+    } finally {
+      setDeletingTemplate(false);
     }
   };
 
@@ -444,6 +487,27 @@ export const Templates = () => {
 
   return (
     <Layout currentPage="templates">
+      {tourStep === 3 && !showEditor && (
+        <TourSpotlight
+          selector='[data-tour="new-template-button"]'
+          stepLabel="Paso 4 de 5"
+          title="Creá tu primer template"
+          body="Diseñá el contenido que vas a enviar a tus destinatarios. Al guardarlo, seguimos con el último paso: probar un envío."
+          ctaLabel={templates.length > 0 ? 'Continuar' : 'Entendido'}
+          onCta={() => {
+            if (templates.length > 0) {
+              goToTourStep(4);
+              navigate('/api-explorer');
+              return;
+            }
+            openEditor();
+          }}
+          onSkip={() => {
+            if (user?.sub) markOnboardingTourSeen(user.sub);
+            endTour();
+          }}
+        />
+      )}
       <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Templates</h1>
@@ -476,6 +540,7 @@ export const Templates = () => {
               ) : (
                 <button
                   onClick={() => openEditor()}
+                  data-tour="new-template-button"
                   className="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
                 >
                   <Plus className="w-5 h-5" />
@@ -744,6 +809,7 @@ export const Templates = () => {
           onCancel={() => setShowEditor(false)}
           isEditing={!!editingTemplate}
           applicationId={selectedApp}
+          saving={savingTemplate}
         />
       )}
 
@@ -801,15 +867,18 @@ export const Templates = () => {
             <div className="flex space-x-3">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                disabled={deletingTemplate}
+                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancelar
               </button>
               <button
                 onClick={confirmDeleteTemplate}
-                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                disabled={deletingTemplate}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Eliminar
+                {deletingTemplate && <Loader2 className="w-4 h-4 animate-spin" />}
+                {deletingTemplate ? 'Eliminando...' : 'Eliminar'}
               </button>
             </div>
           </div>

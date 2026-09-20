@@ -120,7 +120,8 @@ export const WhatsApp = () => {
         .eq('user_id', user.sub)
         .maybeSingle();
 
-      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
+      // Por ahora el admin de sistema no ve las apps de otros tenants aca.
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, false);
       setApplications(rows);
       const defaultId = (prefs as any)?.default_application_id;
       if (defaultId) setSelectedApp(defaultId);

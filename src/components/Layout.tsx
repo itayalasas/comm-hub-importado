@@ -1,19 +1,23 @@
-import { ReactNode, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { ReactNode, useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
   AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
   Mail, Briefcase, AppWindow, Package, MessageSquare, Star, FlaskConical, LogOut,
-  Workflow, CalendarClock, Send, Activity, ShieldCheck,
+  Workflow, CalendarClock, Send, Activity, ShieldCheck, History,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useOnboardingTour } from '../contexts/OnboardingTourContext';
 import { TrialBanner } from './TrialBanner';
+import { ImpersonationBanner } from './ImpersonationBanner';
 import { UserMenu } from './UserMenu';
+import { TourSpotlight } from './TourSpotlight';
 import { useToast } from './Toast';
 import { resolveManagedCheckoutEndpoint, resolvePlanCheckoutUrl, sortPlansByOrder, usePlans } from '../hooks/usePlans';
 import { getRuntimeConfig, configManager } from '../lib/config';
 import { startManagedSubscriptionCheckout, storePendingSubscriptionCheckout } from '../lib/subscriptionCheckout';
 import { findPlanFeatureByCode } from '../lib/planFeatures';
+import { markOnboardingTourSeen } from '../lib/onboarding';
 
 interface LayoutProps {
   children: ReactNode;
@@ -448,6 +452,7 @@ const NavItemRow = ({
       <Link
         to={`/${item.route}`}
         onClick={onClose}
+        data-tour-nav={item.route}
         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group ${
           isActive
             ? 'bg-cyan-500/10 text-cyan-400'
@@ -464,6 +469,7 @@ const NavItemRow = ({
     <div>
       <button
         onClick={() => setOpen(o => !o)}
+        data-tour-nav={item.route}
         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
           isChildActive
             ? 'bg-cyan-500/10 text-cyan-400'
@@ -488,6 +494,7 @@ const NavItemRow = ({
                 key={child.route}
                 to={`/${child.route}`}
                 onClick={onClose}
+                data-tour-nav={child.route}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 ${
                   childActive
                     ? 'bg-cyan-500/10 text-cyan-400'
@@ -510,8 +517,21 @@ const NavItemRow = ({
 export const Layout = ({ children, currentPage }: LayoutProps) => {
   const { hasMenuAccess, hasSubmenuAccess, subscription, subscriptionHasAccess, user, isSystemAdmin } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { stepIndex: tourStep, goToStep: goToTourStep, endTour } = useOnboardingTour();
+  const navigate = useNavigate();
 
   const closeMobile = () => setIsMobileMenuOpen(false);
+
+  useEffect(() => {
+    if (tourStep === 0 || tourStep === 1) {
+      setIsMobileMenuOpen(true);
+    }
+  }, [tourStep]);
+
+  const skipTour = () => {
+    if (user?.sub) markOnboardingTourSeen(user.sub);
+    endTour();
+  };
 
   const allNavItems: NavItem[] = ([
     {
@@ -590,16 +610,21 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       route: 'settings',
       permissionKey: 'settings',
       children: [
-        { name: 'Aplicaciones',       icon: AppWindow,  route: 'settings/apps',  page: 'settings-apps',  permissionKey: 'settings.aplicaciones' },
-        { name: 'Correo Electrónico', icon: Mail,       route: 'settings/email', page: 'settings-email', permissionKey: 'settings.correo_electronico' },
-        { name: 'Acceso al Embed',    icon: Package,    route: 'settings/embed', page: 'settings-embed', permissionKey: 'settings.acceso_embed' },
+        { name: 'Aplicaciones',       icon: AppWindow,  route: 'settings/apps',      page: 'settings-apps',      permissionKey: 'settings.aplicaciones' },
+        { name: 'Correo Electrónico', icon: Mail,       route: 'settings/email',     page: 'settings-email',     permissionKey: 'settings.correo_electronico' },
+        { name: 'Acceso al Embed',    icon: Package,    route: 'settings/embed',     page: 'settings-embed',     permissionKey: 'settings.acceso_embed' },
+        { name: 'Auditoría',          icon: History,    route: 'settings/auditoria', page: 'settings-auditoria', permissionKey: 'settings.auditoria' },
       ],
     },
   ] as NavItem[])
     .filter(item => item.permissionKey === 'admin_dashboard' ? isSystemAdmin : hasMenuAccess(item.permissionKey))
     .map(item => ({
       ...item,
-      children: item.children?.filter(child => hasSubmenuAccess(child.permissionKey)),
+      // 'settings.auditoria' no existe como menú granular en el sistema de roles del
+      // servicio de autenticación (igual que 'marketplace', que ya se trata como
+      // siempre accesible); el control real de acceso lo hace la propia página vía
+      // la feature de plan `audit_logs`, no el sistema de permisos por rol.
+      children: item.children?.filter(child => child.permissionKey === 'settings.auditoria' || hasSubmenuAccess(child.permissionKey)),
     }));
 
   const normalizedStatus = String(subscription?.status ?? '').toLowerCase();
@@ -640,6 +665,7 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
       {/* Top header — UserMenu always visible here on all screen sizes */}
       <header className="sticky top-0 z-40 border-b border-slate-700/60 bg-slate-900/80 backdrop-blur-sm">
         <TestingBanner />
+        <ImpersonationBanner />
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-2">
             <button
@@ -705,6 +731,38 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
           </nav>
 
         </aside>
+
+        {tourStep === 0 && (
+          <TourSpotlight
+            selector='[data-tour-nav="settings"]'
+            stepLabel="Paso 1 de 5"
+            title="Empecemos por Configuración"
+            body="Ahí vas a crear tu primera aplicación y conseguir tu API key para integrar SendCraft."
+            ctaLabel="Siguiente"
+            onCta={() => {
+              if (!document.querySelector('[data-tour-nav="settings/apps"]')) {
+                (document.querySelector('[data-tour-nav="settings"]') as HTMLElement | null)?.click();
+              }
+              goToTourStep(1);
+            }}
+            onSkip={skipTour}
+          />
+        )}
+
+        {tourStep === 1 && (
+          <TourSpotlight
+            selector='[data-tour-nav="settings/apps"]'
+            stepLabel="Paso 2 de 5"
+            title="Aplicaciones"
+            body="Acá vas a crear tu primera aplicación. Al crearla se genera automáticamente tu API key."
+            ctaLabel="Ir a Aplicaciones"
+            onCta={() => {
+              navigate('/settings/apps');
+              goToTourStep(2);
+            }}
+            onSkip={skipTour}
+          />
+        )}
 
         {/* Main content */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 lg:min-h-screen">

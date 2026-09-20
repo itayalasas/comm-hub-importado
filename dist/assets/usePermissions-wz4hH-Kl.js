@@ -1,0 +1,1 @@
+import{c as d}from"./index-DHiSXTQ5.js";const l=c=>{var o;const{hasPermission:t,hasSubmenuAccess:a,user:s}=d(),n=t(c,"create"),e=t(c,"read"),r=t(c,"update"),i=t(c,"delete"),p=((o=s==null?void 0:s.permissions)==null?void 0:o[c])??[];return{canCreate:n,canRead:e,canUpdate:r,canDelete:i,hasAccess:e,role:s==null?void 0:s.role,permissions:p,hasSubmenuAccess:a}};export{l as u};

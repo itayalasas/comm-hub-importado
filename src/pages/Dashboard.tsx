@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { PageLoader } from '../components/PageLoader';
+import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { useAuth } from '../contexts/AuthContext';
-import { querySelect } from '../lib/queryApi';
+import { useOnboardingTour } from '../contexts/OnboardingTourContext';
+import { hasSeenOnboardingTour, markOnboardingTourSeen } from '../lib/onboarding';
+import { querySelect, type QueryFilter } from '../lib/queryApi';
 import { buildFunctionsUrl, configManager } from '../lib/config';
 import { functionsFetch } from '../lib/functions';
 import { loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
 import {
-  Mail, FileText, CheckCircle2, XCircle, TrendingUp,
+  Mail, FileText, CheckCircle2, XCircle, TrendingUp, TrendingDown,
   Activity, Server, Zap, Eye, AlertTriangle,
-  MousePointerClick,
-  MessageSquare, Send, Smartphone,
+  MousePointerClick, Loader2, Download, Trophy, AlertCircle,
+  MessageSquare, Send, Smartphone, CalendarRange,
 } from 'lucide-react';
 
 /* ── Types ───────────────────────────────────────────────────────── */
@@ -47,7 +50,101 @@ interface ServiceStatus {
 
 interface DailyCount { date: string; sent: number; failed: number; }
 
+interface EmailLogRow {
+  id: string;
+  recipient_email: string | null;
+  status: string;
+  communication_type: string;
+  template_id: string | null;
+  error_message: string | null;
+  opened_at: string | null;
+  clicked_at: string | null;
+  delivery_status: string | null;
+  bounce_type: string | null;
+  created_at: string;
+}
+
+interface WaLogRow {
+  id: string;
+  recipient_phone: string | null;
+  status: string;
+  whatsapp_template_id: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+interface TemplateRankItem {
+  id: string;
+  name: string;
+  channel: 'email' | 'whatsapp';
+  total: number;
+  failed: number;
+}
+
+interface FailureItem {
+  id: string;
+  channel: 'email' | 'whatsapp';
+  recipient: string;
+  templateName: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+interface PeriodComparison {
+  total: number;
+  sent: number;
+  failed: number;
+}
+
 type Channel = 'all' | 'email' | 'whatsapp';
+type DashboardRange = '7d' | '30d' | '90d' | 'all';
+
+const RANGE_OPTIONS: Array<{ value: DashboardRange; label: string; days: number | null }> = [
+  { value: '7d', label: '7 días', days: 7 },
+  { value: '30d', label: '30 días', days: 30 },
+  { value: '90d', label: '90 días', days: 90 },
+  { value: 'all', label: 'Todo', days: null },
+];
+
+// 'Todo' aún necesita una ventana finita para dibujar el gráfico de barras diario;
+// las tarjetas de KPI sí muestran el total real sin límite de fecha.
+const ALL_RANGE_CHART_DAYS = 90;
+
+function rangeToDays(range: DashboardRange): number | null {
+  return RANGE_OPTIONS.find((option) => option.value === range)?.days ?? null;
+}
+
+function rangeStartIso(range: DashboardRange): string | null {
+  const days = rangeToDays(range);
+  if (days === null) return null;
+  const since = new Date();
+  since.setHours(0, 0, 0, 0);
+  since.setDate(since.getDate() - (days - 1));
+  return since.toISOString();
+}
+
+// The equivalent window right before the current one (e.g. for "7 días" this
+// is the 7 days before that), used to compute period-over-period deltas.
+// Not meaningful for "all" (open-ended), so callers should skip it there.
+function previousRangeBounds(range: DashboardRange): { start: string; end: string } | null {
+  const days = rangeToDays(range);
+  if (days === null) return null;
+
+  const currentStart = new Date();
+  currentStart.setHours(0, 0, 0, 0);
+  currentStart.setDate(currentStart.getDate() - (days - 1));
+
+  const previousEnd = new Date(currentStart);
+  const previousStart = new Date(currentStart);
+  previousStart.setDate(previousStart.getDate() - days);
+
+  return { start: previousStart.toISOString(), end: previousEnd.toISOString() };
+}
+
+function computeDelta(current: number, previous: number): number | null {
+  if (previous === 0) return current > 0 ? null : 0;
+  return Math.round(((current - previous) / previous) * 100);
+}
 
 /* ── Sparkline ───────────────────────────────────────────────────── */
 
@@ -127,8 +224,28 @@ const DonutRing = ({ pct, color, size = 72 }: { pct: number; color: string; size
 
 /* ── Stat card ───────────────────────────────────────────────────── */
 
-const StatCard = ({ icon: Icon, label, value, sub, color, trend }: {
+const ComparisonBadge = ({ delta, invertColors = false }: { delta: number | null | undefined; invertColors?: boolean }) => {
+  if (delta === undefined) return null;
+  if (delta === null) {
+    return <span className="text-[11px] font-semibold text-cyan-400">Nuevo</span>;
+  }
+  if (delta === 0) {
+    return <span className="text-[11px] font-medium text-slate-500">Sin cambios</span>;
+  }
+  const isUp = delta > 0;
+  // For "failed", going up is bad (red) and down is good (emerald) — invertColors flips that.
+  const good = invertColors ? !isUp : isUp;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${good ? 'text-emerald-400' : 'text-red-400'}`}>
+      {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+      {isUp ? '+' : ''}{delta}% vs período anterior
+    </span>
+  );
+};
+
+const StatCard = ({ icon: Icon, label, value, sub, color, trend, comparison, comparisonInvert }: {
   icon: any; label: string; value: string | number; sub?: string; color: string; trend?: string;
+  comparison?: number | null; comparisonInvert?: boolean;
 }) => (
   <div className={`bg-slate-800/50 backdrop-blur-sm rounded-xl border p-5 flex flex-col gap-3 ${color}`}>
     <div className="flex items-center justify-between">
@@ -143,6 +260,11 @@ const StatCard = ({ icon: Icon, label, value, sub, color, trend }: {
       <div className="text-2xl font-extrabold text-white">{value}</div>
       <div className="text-xs text-slate-400 mt-0.5">{label}</div>
       {sub && <div className="text-xs text-slate-500 mt-0.5">{sub}</div>}
+      {comparison !== undefined && (
+        <div className="mt-1.5">
+          <ComparisonBadge delta={comparison} invertColors={comparisonInvert} />
+        </div>
+      )}
     </div>
   </div>
 );
@@ -151,9 +273,12 @@ const StatCard = ({ icon: Icon, label, value, sub, color, trend }: {
 
 export const Dashboard = () => {
   const { user, isSystemAdmin } = useAuth();
+  const { startTour } = useOnboardingTour();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [channel, setChannel] = useState<Channel>('all');
+  const [range, setRange] = useState<DashboardRange>('30d');
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const [emailStats, setEmailStats] = useState<EmailStats>({
     total: 0, sent: 0, failed: 0, pending: 0, pdfs: 0,
@@ -170,6 +295,14 @@ export const Dashboard = () => {
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [emailLogsRaw, setEmailLogsRaw] = useState<EmailLogRow[]>([]);
+  const [waLogsRaw, setWaLogsRaw] = useState<WaLogRow[]>([]);
+  const [emailTemplateNames, setEmailTemplateNames] = useState<Record<string, string>>({});
+  const [waTemplateNames, setWaTemplateNames] = useState<Record<string, string>>({});
+  const [previousEmail, setPreviousEmail] = useState<PeriodComparison | null>(null);
+  const [previousWa, setPreviousWa] = useState<PeriodComparison | null>(null);
+  const [exporting, setExporting] = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const checkoutSessionId = params.get('checkout_session_id');
@@ -182,8 +315,19 @@ export const Dashboard = () => {
   }, []);
   useEffect(() => { if (user) loadApplications(); }, [user, isSystemAdmin]);
   useEffect(() => {
-    if (selectedApp) { loadEmailStats(); loadWhatsAppStats(); loadChartData(); }
-  }, [selectedApp]);
+    if (!loading && applications.length === 0 && user?.sub && !hasSeenOnboardingTour(user.sub)) {
+      startTour();
+      markOnboardingTourSeen(user.sub);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, applications.length, user?.sub]);
+  useEffect(() => {
+    if (!selectedApp) return;
+    setStatsLoading(true);
+    Promise.all([loadEmailStats(), loadWhatsAppStats(), loadChartData(), loadTemplateNames(), loadPreviousPeriod()])
+      .finally(() => setStatsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedApp, range]);
   useEffect(() => { checkServiceHealth(); const iv = setInterval(checkServiceHealth, 60000); return () => clearInterval(iv); }, []);
 
   const loadApplications = async () => {
@@ -200,7 +344,8 @@ export const Dashboard = () => {
 
       if (prefsError) throw prefsError;
 
-      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
+      // Por ahora el admin de sistema no ve las apps de otros tenants aca.
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, false);
       const appList = rows.map(({ id, name }) => ({ id, name }));
       setApplications(appList);
 
@@ -213,21 +358,20 @@ export const Dashboard = () => {
   const loadEmailStats = async () => {
     if (!selectedApp) return;
     try {
-      const { data: logs, error } = await querySelect<{
-        status: string;
-        communication_type: string;
-        opened_at: string | null;
-        clicked_at: string | null;
-        delivery_status: string | null;
-        bounce_type: string | null;
-      }>({
+      const filters: QueryFilter[] = [{ column: 'application_id', op: 'eq', value: selectedApp }];
+      const since = rangeStartIso(range);
+      if (since) filters.push({ column: 'created_at', op: 'gte', value: since });
+
+      const { data: logs, error } = await querySelect<EmailLogRow>({
         table: 'email_logs',
         operation: 'select',
-        select: 'status, communication_type, opened_at, clicked_at, delivery_status, bounce_type',
-        filters: [{ column: 'application_id', op: 'eq', value: selectedApp }],
+        select: 'id, recipient_email, status, communication_type, template_id, error_message, opened_at, clicked_at, delivery_status, bounce_type, created_at',
+        filters,
+        order: { column: 'created_at', ascending: false },
       });
       if (error) throw error;
       const all = logs || [];
+      setEmailLogsRaw(all);
       setEmailStats({
         total: all.length,
         sent: all.filter((l) => l.status === 'sent').length,
@@ -248,17 +392,20 @@ export const Dashboard = () => {
       return;
     }
     try {
-      const { data: logs, error } = await querySelect<{
-        status: string;
-        created_at: string;
-      }>({
+      const filters: QueryFilter[] = [{ column: 'application_id', op: 'eq', value: selectedApp }];
+      const since = rangeStartIso(range);
+      if (since) filters.push({ column: 'created_at', op: 'gte', value: since });
+
+      const { data: logs, error } = await querySelect<WaLogRow>({
         table: 'whatsapp_logs',
         operation: 'select',
-        select: 'status, created_at',
-        filters: [{ column: 'application_id', op: 'eq', value: selectedApp }],
+        select: 'id, recipient_phone, status, whatsapp_template_id, error_message, created_at',
+        filters,
+        order: { column: 'created_at', ascending: false },
       });
       if (error) throw error;
       const all = logs || [];
+      setWaLogsRaw(all);
       setHasWhatsApp(all.length > 0);
       setWaStats({
         total: all.length,
@@ -273,11 +420,91 @@ export const Dashboard = () => {
     }
   };
 
+  const loadTemplateNames = async () => {
+    if (!selectedApp) return;
+    try {
+      const [emailTemplatesResult, waTemplatesResult] = await Promise.all([
+        querySelect<{ id: string; name: string }>({
+          table: 'communication_templates',
+          operation: 'select',
+          select: 'id, name',
+          filters: [{ column: 'application_id', op: 'eq', value: selectedApp }],
+        }),
+        querySelect<{ id: string; meta_template_name: string }>({
+          table: 'whatsapp_templates',
+          operation: 'select',
+          select: 'id, meta_template_name',
+          filters: [{ column: 'application_id', op: 'eq', value: selectedApp }],
+        }),
+      ]);
+
+      const emailMap: Record<string, string> = {};
+      (emailTemplatesResult.data || []).forEach((t) => { emailMap[t.id] = t.name; });
+      setEmailTemplateNames(emailMap);
+
+      const waMap: Record<string, string> = {};
+      (waTemplatesResult.data || []).forEach((t) => { waMap[t.id] = t.meta_template_name; });
+      setWaTemplateNames(waMap);
+    } catch { }
+  };
+
+  const loadPreviousPeriod = async () => {
+    if (!selectedApp) {
+      setPreviousEmail(null);
+      setPreviousWa(null);
+      return;
+    }
+
+    const bounds = previousRangeBounds(range);
+    if (!bounds) {
+      // "Todo" no tiene un período anterior comparable.
+      setPreviousEmail(null);
+      setPreviousWa(null);
+      return;
+    }
+
+    try {
+      const dateFilters: QueryFilter[] = [
+        { column: 'application_id', op: 'eq', value: selectedApp },
+        { column: 'created_at', op: 'gte', value: bounds.start },
+        { column: 'created_at', op: 'lt', value: bounds.end },
+      ];
+
+      const [emailResult, waResult] = await Promise.all([
+        querySelect<{ status: string }>({
+          table: 'email_logs', operation: 'select', select: 'status', filters: dateFilters,
+        }),
+        querySelect<{ status: string }>({
+          table: 'whatsapp_logs', operation: 'select', select: 'status', filters: dateFilters,
+        }),
+      ]);
+
+      const emailRows = emailResult.data || [];
+      setPreviousEmail({
+        total: emailRows.length,
+        sent: emailRows.filter((r) => r.status === 'sent').length,
+        failed: emailRows.filter((r) => r.status === 'failed').length,
+      });
+
+      const waRows = waResult.data || [];
+      setPreviousWa({
+        total: waRows.length,
+        sent: waRows.filter((r) => ['sent', 'delivered', 'read'].includes(r.status)).length,
+        failed: waRows.filter((r) => r.status === 'failed').length,
+      });
+    } catch {
+      setPreviousEmail(null);
+      setPreviousWa(null);
+    }
+  };
+
   const loadChartData = async () => {
     if (!selectedApp) return;
     try {
+      const chartDays = rangeToDays(range) ?? ALL_RANGE_CHART_DAYS;
       const since = new Date();
-      since.setDate(since.getDate() - 29);
+      since.setHours(0, 0, 0, 0);
+      since.setDate(since.getDate() - (chartDays - 1));
 
       const [emailResult, waResult] = await Promise.all([
         querySelect<{ status: string; created_at: string }>({
@@ -308,7 +535,7 @@ export const Dashboard = () => {
       const emailBuckets: Record<string, DailyCount> = {};
       const waBuckets: Record<string, DailyCount> = {};
 
-      for (let i = 29; i >= 0; i--) {
+      for (let i = chartDays - 1; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const key = d.toISOString().slice(0, 10);
@@ -440,8 +667,134 @@ export const Dashboard = () => {
 
   const showChannelTabs = hasWhatsApp;
 
+  // Comparación vs período anterior
+  const emailTotalDelta = previousEmail ? computeDelta(emailStats.total, previousEmail.total) : undefined;
+  const emailSentDelta = previousEmail ? computeDelta(emailStats.sent, previousEmail.sent) : undefined;
+  const emailFailedDelta = previousEmail ? computeDelta(emailStats.failed, previousEmail.failed) : undefined;
+  const waTotalDelta = previousWa ? computeDelta(waStats.total, previousWa.total) : undefined;
+  const waSentDelta = previousWa ? computeDelta(waStats.sent, previousWa.sent) : undefined;
+  const waFailedDelta = previousWa ? computeDelta(waStats.failed, previousWa.failed) : undefined;
+
+  // Ranking de templates: agrupa los logs del período por template y ordena por volumen.
+  const templateRanking: TemplateRankItem[] = (() => {
+    const byId: Record<string, TemplateRankItem> = {};
+
+    if (channel === 'all' || channel === 'email') {
+      emailLogsRaw.forEach((log) => {
+        if (!log.template_id) return;
+        const key = `email:${log.template_id}`;
+        if (!byId[key]) {
+          byId[key] = { id: key, name: emailTemplateNames[log.template_id] || 'Template eliminado', channel: 'email', total: 0, failed: 0 };
+        }
+        byId[key].total += 1;
+        if (log.status === 'failed') byId[key].failed += 1;
+      });
+    }
+
+    if (channel === 'all' || channel === 'whatsapp') {
+      waLogsRaw.forEach((log) => {
+        if (!log.whatsapp_template_id) return;
+        const key = `whatsapp:${log.whatsapp_template_id}`;
+        if (!byId[key]) {
+          byId[key] = { id: key, name: waTemplateNames[log.whatsapp_template_id] || 'Template eliminado', channel: 'whatsapp', total: 0, failed: 0 };
+        }
+        byId[key].total += 1;
+        if (log.status === 'failed') byId[key].failed += 1;
+      });
+    }
+
+    return Object.values(byId).sort((a, b) => b.total - a.total).slice(0, 5);
+  })();
+
+  // Últimos fallos combinando ambos canales, más recientes primero.
+  const recentFailures: FailureItem[] = (() => {
+    const emailFailures: FailureItem[] = (channel === 'all' || channel === 'email')
+      ? emailLogsRaw
+        .filter((log) => log.status === 'failed')
+        .map((log) => ({
+          id: log.id,
+          channel: 'email' as const,
+          recipient: log.recipient_email || 'Destinatario desconocido',
+          templateName: log.template_id ? emailTemplateNames[log.template_id] || null : null,
+          errorMessage: log.error_message,
+          createdAt: log.created_at,
+        }))
+      : [];
+
+    const waFailures: FailureItem[] = (channel === 'all' || channel === 'whatsapp')
+      ? waLogsRaw
+        .filter((log) => log.status === 'failed')
+        .map((log) => ({
+          id: log.id,
+          channel: 'whatsapp' as const,
+          recipient: log.recipient_phone || 'Destinatario desconocido',
+          templateName: log.whatsapp_template_id ? waTemplateNames[log.whatsapp_template_id] || null : null,
+          errorMessage: log.error_message,
+          createdAt: log.created_at,
+        }))
+      : [];
+
+    return [...emailFailures, ...waFailures]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 6);
+  })();
+
+  const exportCsv = () => {
+    setExporting(true);
+    try {
+      const rows: string[][] = [['Canal', 'Destinatario', 'Estado', 'Template', 'Error', 'Fecha']];
+
+      if (channel === 'all' || channel === 'email') {
+        emailLogsRaw.forEach((log) => {
+          rows.push([
+            'Email',
+            log.recipient_email || '',
+            log.status,
+            log.template_id ? (emailTemplateNames[log.template_id] || log.template_id) : '',
+            log.error_message || '',
+            log.created_at,
+          ]);
+        });
+      }
+
+      if (channel === 'all' || channel === 'whatsapp') {
+        waLogsRaw.forEach((log) => {
+          rows.push([
+            'WhatsApp',
+            log.recipient_phone || '',
+            log.status,
+            log.whatsapp_template_id ? (waTemplateNames[log.whatsapp_template_id] || log.whatsapp_template_id) : '',
+            log.error_message || '',
+            log.created_at,
+          ]);
+        });
+      }
+
+      const csvContent = rows
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\r\n');
+
+      const blob = new Blob([`﻿${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const rangeSlug = RANGE_OPTIONS.find((o) => o.value === range)?.label.replace(/\s+/g, '_') || range;
+      link.href = url;
+      link.download = `envios_${rangeSlug}_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const ServiceStatusPanel = () => {
-    const overall = services.some(s => s.status === 'down')
+    const isChecking = services.length === 0;
+
+    const overall = isChecking
+      ? { icon: Loader2, label: 'Verificando...', text: 'text-slate-400', spin: true }
+      : services.some(s => s.status === 'down')
       ? { icon: XCircle, label: 'Fuera de Servicio', text: 'text-red-400' }
       : services.some(s => s.status === 'degraded')
       ? { icon: Activity, label: 'Degradado', text: 'text-amber-400' }
@@ -449,12 +802,7 @@ export const Dashboard = () => {
       ? { icon: Zap, label: 'Config. Pendiente', text: 'text-slate-400' }
       : { icon: Zap, label: 'Operacional', text: 'text-emerald-400' };
 
-    const cards = services.length ? services : [
-      { name: 'API', status: 'down', responseTime: 0, message: 'Sin respuesta' },
-      { name: 'Base de Datos', status: 'down', responseTime: 0, message: 'Sin respuesta' },
-      { name: 'Email Service', status: 'down', responseTime: 0, message: 'Sin respuesta' },
-      { name: 'PDF Generator', status: 'down', responseTime: 0, message: 'Sin respuesta' },
-    ] as ServiceStatus[];
+    const placeholderNames = ['API', 'Base de Datos', 'Email Service', 'PDF Generator'];
 
     return (
       <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
@@ -464,12 +812,29 @@ export const Dashboard = () => {
             <h2 className="text-base font-semibold text-white">Estado de Servicios</h2>
           </div>
           <div className={`flex items-center gap-1.5 text-xs ${overall.text}`}>
-            <overall.icon className="w-3.5 h-3.5" />
+            <overall.icon className={`w-3.5 h-3.5 ${overall.spin ? 'animate-spin' : ''}`} />
             <span className="font-medium">{overall.label}</span>
           </div>
         </div>
+        {isChecking ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {placeholderNames.map((name) => (
+              <div key={name} className="bg-slate-900/50 rounded-lg border border-slate-700/60 px-4 py-3 flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-slate-600 animate-pulse" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-white truncate">{name}</div>
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="w-1 h-1 rounded-full bg-slate-500 animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1 h-1 rounded-full bg-slate-500 animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1 h-1 rounded-full bg-slate-500 animate-bounce" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {cards.map((svc, i) => {
+          {services.map((svc, i) => {
             const dotColor = svc.status === 'operational'
               ? 'bg-emerald-500'
               : svc.status === 'degraded'
@@ -513,6 +878,7 @@ export const Dashboard = () => {
             );
           })}
         </div>
+        )}
       </div>
     );
   };
@@ -526,20 +892,19 @@ export const Dashboard = () => {
       <Layout currentPage="dashboard">
         <div className="space-y-6">
           <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-12 text-center">
-            <Mail className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">No tienes aplicaciones</h3>
-          </div>
+          <OnboardingChecklist applicationIds={[]} />
           <ServiceStatusPanel />
         </div>
       </Layout>
     );
   }
 
-  const dayLabels = activeDailyData.filter((_, i) => i % 5 === 0).map(d => {
+  const dayLabelStep = activeDailyData.length <= 7 ? 1 : activeDailyData.length <= 30 ? 5 : 10;
+  const dayLabels = activeDailyData.filter((_, i) => i % dayLabelStep === 0).map(d => {
     const dt = new Date(d.date);
     return `${dt.getDate()}/${dt.getMonth() + 1}`;
   });
+  const chartDaysCount = rangeToDays(range) ?? ALL_RANGE_CHART_DAYS;
 
   return (
     <Layout currentPage="dashboard">
@@ -556,6 +921,34 @@ export const Dashboard = () => {
             ))}
           </div>
         </div>
+
+        {/* Period filter */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+              <CalendarRange className="w-3.5 h-3.5" />
+              Período
+            </span>
+            <div className="flex items-center gap-1 bg-slate-800/60 rounded-xl p-1 w-fit border border-slate-700/60">
+              {RANGE_OPTIONS.map(({ value, label }) => (
+                <button key={value} onClick={() => setRange(value)} disabled={statsLoading}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:cursor-not-allowed ${
+                    range === value ? 'bg-cyan-500 text-white shadow' : 'text-slate-400 hover:text-white disabled:opacity-60'
+                  }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {statsLoading && <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin" />}
+          </div>
+          <button onClick={exportCsv} disabled={exporting || (emailLogsRaw.length === 0 && waLogsRaw.length === 0)}
+            className="inline-flex items-center gap-1.5 self-start rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:border-cyan-500/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-50">
+            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            Exportar CSV
+          </button>
+        </div>
+
+        <OnboardingChecklist applicationIds={applications.map((app) => app.id)} />
 
         {/* Channel tabs — only shown when WhatsApp has data */}
         {showChannelTabs && (
@@ -590,13 +983,16 @@ export const Dashboard = () => {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <StatCard icon={Mail} label="Emails Totales" value={emailStats.total}
                 sub={`${emailStats.pending} pendientes`} color="border-cyan-500/20 text-cyan-400"
-                trend={emailStats.total > 0 ? `${pct(emailStats.sent, emailStats.total)}%` : undefined} />
+                trend={emailStats.total > 0 ? `${pct(emailStats.sent, emailStats.total)}%` : undefined}
+                comparison={emailTotalDelta} />
               <StatCard icon={CheckCircle2} label="Enviados" value={emailStats.sent}
                 color="border-emerald-500/20 text-emerald-400"
-                sub={`Tasa ${pct(emailStats.sent, emailStats.total)}%`} />
+                sub={`Tasa ${pct(emailStats.sent, emailStats.total)}%`}
+                comparison={emailSentDelta} />
               <StatCard icon={XCircle} label="Fallidos" value={emailStats.failed}
                 color="border-red-500/20 text-red-400"
-                sub={`Rebote ${pct(emailStats.bounced, emailStats.total)}%`} />
+                sub={`Rebote ${pct(emailStats.bounced, emailStats.total)}%`}
+                comparison={emailFailedDelta} comparisonInvert />
               <StatCard icon={FileText} label="PDFs Generados" value={emailStats.pdfs}
                 color="border-blue-500/20 text-blue-400" />
             </div>
@@ -642,10 +1038,12 @@ export const Dashboard = () => {
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               <StatCard icon={MessageSquare} label="Total Mensajes" value={waStats.total}
                 color="border-emerald-500/20 text-emerald-400"
-                sub={`${waStats.queued} en cola`} />
+                sub={`${waStats.queued} en cola`}
+                comparison={waTotalDelta} />
               <StatCard icon={Send} label="Enviados" value={waStats.sent}
                 color="border-cyan-500/20 text-cyan-400"
-                sub={`${pct(waStats.sent, waStats.total)}%`} />
+                sub={`${pct(waStats.sent, waStats.total)}%`}
+                comparison={waSentDelta} />
               <StatCard icon={CheckCircle2} label="Entregados" value={waStats.delivered}
                 color="border-teal-500/20 text-teal-400"
                 sub={`${pct(waStats.delivered, waStats.total)}%`} />
@@ -654,7 +1052,8 @@ export const Dashboard = () => {
                 sub={`${pct(waStats.read, waStats.total)}%`} />
               <StatCard icon={XCircle} label="Fallidos" value={waStats.failed}
                 color="border-red-500/20 text-red-400"
-                sub={`${pct(waStats.failed, waStats.total)}%`} />
+                sub={`${pct(waStats.failed, waStats.total)}%`}
+                comparison={waFailedDelta} comparisonInvert />
             </div>
 
             {/* WA delivery donut row */}
@@ -710,7 +1109,7 @@ export const Dashboard = () => {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-base font-semibold text-white">Volumen de Envíos</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Últimos 30 días · {channel === 'all' ? 'Todos los canales' : channel === 'whatsapp' ? 'WhatsApp' : 'Email'}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Últimos {chartDaysCount} días · {channel === 'all' ? 'Todos los canales' : channel === 'whatsapp' ? 'WhatsApp' : 'Email'}</p>
               </div>
               <div className="flex items-center gap-3 text-xs">
                 <span className="flex items-center gap-1.5 text-slate-300">
@@ -749,6 +1148,78 @@ export const Dashboard = () => {
               </>
             ) : (
               <div className="h-28 flex items-center justify-center text-slate-600 text-sm">Sin datos esta semana</div>
+            )}
+          </div>
+        </div>
+
+        {/* Templates ranking + recent failures */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Trophy className="w-4 h-4 text-amber-400" />
+              <h2 className="text-base font-semibold text-white">Templates más usados</h2>
+            </div>
+            {templateRanking.length > 0 ? (
+              <div className="space-y-3">
+                {templateRanking.map((item) => {
+                  const maxTotal = templateRanking[0]?.total || 1;
+                  const barPct = Math.round((item.total / maxTotal) * 100);
+                  const failRate = pct(item.failed, item.total);
+                  return (
+                    <div key={item.id}>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {item.channel === 'whatsapp'
+                            ? <MessageSquare className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                            : <Mail className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />}
+                          <span className="text-sm text-white truncate">{item.name}</span>
+                        </div>
+                        <span className="text-xs text-slate-400 flex-shrink-0">{item.total}{failRate > 0 ? ` · ${failRate}% falla` : ''}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-slate-900/60 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${item.channel === 'whatsapp' ? 'bg-emerald-500/70' : 'bg-cyan-500/70'}`}
+                          style={{ width: `${Math.max(barPct, 3)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="h-28 flex items-center justify-center text-slate-600 text-sm">Sin envíos por template en este período</div>
+            )}
+          </div>
+
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertCircle className="w-4 h-4 text-red-400" />
+              <h2 className="text-base font-semibold text-white">Últimos fallos</h2>
+            </div>
+            {recentFailures.length > 0 ? (
+              <div className="space-y-3">
+                {recentFailures.map((item) => (
+                  <div key={`${item.channel}-${item.id}`} className="flex items-start gap-3 rounded-lg border border-red-500/10 bg-red-500/5 px-3 py-2.5">
+                    {item.channel === 'whatsapp'
+                      ? <MessageSquare className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                      : <Mail className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0 mt-0.5" />}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-white truncate">{item.recipient}</span>
+                        <span className="text-[10px] text-slate-500 flex-shrink-0">
+                          {new Date(item.createdAt).toLocaleDateString('es-UY', { day: '2-digit', month: 'short' })}
+                        </span>
+                      </div>
+                      {item.templateName && <div className="text-[11px] text-slate-500">{item.templateName}</div>}
+                      <p className="text-xs text-red-300 mt-0.5 truncate" title={item.errorMessage || undefined}>
+                        {item.errorMessage || 'Sin detalle de error'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-28 flex items-center justify-center text-slate-600 text-sm">Sin fallos en este período</div>
             )}
           </div>
         </div>

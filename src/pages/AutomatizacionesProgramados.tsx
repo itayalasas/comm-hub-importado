@@ -3,7 +3,9 @@ import { Layout } from '../components/Layout';
 import { PageLoader } from '../components/PageLoader';
 import { AutomationPageHeader } from '../components/AutomationPageHeader';
 import { useApplicationPicker } from '../hooks/useApplicationPicker';
+import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
+import { logAuditEvent } from '../lib/auditLog';
 import {
   AutomationProgramRecord,
   deleteAutomationProgram,
@@ -200,16 +202,24 @@ function ProgramCard({
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button
           onClick={() => onTogglePause(program)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+          disabled={running}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {program.status === 'paused' ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+          {running ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : program.status === 'paused' ? (
+            <Play className="h-3.5 w-3.5" />
+          ) : (
+            <Pause className="h-3.5 w-3.5" />
+          )}
           {program.status === 'paused' ? 'Reanudar' : 'Pausar'}
         </button>
         <button
           onClick={() => onDelete(program)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/20"
+          disabled={running}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           Cancelar
         </button>
         {program.delivery_mode === 'queued' && (
@@ -237,6 +247,7 @@ function ProgramCard({
 
 export const AutomatizacionesProgramados = () => {
   const toast = useToast();
+  const { user } = useAuth();
   const { applications, selectedApp, setSelectedApp, selectedApplication, loading } = useApplicationPicker();
   const [programs, setPrograms] = useState<AutomationProgramRecord[]>([]);
   const [form, setForm] = useState<ProgramFormState>(emptyForm());
@@ -354,6 +365,17 @@ export const AutomatizacionesProgramados = () => {
         }
         return [program, ...current];
       });
+
+      void logAuditEvent({
+        action: editingId ? 'update' : 'create',
+        entityType: 'automation_program',
+        entityId: program.id,
+        entityLabel: program.name,
+        applicationId: selectedApplication.id,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+      });
+
       resetForm();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo guardar la programacion');
@@ -386,6 +408,16 @@ export const AutomatizacionesProgramados = () => {
       if (editingId === program.id) {
         resetForm();
       }
+
+      void logAuditEvent({
+        action: 'delete',
+        entityType: 'automation_program',
+        entityId: program.id,
+        entityLabel: program.name,
+        applicationId: selectedApplication?.id,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo cancelar el programa');
     } finally {

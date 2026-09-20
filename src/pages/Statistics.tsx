@@ -74,6 +74,8 @@ export const Statistics = () => {
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
   const [deleteConfirmPending, setDeleteConfirmPending] = useState<string | null>(null);
   const [deleteConfirmLog, setDeleteConfirmLog] = useState<string | null>(null);
+  const [deletingPending, setDeletingPending] = useState(false);
+  const [deletingLog, setDeletingLog] = useState(false);
   const [resendConfirmLog, setResendConfirmLog] = useState<EmailLog | null>(null);
   const [resending, setResending] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
@@ -128,7 +130,8 @@ export const Statistics = () => {
 
       if (prefsError) throw prefsError;
 
-      const applicationRows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
+      // Por ahora el admin de sistema no ve las apps de otros tenants aca.
+      const applicationRows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, false);
       setApplications(applicationRows);
 
       const defaultApplicationId = prefs?.[0]?.default_application_id || null;
@@ -352,6 +355,7 @@ export const Statistics = () => {
   const deletePendingCommunication = async () => {
     if (!deleteConfirmPending) return;
 
+    setDeletingPending(true);
     try {
       const { error } = await db
         .from('pending_communications')
@@ -368,12 +372,15 @@ export const Statistics = () => {
       }
     } catch {
       toast.error('Error al eliminar la comunicación pendiente');
+    } finally {
+      setDeletingPending(false);
     }
   };
 
   const deleteEmailLog = async () => {
     if (!deleteConfirmLog) return;
 
+    setDeletingLog(true);
     try {
       const { error } = await db
         .from('email_logs')
@@ -390,6 +397,8 @@ export const Statistics = () => {
       }
     } catch {
       toast.error('Error al eliminar el registro');
+    } finally {
+      setDeletingLog(false);
     }
   };
 
@@ -1214,15 +1223,18 @@ export const Statistics = () => {
             <div className="flex space-x-3">
               <button
                 onClick={() => setDeleteConfirmPending(null)}
-                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                disabled={deletingPending}
+                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancelar
               </button>
               <button
                 onClick={deletePendingCommunication}
-                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                disabled={deletingPending}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Eliminar
+                {deletingPending && <Clock className="w-4 h-4 animate-spin" />}
+                {deletingPending ? 'Eliminando...' : 'Eliminar'}
               </button>
             </div>
           </div>
@@ -1239,15 +1251,18 @@ export const Statistics = () => {
             <div className="flex space-x-3">
               <button
                 onClick={() => setDeleteConfirmLog(null)}
-                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                disabled={deletingLog}
+                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancelar
               </button>
               <button
                 onClick={deleteEmailLog}
-                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                disabled={deletingLog}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Eliminar
+                {deletingLog && <Clock className="w-4 h-4 animate-spin" />}
+                {deletingLog ? 'Eliminando...' : 'Eliminar'}
               </button>
             </div>
           </div>

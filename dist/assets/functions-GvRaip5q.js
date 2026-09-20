@@ -1,0 +1,1 @@
+import{o}from"./index-DHiSXTQ5.js";function f(s,a={}){const i=o.functionsBaseUrl,t=o.apiKey,{includeApiKey:n=!0,headers:r,...c}=a,e={...r||{}};return n||(delete e["x-api-key"],delete e["X-API-KEY"]),fetch(`${i}/${s}`,{...c,headers:{"Content-Type":"application/json",...n&&t?{"x-api-key":t}:{},...e}})}export{f};

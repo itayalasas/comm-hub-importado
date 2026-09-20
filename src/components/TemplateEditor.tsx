@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Eye, Code, FileText, Image, QrCode, Plus, Trash2, Maximize2 } from 'lucide-react';
+import { X, Eye, Code, FileText, Image, QrCode, Plus, Trash2, Maximize2, Loader2 } from 'lucide-react';
 import { db } from '../lib/db';
 import { useToast } from './Toast';
 import { HTMLEditor } from './HTMLEditor';
@@ -11,6 +11,7 @@ interface TemplateEditorProps {
   onCancel: () => void;
   isEditing: boolean;
   applicationId: string;
+  saving?: boolean;
 }
 
 interface PredefinedVariable {
@@ -30,13 +31,15 @@ const defaultVariables: PredefinedVariable[] = [
   { name: 'company_url', example: 'https://cmpro.com', description: 'URL de la empresa' },
 ];
 
-export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEditing, applicationId }: TemplateEditorProps) => {
+export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEditing, applicationId, saving = false }: TemplateEditorProps) => {
   const toast = useToast();
   const [showPreview, setShowPreview] = useState(false);
   const [showHTMLEditor, setShowHTMLEditor] = useState(false);
   const [customVariables, setCustomVariables] = useState<PredefinedVariable[]>([]);
   const [showAddVariable, setShowAddVariable] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [savingVariable, setSavingVariable] = useState(false);
+  const [deletingVariable, setDeletingVariable] = useState(false);
   const [pdfTemplates, setPdfTemplates] = useState<any[]>([]);
   const [detectedVariables, setDetectedVariables] = useState<Set<string>>(new Set());
   const [newVariable, setNewVariable] = useState<PredefinedVariable>({
@@ -120,6 +123,7 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
       return;
     }
 
+    setSavingVariable(true);
     try {
       const { error } = await db.from('predefined_variables').insert({
         application_id: applicationId,
@@ -140,12 +144,15 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
       } else {
         toast.error('Error al guardar la variable. Por favor intenta de nuevo');
       }
+    } finally {
+      setSavingVariable(false);
     }
   };
 
   const confirmDelete = async () => {
     if (!deleteConfirm) return;
 
+    setDeletingVariable(true);
     try {
       const { error } = await db
         .from('predefined_variables')
@@ -158,6 +165,8 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
       setDeleteConfirm(null);
     } catch {
       toast.error('Error al eliminar la variable');
+    } finally {
+      setDeletingVariable(false);
     }
   };
 
@@ -655,13 +664,16 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
                     <div className="flex space-x-2">
                       <button
                         onClick={saveCustomVariable}
-                        className="flex-1 px-3 py-2 bg-cyan-500 text-white text-xs rounded hover:bg-cyan-600 transition-colors"
+                        disabled={savingVariable}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-cyan-500 text-white text-xs rounded hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Guardar
+                        {savingVariable && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        {savingVariable ? 'Guardando...' : 'Guardar'}
                       </button>
                       <button
                         onClick={() => setShowAddVariable(false)}
-                        className="flex-1 px-3 py-2 bg-slate-700 text-white text-xs rounded hover:bg-slate-600 transition-colors"
+                        disabled={savingVariable}
+                        className="flex-1 px-3 py-2 bg-slate-700 text-white text-xs rounded hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Cancelar
                       </button>
@@ -711,10 +723,11 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
           </button>
           <button
             onClick={onSave}
-            disabled={!formData.name || !formData.html_content}
-            className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!formData.name || !formData.html_content || saving}
+            className="flex items-center gap-2 px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Guardar
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {saving ? 'Guardando...' : 'Guardar'}
           </button>
         </div>
       </div>
@@ -729,15 +742,18 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
             <div className="flex space-x-3">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                disabled={deletingVariable}
+                className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancelar
               </button>
               <button
                 onClick={confirmDelete}
-                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                disabled={deletingVariable}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Eliminar
+                {deletingVariable && <Loader2 className="w-4 h-4 animate-spin" />}
+                {deletingVariable ? 'Eliminando...' : 'Eliminar'}
               </button>
             </div>
           </div>

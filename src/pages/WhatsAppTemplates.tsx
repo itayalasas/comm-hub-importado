@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { db } from '../lib/db';
+import { logAuditEvent } from '../lib/auditLog';
 import { functionsFetch } from '../lib/functions';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
@@ -112,6 +113,7 @@ export const WhatsAppTemplates = () => {
     pdf_filename_pattern: '',
   });
   const [templateSaving, setTemplateSaving] = useState(false);
+  const [deletingTemplate, setDeletingTemplate] = useState(false);
 
   // Submit to Meta
   const [submitting, setSubmitting] = useState<string | null>(null);
@@ -144,7 +146,8 @@ export const WhatsAppTemplates = () => {
         .eq('user_id', user.sub)
         .maybeSingle();
 
-      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
+      // Por ahora el admin de sistema no ve las apps de otros tenants aca.
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, false);
       setApplications(rows);
       const defaultId = (prefs as any)?.default_application_id;
       if (defaultId) setSelectedApp(defaultId);
@@ -259,6 +262,16 @@ export const WhatsAppTemplates = () => {
       }
       setShowModal(false);
       loadTemplates();
+
+      void logAuditEvent({
+        action: editingTemplate ? 'update' : 'create',
+        entityType: 'whatsapp_template',
+        entityId: editingTemplate?.id,
+        entityLabel: templateForm.meta_template_name,
+        applicationId: selectedApp,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+      });
     } catch {
       toast.error('Error al guardar el template.');
     } finally {
@@ -294,10 +307,28 @@ export const WhatsAppTemplates = () => {
   };
 
   const deleteTemplate = async (id: string) => {
-    await db.from('whatsapp_templates').delete().eq('id', id);
-    toast.success('Template eliminado');
-    setDeleteConfirm(null);
-    loadTemplates();
+    const target = templates.find((t) => t.id === id);
+    setDeletingTemplate(true);
+    try {
+      await db.from('whatsapp_templates').delete().eq('id', id);
+      toast.success('Template eliminado');
+      setDeleteConfirm(null);
+      loadTemplates();
+
+      void logAuditEvent({
+        action: 'delete',
+        entityType: 'whatsapp_template',
+        entityId: id,
+        entityLabel: target?.meta_template_name,
+        applicationId: selectedApp,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+      });
+    } catch {
+      toast.error('Error al eliminar el template');
+    } finally {
+      setDeletingTemplate(false);
+    }
   };
 
   const countVars = (text: string) => {
@@ -732,8 +763,8 @@ export const WhatsAppTemplates = () => {
             <h3 className="text-lg font-bold text-white mb-2">Eliminar template</h3>
             <p className="text-slate-400 text-sm mb-6">Esta acción no se puede deshacer.</p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm transition-colors">Cancelar</button>
-              <button onClick={() => deleteTemplate(deleteConfirm)} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors">Eliminar</button>
+              <button onClick={() => setDeleteConfirm(null)} disabled={deletingTemplate} className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Cancelar</button>
+              <button onClick={() => deleteTemplate(deleteConfirm)} disabled={deletingTemplate} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{deletingTemplate ? 'Eliminando…' : 'Eliminar'}</button>
             </div>
           </div>
         </div>

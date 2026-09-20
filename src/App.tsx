@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { OnboardingTourProvider } from './contexts/OnboardingTourContext';
 import { ToastContainer } from './components/ToastContainer';
 import { Home } from './pages/Home';
 import { getDefaultAuthenticatedPath } from './lib/authNavigation';
@@ -313,6 +314,14 @@ const AppRoutes = () => {
         }
       />
       <Route
+        path="/settings/auditoria"
+        element={
+          <ProtectedRoute requiredMenu="settings">
+            <Settings tab="auditoria" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/api-explorer"
         element={
           <ProtectedRoute requiredMenu="documentation">
@@ -360,11 +369,13 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <ToastContainer>
-          <Suspense fallback={<AppLoader />}>
-            <AppRoutes />
-          </Suspense>
-        </ToastContainer>
+        <OnboardingTourProvider>
+          <ToastContainer>
+            <Suspense fallback={<AppLoader />}>
+              <AppRoutes />
+            </Suspense>
+          </ToastContainer>
+        </OnboardingTourProvider>
       </AuthProvider>
     </BrowserRouter>
   );

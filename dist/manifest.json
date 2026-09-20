@@ -1,0 +1,27 @@
+{
+  "base_url_example": "https://sendcraft.net/assets/email",
+  "logo": [
+    "sendcraft-icon.png",
+    "sendcraft-logo-dark.png",
+    "sendcraft-logo-horizontal.png",
+    "sendcraft-logo-white.png",
+    "sendcraft-logo.png"
+  ],
+  "icons": [
+    "automatizaciones.png",
+    "campanas.png",
+    "check.png",
+    "email.png",
+    "link.png",
+    "metricas.png",
+    "plantillas.png",
+    "send.png",
+    "soporte.png",
+    "web.png"
+  ],
+  "illustrations": [
+    "hero-analytics.png",
+    "hero-dashboard.png",
+    "hero-email.png"
+  ]
+}

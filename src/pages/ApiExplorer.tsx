@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Zap,
   Copy,
@@ -14,8 +14,11 @@ import {
   Terminal,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
+import { TourSpotlight } from '../components/TourSpotlight';
 import { buildFunctionsUrl, getRuntimeConfig } from '../lib/config';
 import { useAuth } from '../contexts/AuthContext';
+import { useOnboardingTour } from '../contexts/OnboardingTourContext';
+import { markOnboardingTourSeen } from '../lib/onboarding';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import {
   buildApiExplorerCatalog,
@@ -129,7 +132,15 @@ const CodeBlock = ({
   </div>
 );
 
-const TryItPanel = ({ endpoint, baseUrl }: { endpoint: ApiExplorerEndpoint; baseUrl: string }) => {
+const TryItPanel = ({
+  endpoint,
+  baseUrl,
+  onSuccess,
+}: {
+  endpoint: ApiExplorerEndpoint;
+  baseUrl: string;
+  onSuccess?: () => void;
+}) => {
   const queryFields = getQueryFields(endpoint);
   const bodyFields = getBodyFields(endpoint);
   const [apiKey, setApiKey] = useState('');
@@ -182,12 +193,13 @@ const TryItPanel = ({ endpoint, baseUrl }: { endpoint: ApiExplorerEndpoint; base
       }
 
       setResponse({ status: res.status, body: pretty, time: Date.now() - start });
+      if (res.ok) onSuccess?.();
     } catch (err: any) {
       setResponse({ status: 0, body: `Network error: ${err.message}`, time: Date.now() - start });
     } finally {
       setLoading(false);
     }
-  }, [endpoint, baseUrl, apiKey, bodyJson, queryParams]);
+  }, [endpoint, baseUrl, apiKey, bodyJson, queryParams, onSuccess]);
 
   return (
     <div className="space-y-4">
@@ -278,6 +290,7 @@ const EndpointCard = ({
   onToggle,
   copiedCode,
   onCopy,
+  onTrySuccess,
 }: {
   endpoint: ApiExplorerEndpoint;
   baseUrl: string;
@@ -285,6 +298,7 @@ const EndpointCard = ({
   onToggle: () => void;
   copiedCode: string | null;
   onCopy: (code: string, id: string) => void;
+  onTrySuccess?: () => void;
 }) => {
   const [activeTab, setActiveTab] = useState<'docs' | 'try'>('docs');
   const Icon = endpoint.icon;
@@ -432,7 +446,7 @@ const EndpointCard = ({
                 </div>
               </>
             ) : (
-              <TryItPanel endpoint={endpoint} baseUrl={baseUrl} />
+              <TryItPanel endpoint={endpoint} baseUrl={baseUrl} onSuccess={onTrySuccess} />
             )}
           </div>
         </div>
@@ -448,8 +462,16 @@ export default function ApiExplorer() {
   const [expandedGroups, setExpandedGroups] = useState<string[]>(() => groups.map((group) => group.id));
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [filterGroup, setFilterGroup] = useState<string>('all');
-  useAuth();
+  const { user } = useAuth();
+  const { stepIndex: tourStep, endTour } = useOnboardingTour();
   const { hasAnyFeature } = useSubscriptionLimits();
+
+  const handleSendEmailTourSuccess = () => {
+    if (tourStep === 4) {
+      if (user?.sub) markOnboardingTourSeen(user.sub);
+      endTour();
+    }
+  };
 
   const baseUrl = getFunctionsBaseUrl();
   const canUseApiExplorer = hasAnyFeature(['api_explorer_access', 'api_access']);
@@ -467,6 +489,14 @@ export default function ApiExplorer() {
   const toggleGroup = (groupId: string) => {
     setExpandedGroups((prev) => (prev.includes(groupId) ? prev.filter((item) => item !== groupId) : [...prev, groupId]));
   };
+
+  useEffect(() => {
+    if (tourStep === 4) {
+      setFilterGroup('all');
+      setExpandedGroups(groups.map((group) => group.id));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourStep]);
 
   const visibleEndpoints = filterGroup === 'all'
     ? endpoints
@@ -503,6 +533,22 @@ export default function ApiExplorer() {
 
   return (
     <Layout currentPage="api-explorer">
+      {tourStep === 4 && (
+        <TourSpotlight
+          selector='[data-tour="endpoint-send_email"]'
+          stepLabel="Paso 5 de 5"
+          title="Probá tu primer envío"
+          body="Abrí este endpoint, entrá a la pestaña Probar, completá los datos y presioná Ejecutar."
+          ctaLabel="Entendido"
+          onCta={() => {
+            setExpandedEndpoints((prev) => (prev.includes('send_email') ? prev : [...prev, 'send_email']));
+          }}
+          onSkip={() => {
+            if (user?.sub) markOnboardingTourSeen(user.sub);
+            endTour();
+          }}
+        />
+      )}
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -603,15 +649,20 @@ export default function ApiExplorer() {
                 {isGroupExpanded && (
                   <div className="border-t border-slate-700/40 p-4 space-y-3">
                     {groupEndpoints.map((endpoint) => (
-                      <EndpointCard
+                      <div
                         key={endpoint.id}
-                        endpoint={endpoint}
-                        baseUrl={baseUrl}
-                        expanded={expandedEndpoints.includes(endpoint.id)}
-                        onToggle={() => toggleEndpoint(endpoint.id)}
-                        copiedCode={copiedCode}
-                        onCopy={copyToClipboard}
-                      />
+                        data-tour={endpoint.id === 'send_email' ? 'endpoint-send_email' : undefined}
+                      >
+                        <EndpointCard
+                          endpoint={endpoint}
+                          baseUrl={baseUrl}
+                          expanded={expandedEndpoints.includes(endpoint.id)}
+                          onToggle={() => toggleEndpoint(endpoint.id)}
+                          copiedCode={copiedCode}
+                          onCopy={copyToClipboard}
+                          onTrySuccess={endpoint.id === 'send_email' ? handleSendEmailTourSuccess : undefined}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}

@@ -11,6 +11,7 @@ const corsHeaders = {
 const allowedTables = [
   "applications",
   "api_keys",
+  "audit_logs",
   "branding_configs",
   "email_credentials",
   "communication_templates",
@@ -233,21 +234,43 @@ function normalizeWebAccessAttemptRow(row: Record<string, any>, req: Request): R
   return normalized;
 }
 
-function enrichWebAccessAttemptData(table: string, operation: string, data: any, req: Request): any {
-  if (table !== "web_access_attempts" || !["insert", "upsert"].includes(operation)) {
-    return data;
-  }
-
+function mapRows(data: any, mapper: (row: Record<string, any>) => Record<string, any>): any {
   if (Array.isArray(data)) {
     return data.map((row) => (
-      row && typeof row === "object" && !Array.isArray(row)
-        ? normalizeWebAccessAttemptRow(row, req)
-        : row
+      row && typeof row === "object" && !Array.isArray(row) ? mapper(row) : row
     ));
   }
 
   if (data && typeof data === "object" && !Array.isArray(data)) {
-    return normalizeWebAccessAttemptRow(data, req);
+    return mapper(data);
+  }
+
+  return data;
+}
+
+function normalizeAuditLogRow(row: Record<string, any>, req: Request): Record<string, any> {
+  const normalized = { ...row };
+
+  const rawIp = String(normalized.ip_address ?? "").trim();
+  normalized.ip_address = rawIp || getClientIp(req);
+
+  const rawUserAgent = String(normalized.user_agent ?? "").trim();
+  normalized.user_agent = rawUserAgent || req.headers.get("user-agent") || "unknown";
+
+  return normalized;
+}
+
+function enrichWebAccessAttemptData(table: string, operation: string, data: any, req: Request): any {
+  if (!["insert", "upsert"].includes(operation)) {
+    return data;
+  }
+
+  if (table === "web_access_attempts") {
+    return mapRows(data, (row) => normalizeWebAccessAttemptRow(row, req));
+  }
+
+  if (table === "audit_logs") {
+    return mapRows(data, (row) => normalizeAuditLogRow(row, req));
   }
 
   return data;

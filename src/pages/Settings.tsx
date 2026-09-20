@@ -1,7 +1,11 @@
 ﻿import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { PageLoader } from '../components/PageLoader';
 import { useAuth } from '../contexts/AuthContext';
+import { useOnboardingTour } from '../contexts/OnboardingTourContext';
+import { TourSpotlight } from '../components/TourSpotlight';
+import { markOnboardingTourSeen } from '../lib/onboarding';
 import { authClient } from '../lib/auth';
 import { useToast } from '../components/Toast';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
@@ -11,6 +15,8 @@ import { configManager, getRuntimeConfig, buildFunctionsUrl } from '../lib/confi
 import { db } from '../lib/db';
 import { queryMutate, querySelect } from '../lib/queryApi';
 import { createOwnedApplication, loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
+import { logAuditEvent } from '../lib/auditLog';
+import { AuditLogPanel } from '../components/AuditLogPanel';
 
 interface Application {
   id: string;
@@ -71,8 +77,10 @@ interface WhatsAppConfig {
   is_active: boolean;
 }
 
-export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 'whatsapp' }) => {
+export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 'whatsapp' | 'auditoria' }) => {
   const { user, isSystemAdmin } = useAuth();
+  const { stepIndex: tourStep, goToStep: goToTourStep, endTour } = useOnboardingTour();
+  const navigate = useNavigate();
   const toast = useToast();
   const { checkApplicationLimit, refreshCounts, hasFeature } = useSubscriptionLimits();
   const [applications, setApplications] = useState<Application[]>([]);
@@ -82,6 +90,10 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
   const [showPassword, setShowPassword] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showNewAppModal, setShowNewAppModal] = useState(false);
+  const [creatingApplication, setCreatingApplication] = useState(false);
+  const [settingDefaultAppId, setSettingDefaultAppId] = useState<string | null>(null);
+  const [savingCredentials, setSavingCredentials] = useState(false);
+  const [embedCredActionId, setEmbedCredActionId] = useState<string | null>(null);
   const [showDeleteAppModal, setShowDeleteAppModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -215,7 +227,8 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     try {
       if (!user?.sub) return;
 
-      const apps = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
+      // Por ahora el admin de sistema no ve las apps de otros tenants aca.
+      const apps = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, false);
       setApplications(apps);
 
       const { data: prefs, error } = await querySelect<{ default_application_id: string | null }>({
@@ -313,6 +326,16 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
       toast.success('Configuración de WhatsApp guardada');
       setShowWaModal(false);
       if (selectedApp && (tab === 'whatsapp')) loadWaConfig(selectedApp);
+
+      void logAuditEvent({
+        action: waConfig ? 'update' : 'create',
+        entityType: 'whatsapp_config',
+        entityId: waConfig?.id || targetId,
+        entityLabel: waForm.display_name || waForm.phone_number_id,
+        applicationId: targetId,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+      });
     } catch {
       toast.error('Error al guardar la configuración.');
     } finally {
@@ -419,6 +442,14 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
       setGeneratedPass('');
       toast.success('Credencial creada');
       loadEmbedCreds();
+
+      void logAuditEvent({
+        action: 'create',
+        entityType: 'embed_credential',
+        entityLabel: newEmbed.username.trim(),
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+      });
     } catch {
       setNewEmbedError('Error al guardar. Intentá de nuevo.');
     } finally {
@@ -427,22 +458,58 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
   };
 
   const deleteEmbedCred = async (id: string) => {
-    await embedFetch(`/${id}`, { method: 'DELETE' });
-    setEmbedCreds(prev => prev.filter(c => c.id !== id));
-    toast.success('Credencial eliminada');
+    setEmbedCredActionId(id);
+    const target = embedCreds.find((c) => c.id === id);
+    try {
+      await embedFetch(`/${id}`, { method: 'DELETE' });
+      setEmbedCreds(prev => prev.filter(c => c.id !== id));
+      toast.success('Credencial eliminada');
+
+      void logAuditEvent({
+        action: 'delete',
+        entityType: 'embed_credential',
+        entityId: id,
+        entityLabel: target?.username || target?.label,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+      });
+    } catch {
+      toast.error('Error al eliminar la credencial');
+    } finally {
+      setEmbedCredActionId((current) => (current === id ? null : current));
+    }
   };
 
   const toggleEmbedCred = async (id: string, current: boolean) => {
-    await embedFetch(`/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_active: !current }),
-    });
-    setEmbedCreds(prev => prev.map(c => c.id === id ? { ...c, is_active: !current } : c));
+    setEmbedCredActionId(id);
+    const target = embedCreds.find((c) => c.id === id);
+    try {
+      await embedFetch(`/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: !current }),
+      });
+      setEmbedCreds(prev => prev.map(c => c.id === id ? { ...c, is_active: !current } : c));
+
+      void logAuditEvent({
+        action: 'update',
+        entityType: 'embed_credential',
+        entityId: id,
+        entityLabel: target?.username || target?.label,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+        metadata: { is_active: !current },
+      });
+    } catch {
+      toast.error('Error al actualizar la credencial');
+    } finally {
+      setEmbedCredActionId((currentId) => (currentId === id ? null : currentId));
+    }
   };
 
   const saveCredentials = async () => {
     if (!selectedApp) return;
 
+    setSavingCredentials(true);
     try {
       const updateData: any = {
         provider_type: formData.provider_type,
@@ -486,8 +553,21 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
 
       setShowModal(false);
       loadCredentials(selectedApp);
+
+      void logAuditEvent({
+        action: credentials?.id ? 'update' : 'create',
+        entityType: 'email_credentials',
+        entityId: credentials?.id || selectedApp,
+        entityLabel: formData.from_email,
+        applicationId: selectedApp,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+        metadata: { provider_type: formData.provider_type },
+      });
     } catch {
       toast.error('Error al guardar las credenciales');
+    } finally {
+      setSavingCredentials(false);
     }
   };
 
@@ -532,6 +612,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
   };
 
   const setAsDefault = async (appId: string) => {
+    setSettingDefaultAppId(appId);
     try {
       if (!user?.sub) return;
 
@@ -553,6 +634,8 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
       toast.success('Aplicación predeterminada actualizada');
     } catch {
       toast.error('Error al guardar la configuración');
+    } finally {
+      setSettingDefaultAppId((current) => (current === appId ? null : current));
     }
   };
 
@@ -589,6 +672,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
       return;
     }
 
+    setCreatingApplication(true);
     try {
       const createdApp = await createOwnedApplication({
         ownerId: user.sub,
@@ -604,8 +688,25 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
       setShowNewAppModal(false);
       setNewAppData({ name: '', domain: '' });
       await loadApplications();
+
+      void logAuditEvent({
+        action: 'create',
+        entityType: 'application',
+        entityId: createdApp.id,
+        entityLabel: newAppData.name,
+        applicationId: createdApp.id,
+        tenantId: user.tenant_id || null,
+        actor: { id: user.sub, email: user.email, name: user.name },
+      });
+
+      if (tourStep === 2) {
+        goToTourStep(3);
+        navigate('/templates');
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al crear la aplicación');
+    } finally {
+      setCreatingApplication(false);
     }
   };
 
@@ -694,6 +795,16 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
       } else {
         toast.success('Aplicación eliminada');
       }
+
+      void logAuditEvent({
+        action: 'delete',
+        entityType: 'application',
+        entityId: deleteAppTarget.id,
+        entityLabel: deleteAppTarget.name,
+        applicationId: deleteAppTarget.id,
+        tenantId: user?.tenant_id || null,
+        actor: { id: user?.sub, email: user?.email, name: user?.name },
+      });
     } catch (error) {
       setDeleteAppError(error instanceof Error ? error.message : 'No se pudo eliminar la aplicación');
     } finally {
@@ -701,12 +812,14 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     }
   };
 
-  const currentPageSlug = tab === 'email' ? 'settings-email' : tab === 'embed' ? 'settings-embed' : 'settings-apps';
-  const pageTitle = tab === 'email' ? 'Correo Electrónico' : tab === 'embed' ? 'Acceso al Embed' : 'Aplicaciones';
+  const currentPageSlug = tab === 'email' ? 'settings-email' : tab === 'embed' ? 'settings-embed' : tab === 'auditoria' ? 'settings-auditoria' : 'settings-apps';
+  const pageTitle = tab === 'email' ? 'Correo Electrónico' : tab === 'embed' ? 'Acceso al Embed' : tab === 'auditoria' ? 'Auditoría' : 'Aplicaciones';
   const pageDesc = tab === 'email'
     ? 'Configura el proveedor de email para cada aplicación'
     : tab === 'embed'
     ? 'Genera credenciales para proteger el acceso al Marketplace embebido'
+    : tab === 'auditoria'
+    ? 'Quién hizo qué, desde dónde y cuándo'
     : 'Gestiona tus aplicaciones y API keys';
 
   if (loading) {
@@ -719,7 +832,29 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
 
   return (
     <Layout currentPage={currentPageSlug}>
-      <div className="space-y-4 sm:space-y-6">
+      {tourStep === 2 && tab === 'apps' && !showNewAppModal && !showUpgradeModal && (
+        <TourSpotlight
+          selector='[data-tour="new-application-button"]'
+          stepLabel="Paso 3 de 5"
+          title="Creá tu primera aplicación"
+          body="Hacé clic acá para darla de alta. Al crearla vas a ver tu API key y seguimos guiándote para crear tu primer template y probar un envío."
+          ctaLabel={applications.length > 0 ? 'Continuar' : 'Entendido'}
+          onCta={() => {
+            if (applications.length > 0) {
+              goToTourStep(3);
+              navigate('/templates');
+              return;
+            }
+            handleNewApplicationClick();
+          }}
+          onSkip={() => {
+            if (user?.sub) markOnboardingTourSeen(user.sub);
+            endTour();
+          }}
+        />
+      )}
+      {tab === 'auditoria' && <AuditLogPanel />}
+      <div className={tab === 'auditoria' ? 'hidden' : 'space-y-4 sm:space-y-6'}>
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white">{pageTitle}</h1>
           <p className="text-sm sm:text-base text-slate-400 mt-2">{pageDesc}</p>
@@ -734,6 +869,7 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
             </div>
             <button
               onClick={handleNewApplicationClick}
+              data-tour="new-application-button"
               className="flex items-center justify-center space-x-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />
@@ -775,9 +911,11 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
                       {defaultApp !== app.id && (
                         <button
                           onClick={() => setAsDefault(app.id)}
-                          className="text-xs px-3 py-1 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors"
+                          disabled={settingDefaultAppId === app.id}
+                          className="flex items-center gap-1.5 text-xs px-3 py-1 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Marcar como predeterminada
+                          {settingDefaultAppId === app.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                          {settingDefaultAppId === app.id ? 'Guardando...' : 'Marcar como predeterminada'}
                         </button>
                       )}
                     </div>
@@ -1051,12 +1189,18 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button
                           onClick={() => toggleEmbedCred(cred.id, cred.is_active)}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors ${cred.is_active ? 'bg-emerald-500/10 text-emerald-400 hover:bg-red-500/10 hover:text-red-400' : 'bg-slate-700 text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400'}`}
+                          disabled={embedCredActionId === cred.id}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${cred.is_active ? 'bg-emerald-500/10 text-emerald-400 hover:bg-red-500/10 hover:text-red-400' : 'bg-slate-700 text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400'}`}
                         >
+                          {embedCredActionId === cred.id && <Loader2 className="w-3 h-3 animate-spin" />}
                           {cred.is_active ? 'Activo' : 'Inactivo'}
                         </button>
-                        <button onClick={() => deleteEmbedCred(cred.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-slate-600 hover:text-red-400 transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
+                        <button
+                          onClick={() => deleteEmbedCred(cred.id)}
+                          disabled={embedCredActionId === cred.id}
+                          className="p-1.5 rounded-lg hover:bg-red-500/10 text-slate-600 hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {embedCredActionId === cred.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                         </button>
                       </div>
                     </div>
@@ -1338,16 +1482,18 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
                   setShowNewAppModal(false);
                   setNewAppData({ name: '', domain: '' });
                 }}
-                className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                disabled={creatingApplication}
+                className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancelar
               </button>
               <button
                 onClick={createApplication}
-                disabled={!newAppData.name}
-                className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!newAppData.name || creatingApplication}
+                className="flex items-center gap-2 px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Crear
+                {creatingApplication && <Loader2 className="w-4 h-4 animate-spin" />}
+                {creatingApplication ? 'Creando...' : 'Crear'}
               </button>
             </div>
           </div>
@@ -1589,20 +1735,22 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
             <div className="flex justify-end space-x-3 p-6 border-t border-slate-700">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                disabled={savingCredentials}
+                className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancelar
               </button>
               <button
                 onClick={saveCredentials}
                 disabled={
-                  formData.provider_type === 'smtp'
+                  savingCredentials || (formData.provider_type === 'smtp'
                     ? (!formData.smtp_host || !formData.smtp_user || !formData.smtp_password || !formData.from_email)
-                    : (!formData.resend_api_key || !formData.from_email)
+                    : (!formData.resend_api_key || !formData.from_email))
                 }
-                className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Guardar
+                {savingCredentials && <Loader2 className="w-4 h-4 animate-spin" />}
+                {savingCredentials ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>

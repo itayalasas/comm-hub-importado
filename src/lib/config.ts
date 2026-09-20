@@ -6,6 +6,10 @@ const CONFIG_API_URL = (() => {
   return raw.endsWith('/get-env') ? raw : `${raw}/get-env`;
 })();
 const CONFIG_ACCESS_KEY = 'cc3cdc09379e1dc8f8482007290a5d9e2d2755c5613f5a3fd81fb02c81040b37';
+// Bounds worst-case wait when the remote config service (Azure Container App)
+// is cold-starting — beyond this we fall back to build-time env vars instead
+// of leaving the caller (e.g. the login button) hanging indefinitely.
+const CONFIG_FETCH_TIMEOUT_MS = 4000;
 
 interface EnvConfig {
   project_name: string;
@@ -344,6 +348,8 @@ function readFallbackEnv(key: string): string {
       return env.AUTH_REFRESH_URL || buildAuthEndpoint(authBaseUrl, 'auth-refresh');
     case 'AUTH_LOGOUT_URL':
       return env.AUTH_LOGOUT_URL || buildAuthEndpoint(authBaseUrl, 'auth-logout');
+    case 'AUTH_IMPERSONATE_URL':
+      return env.AUTH_IMPERSONATE_URL || buildAuthEndpoint(authBaseUrl, 'auth-impersonate');
     case 'URL_HEALTH_CHECK_API':
       return env.URL_HEALTH_CHECK_API || '';
     case 'VALIDATION_API_BASE_URL':
@@ -372,6 +378,7 @@ function buildFallbackConfig(): EnvConfig {
   const authVerifyUrl = readFallbackEnv('AUTH_TOKEN_VALIDA') || readFallbackEnv('AUTH_VERIFY_URL');
   const authRefreshUrl = readFallbackEnv('AUTH_REFRESH_URL');
   const authLogoutUrl = readFallbackEnv('AUTH_LOGOUT_URL');
+  const authImpersonateUrl = readFallbackEnv('AUTH_IMPERSONATE_URL');
 
   return {
     project_name: '',
@@ -397,6 +404,7 @@ function buildFallbackConfig(): EnvConfig {
       AUTH_VERIFY_URL: authVerifyUrl,
       AUTH_REFRESH_URL: authRefreshUrl,
       AUTH_LOGOUT_URL: authLogoutUrl,
+      AUTH_IMPERSONATE_URL: authImpersonateUrl,
       URL_HEALTH_CHECK_API: readFallbackEnv('URL_HEALTH_CHECK_API'),
       VALIDATION_API_BASE_URL: readFallbackEnv('VALIDATION_API_BASE_URL'),
       CANCEL_SUBSCRIPTION_URL: readFallbackEnv('CANCEL_SUBSCRIPTION_URL'),
@@ -419,9 +427,13 @@ class ConfigManager {
     if (this.loading) return this.loading;
 
     this.loading = (async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), CONFIG_FETCH_TIMEOUT_MS);
+
       try {
         const response = await fetch(CONFIG_API_URL, {
           method: 'GET',
+          signal: controller.signal,
           headers: {
             'X-Access-Key': CONFIG_ACCESS_KEY,
           },
@@ -471,6 +483,8 @@ class ConfigManager {
           fallbackConfig.variables.AUTH_REFRESH_URL;
         const authLogoutUrl = remoteVariables.AUTH_LOGOUT_URL ||
           fallbackConfig.variables.AUTH_LOGOUT_URL;
+        const authImpersonateUrl = remoteVariables.AUTH_IMPERSONATE_URL ||
+          fallbackConfig.variables.AUTH_IMPERSONATE_URL;
 
         const resolvedConfig: EnvConfig = {
           ...fallbackConfig,
@@ -498,6 +512,7 @@ class ConfigManager {
             AUTH_VERIFY_URL: authVerifyUrl,
             AUTH_REFRESH_URL: authRefreshUrl,
             AUTH_LOGOUT_URL: authLogoutUrl,
+            AUTH_IMPERSONATE_URL: authImpersonateUrl,
             URL_HEALTH_CHECK_API: remoteVariables.URL_HEALTH_CHECK_API || fallbackConfig.variables.URL_HEALTH_CHECK_API,
             VALIDATION_API_BASE_URL: remoteVariables.VALIDATION_API_BASE_URL || fallbackConfig.variables.VALIDATION_API_BASE_URL,
             CANCEL_SUBSCRIPTION_URL: remoteVariables.CANCEL_SUBSCRIPTION_URL || fallbackConfig.variables.CANCEL_SUBSCRIPTION_URL,
@@ -509,6 +524,8 @@ class ConfigManager {
       } catch {
         const fallbackConfig = buildFallbackConfig();
         this.config = fallbackConfig;
+      } finally {
+        clearTimeout(timeoutId);
       }
     })();
 
@@ -578,6 +595,10 @@ class ConfigManager {
 
   get authTokenValida(): string {
     return this.getVariable('AUTH_TOKEN_VALIDA');
+  }
+
+  get authImpersonateUrl(): string {
+    return this.getVariable('AUTH_IMPERSONATE_URL');
   }
 
   get apiUrl(): string {
@@ -671,6 +692,7 @@ export function getRuntimeConfig() {
     authVerifyUrl: snapshot.variables.AUTH_VERIFY_URL || snapshot.variables.AUTH_TOKEN_VALIDA || '',
     authRefreshUrl: snapshot.variables.AUTH_REFRESH_URL || '',
     authLogoutUrl: snapshot.variables.AUTH_LOGOUT_URL || '',
+    authImpersonateUrl: snapshot.variables.AUTH_IMPERSONATE_URL || '',
   };
 }
 

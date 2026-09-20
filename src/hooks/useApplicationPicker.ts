@@ -29,7 +29,10 @@ export function useApplicationPicker() {
         throw prefsError;
       }
 
-      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, isSystemAdmin);
+      // Por ahora el admin de sistema tampoco ve las apps de otros tenants
+      // aca: antes `isSystemAdmin` traia TODAS las aplicaciones de TODOS los
+      // tenants sin filtrar, lo cual no es el comportamiento esperado.
+      const rows = await loadOwnedApplicationsWithKeys(user.sub, user.tenant_id, false);
       setApplications(rows);
 
       const defaultApplicationId = prefs?.[0]?.default_application_id || null;
