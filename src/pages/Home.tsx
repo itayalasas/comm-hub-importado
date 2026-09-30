@@ -941,7 +941,7 @@ export const Home = () => {
             <div className="flex items-center space-x-3">
               <Link to="/" className="relative">
                 <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-25" />
-                <img src="/logo.svg" alt="SendCraft" width={197} height={32} fetchPriority="high" className="h-8 relative" />
+                <img src="/logo.svg" alt="SendCraft" width={197} height={32} {...{ fetchpriority: 'high' } as Record<string, string>} className="h-8 relative" />
               </Link>
             </div>
             <div className="hidden md:flex items-center space-x-8 text-sm text-slate-400">

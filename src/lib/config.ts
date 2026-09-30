@@ -5,7 +5,7 @@ const CONFIG_API_URL = (() => {
 
   return raw.endsWith('/get-env') ? raw : `${raw}/get-env`;
 })();
-const CONFIG_ACCESS_KEY = 'cc3cdc09379e1dc8f8482007290a5d9e2d2755c5613f5a3fd81fb02c81040b37';
+const CONFIG_ACCESS_KEY = '4ceffb91030a93e1e3670ca95f8b63976517745a64ace0aa8b86e7861884ca45';
 // Bounds worst-case wait when the remote config service (Azure Container App)
 // is cold-starting — beyond this we fall back to build-time env vars instead
 // of leaving the caller (e.g. the login button) hanging indefinitely.

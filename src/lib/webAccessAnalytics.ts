@@ -1,10 +1,9 @@
 import { authClient } from './auth';
-import { buildFunctionsUrl, configManager } from './config';
+import { configManager } from './config';
 import { querySelect, type QueryFilter } from './queryApi';
 
 export const WEB_ACCESS_ATTEMPT_STORAGE_KEY = 'web_access_attempt_id';
 const WEB_ACCESS_ANALYTICS_TABLE = 'web_access_attempts';
-const LEGACY_WEB_ACCESS_ANALYTICS_ENDPOINT = 'web-access-attempts';
 const ANALYTICS_PAGE_SIZE = 250;
 const ANALYTICS_MAX_ROWS = 10000;
 const ANALYTICS_TIME_COLUMNS = ['created_at', 'timestamp', 'createdAt'] as const;
@@ -72,13 +71,6 @@ export interface AccessAnalyticsDashboardPayload {
   recent_attempts: AccessAnalyticsAttempt[];
   generated_at: string;
 }
-
-type ApiEnvelope<T> = {
-  success?: boolean;
-  data?: T;
-  error?: unknown;
-  message?: string;
-};
 
 const WINDOW_STORAGE = () => (typeof window !== 'undefined' ? window.sessionStorage : null);
 
@@ -229,49 +221,13 @@ async function sendAnalyticsPayloadViaQuery(payload: WebAccessAttemptEvent): Pro
   }
 }
 
-async function sendAnalyticsPayloadViaLegacyEndpoint(payload: WebAccessAttemptEvent): Promise<void> {
-  const body = {
-    ...payload,
-    timestamp: new Date().toISOString(),
-    user_agent: payload.user_agent || (typeof navigator !== 'undefined' ? navigator.userAgent : undefined),
-  };
-
-  const url = buildFunctionsUrl(LEGACY_WEB_ACCESS_ANALYTICS_ENDPOINT);
-  const serialized = JSON.stringify(body);
-
-  if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-    try {
-      const beaconOk = navigator.sendBeacon(url, new Blob([serialized], { type: 'application/json' }));
-      if (beaconOk) {
-        return;
-      }
-    } catch {
-      // Fallback to fetch below.
-    }
-  }
-
-  await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildAnalyticsHeaders(),
-    },
-    body: serialized,
-    keepalive: true,
-  });
-}
-
 const sendAnalyticsPayload = async (payload: WebAccessAttemptEvent): Promise<void> => {
   await configManager.loadConfig();
 
   try {
     await sendAnalyticsPayloadViaQuery(payload);
   } catch {
-    try {
-      await sendAnalyticsPayloadViaLegacyEndpoint(payload);
-    } catch {
-      // Tracking should never block navigation or auth flow.
-    }
+    // Tracking should never block navigation or auth flow.
   }
 };
 
@@ -301,28 +257,6 @@ const getValue = (source: Record<string, any>, keys: string[], fallback = ''): s
 const getNullableString = (source: Record<string, any>, keys: string[]): string | null => {
   const value = getValue(source, keys, '');
   return value || null;
-};
-
-const normalizeCountry = (entry: unknown): AccessAnalyticsCountryStat => {
-  const source = asRecord(entry);
-  return {
-    country_code: getValue(source, ['country_code', 'countryCode', 'code', 'iso_code', 'isoCode'], '??'),
-    country_name: getValue(source, ['country_name', 'countryName', 'name', 'country', 'label'], 'Desconocido'),
-    attempts: asNumber(source.attempts ?? source.total ?? source.count, 0),
-    successful_attempts: asNumber(source.successful_attempts ?? source.success ?? source.successes, 0),
-    failed_attempts: asNumber(source.failed_attempts ?? source.failed ?? source.failures, 0),
-    share: asNumber(source.share ?? source.percentage ?? source.pct, 0),
-  };
-};
-
-const normalizeDaily = (entry: unknown): AccessAnalyticsDailyStat => {
-  const source = asRecord(entry);
-  return {
-    date: getValue(source, ['date', 'day', 'created_at', 'period'], ''),
-    attempts: asNumber(source.attempts ?? source.total ?? source.count, 0),
-    successful_attempts: asNumber(source.successful_attempts ?? source.success ?? source.successes, 0),
-    failed_attempts: asNumber(source.failed_attempts ?? source.failed ?? source.failures, 0),
-  };
 };
 
 const normalizeAttempt = (entry: unknown): AccessAnalyticsAttempt => {
@@ -384,54 +318,6 @@ const normalizeSummary = (
     last_24h_attempts: resolveDerivedCount(source.last_24h_attempts ?? source.attempts_24h ?? source.last_day_attempts, last24hFallback),
     last_7d_attempts: resolveDerivedCount(source.last_7d_attempts ?? source.attempts_7d ?? source.last_week_attempts, last7dFallback),
     generated_at: getValue(source, ['generated_at', 'updated_at', 'timestamp', 'generatedAt'], getLatestAttemptIso(recentAttempts)),
-  };
-};
-
-const normalizeAnalyticsPayload = (raw: unknown): AccessAnalyticsDashboardPayload => {
-  const envelope = asRecord(raw) as ApiEnvelope<Record<string, any>>;
-  const root = asRecord(envelope.data ?? raw);
-
-  const countriesSource = Array.isArray(root.countries)
-    ? root.countries
-    : Array.isArray(root.country_breakdown)
-    ? root.country_breakdown
-    : Array.isArray(root.country_stats)
-    ? root.country_stats
-    : [];
-
-  const dailySource = Array.isArray(root.daily)
-    ? root.daily
-    : Array.isArray(root.daily_trend)
-    ? root.daily_trend
-    : Array.isArray(root.timeline)
-    ? root.timeline
-    : [];
-
-  const recentAttemptsSource = Array.isArray(root.recent_attempts)
-    ? root.recent_attempts
-    : Array.isArray(root.attempts)
-    ? root.attempts
-    : Array.isArray(root.recent_logs)
-    ? root.recent_logs
-    : [];
-
-  const countries = countriesSource.map(normalizeCountry);
-  const daily = dailySource.map(normalizeDaily);
-  const recentAttempts = recentAttemptsSource.map(normalizeAttempt);
-  const summary = normalizeSummary(asRecord(root.summary ?? root.stats ?? root), countries, daily, recentAttempts);
-
-  const totalAttempts = summary.total_attempts || 1;
-  const normalizedCountries = countries.map((country) => ({
-    ...country,
-    share: country.share > 0 ? country.share : Number(((country.attempts / totalAttempts) * 100).toFixed(1)),
-  }));
-
-  return {
-    summary,
-    countries: normalizedCountries,
-    daily,
-    recent_attempts: recentAttempts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-    generated_at: summary.generated_at,
   };
 };
 
@@ -602,42 +488,8 @@ async function loadAnalyticsAttemptsFromQuery(range: string): Promise<AccessAnal
   return attempts;
 }
 
-async function loadLegacyAnalyticsPayload(range: string): Promise<AccessAnalyticsDashboardPayload> {
-  const params = new URLSearchParams();
-  if (range) {
-    params.set('range', range);
-  }
-
-  const endpoint = params.toString()
-    ? `${LEGACY_WEB_ACCESS_ANALYTICS_ENDPOINT}?${params.toString()}`
-    : LEGACY_WEB_ACCESS_ANALYTICS_ENDPOINT;
-
-  const response = await fetch(buildFunctionsUrl(endpoint), {
-    method: 'GET',
-    headers: {
-      ...buildAnalyticsHeaders(),
-    },
-  });
-
-  const raw = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const errorMessage =
-      asRecord(raw).message ||
-      asRecord(raw).error?.message ||
-      `No se pudieron cargar las estadisticas (${response.status})`;
-    throw new Error(String(errorMessage));
-  }
-
-  return normalizeAnalyticsPayload(raw);
-}
-
 export async function loadAdminAccessAnalytics(range = '30d'): Promise<AccessAnalyticsDashboardPayload> {
   await configManager.loadConfig();
-  try {
-    const attempts = await loadAnalyticsAttemptsFromQuery(range);
-    return buildAnalyticsPayloadFromAttempts(attempts);
-  } catch {
-    return loadLegacyAnalyticsPayload(range);
-  }
+  const attempts = await loadAnalyticsAttemptsFromQuery(range);
+  return buildAnalyticsPayloadFromAttempts(attempts);
 }
