@@ -3,6 +3,7 @@ import { Layout } from '../components/Layout';
 import { PageLoader } from '../components/PageLoader';
 import { db } from '../lib/db';
 import { buildFunctionsUrl } from '../lib/config';
+import { buildAppSessionHeaders } from '../lib/functions';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send, Check, Search } from 'lucide-react';
@@ -22,7 +23,6 @@ interface Stats {
 interface Application {
   id: string;
   name: string;
-  api_key: string;
 }
 
 interface EmailLog {
@@ -453,10 +453,6 @@ export const Statistics = () => {
         throw new Error('No se encontró la aplicación');
       }
 
-      if (!currentApp.api_key) {
-        throw new Error('La aplicación no tiene una API key configurada');
-      }
-
       if (!log.template_id) {
         throw new Error('El log no tiene un template_id asociado');
       }
@@ -561,7 +557,7 @@ export const Statistics = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': currentApp.api_key,
+          ...buildAppSessionHeaders(currentApp.id),
         },
         body: JSON.stringify(payload),
       });

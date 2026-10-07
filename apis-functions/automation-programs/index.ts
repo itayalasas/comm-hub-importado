@@ -2,12 +2,13 @@
 import { Pool } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { getNextCronRunAt, isValidCronExpression } from "./_shared/cron-utils.ts";
 import { buildAutomationNotifyPayload } from "./_shared/automation-notify-payload.ts";
+import { APP_AUTH_CORS_HEADERS, AppAuthError, authenticateApplication, type AppCredential } from "./_shared/app-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Client-Info, Apikey, x-api-key, X-Api-Key, Accept",
+    `Content-Type, X-Client-Info, Apikey, x-api-key, X-Api-Key, Accept, ${APP_AUTH_CORS_HEADERS}`,
 };
 
 const databaseUrl = Deno.env.get("DATABASE_URL") || "";
@@ -344,18 +345,24 @@ function normalizeProgramPayload(
   };
 }
 
-async function getApplicationByKey(client: any, apiKey: string) {
+async function getApplicationById(client: any, applicationId: string) {
   const result = await client.queryObject(
     `
-    SELECT id, name, api_key
+    SELECT id, name
     FROM applications
-    WHERE api_key_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')
+    WHERE id::text = $1
     LIMIT 1
     `,
-    [apiKey],
+    [applicationId],
   );
 
   return result.rows[0] ?? null;
+}
+
+function authErrorCode(error: AppAuthError): string {
+  if (error.status === 403) return "FORBIDDEN";
+  if (error.message === "Missing API key") return "MISSING_API_KEY";
+  return "INVALID_API_KEY";
 }
 
 async function fetchProgramById(
@@ -664,7 +671,7 @@ async function cancelProgramQueueItem(
 
 async function runStaticProgram(
   client: any,
-  apiKey: string,
+  authHeaders: Record<string, string>,
   applicationId: string,
   program: AutomationProgramRecord,
 ) {
@@ -689,7 +696,7 @@ async function runStaticProgram(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": apiKey,
+      ...authHeaders,
     },
     body: JSON.stringify(payload),
   });
@@ -789,7 +796,7 @@ async function runStaticProgram(
 
 async function runQueuedProgram(
   client: any,
-  apiKey: string,
+  authHeaders: Record<string, string>,
   applicationId: string,
   program: AutomationProgramRecord,
 ) {
@@ -851,7 +858,7 @@ async function runQueuedProgram(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-api-key": apiKey,
+            ...authHeaders,
           },
           body: JSON.stringify(buildQueuedNotifyPayload(program, queueItem)),
         });
@@ -965,15 +972,15 @@ async function runQueuedProgram(
 
 async function runProgram(
   client: any,
-  apiKey: string,
+  authHeaders: Record<string, string>,
   applicationId: string,
   program: AutomationProgramRecord,
 ) {
   if (program.delivery_mode === "queued") {
-    return runQueuedProgram(client, apiKey, applicationId, program);
+    return runQueuedProgram(client, authHeaders, applicationId, program);
   }
 
-  return runStaticProgram(client, apiKey, applicationId, program);
+  return runStaticProgram(client, authHeaders, applicationId, program);
 }
 
 Deno.serve(async (req: Request) => {
@@ -1006,21 +1013,31 @@ Deno.serve(async (req: Request) => {
     const isQueueItemAction = isQueueRoute && !!queueItemId;
     const isRoot = routeParts.length === 0;
 
-    const apiKey = getApiKey(req, url);
-
-    if (!apiKey) {
-      return json({
-        success: false,
-        error: {
-          code: "MISSING_API_KEY",
-          message: "Missing x-api-key header",
-        },
-      }, 401);
-    }
-
     client = await pool.connect();
+    const db = client;
 
-    const application = await getApplicationByKey(client, apiKey);
+    let credential: AppCredential;
+    try {
+      credential = await authenticateApplication(
+        req,
+        async (sql, params) => (await db.queryObject(sql, params)).rows as Record<string, unknown>[],
+        { apiKey: getApiKey(req, url) },
+      );
+    } catch (authError) {
+      if (authError instanceof AppAuthError) {
+        return json({
+          success: false,
+          error: {
+            code: authErrorCode(authError),
+            message: authError.message,
+          },
+        }, authError.status);
+      }
+      throw authError;
+    }
+    const authHeaders = credential.forwardHeaders;
+
+    const application = await getApplicationById(client, credential.applicationId);
 
     if (!application) {
       return json({
@@ -1337,7 +1354,7 @@ Deno.serve(async (req: Request) => {
 
       const result = await runProgram(
         client,
-        apiKey,
+        authHeaders,
         application.id,
         program,
       );

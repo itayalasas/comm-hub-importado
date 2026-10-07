@@ -14,14 +14,20 @@ import { Server, Eye, EyeOff, Plus, Key, Copy, CheckCircle2, Link, Lock, Trash2,
 import { configManager, getRuntimeConfig, buildFunctionsUrl } from '../lib/config';
 import { db } from '../lib/db';
 import { queryMutate, querySelect } from '../lib/queryApi';
-import { createOwnedApplication, loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
+import { createOwnedApplication, loadOwnedApplicationsWithKeys, regenerateApplicationApiKey } from '../lib/applicationQueries';
 import { logAuditEvent } from '../lib/auditLog';
 import { AuditLogPanel } from '../components/AuditLogPanel';
 
 interface Application {
   id: string;
   name: string;
-  api_key: string;
+  api_key_preview: string;
+}
+
+interface RevealedApiKey {
+  appName: string;
+  apiKey: string;
+  onClose?: () => void;
 }
 
 interface ApplicationDeleteSummary {
@@ -135,6 +141,11 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
 
   // ── Per-app copied key tracking ──────────────────────────────────────
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
+  // La key completa solo se muestra una vez, al crearla o regenerarla.
+  const [revealedApiKey, setRevealedApiKey] = useState<RevealedApiKey | null>(null);
+  const [revealedKeyCopied, setRevealedKeyCopied] = useState(false);
+  const [regenerateKeyTarget, setRegenerateKeyTarget] = useState<Application | null>(null);
+  const [regeneratingKey, setRegeneratingKey] = useState(false);
 
   // Plan feature gates for email providers
   const canUseSmtp = hasFeature('configuracion_smtp');
@@ -639,11 +650,52 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
     }
   };
 
-  const copyApiKey = (apiKey: string, appId?: string) => {
-    navigator.clipboard.writeText(apiKey);
-    if (appId) setCopiedKeyId(appId);
-    toast.success('API Key copiada al portapapeles');
+  const copyApplicationId = (appId: string) => {
+    navigator.clipboard.writeText(appId);
+    setCopiedKeyId(appId);
+    toast.success('ID de aplicación copiado al portapapeles');
     setTimeout(() => setCopiedKeyId((current) => (current === appId ? null : current)), 2000);
+  };
+
+  const copyRevealedApiKey = () => {
+    if (!revealedApiKey) return;
+    navigator.clipboard.writeText(revealedApiKey.apiKey);
+    setRevealedKeyCopied(true);
+    toast.success('API Key copiada al portapapeles');
+  };
+
+  const closeRevealedApiKey = () => {
+    const onClose = revealedApiKey?.onClose;
+    setRevealedApiKey(null);
+    setRevealedKeyCopied(false);
+    onClose?.();
+  };
+
+  const confirmRegenerateApiKey = async () => {
+    if (!regenerateKeyTarget || !user?.sub) return;
+    const target = regenerateKeyTarget;
+
+    setRegeneratingKey(true);
+    try {
+      const apiKey = await regenerateApplicationApiKey(target.id);
+      setRegenerateKeyTarget(null);
+      setRevealedApiKey({ appName: target.name, apiKey });
+      await loadApplications();
+
+      void logAuditEvent({
+        action: 'update',
+        entityType: 'application',
+        entityId: target.id,
+        entityLabel: `${target.name} (API key regenerada)`,
+        applicationId: target.id,
+        tenantId: user.tenant_id || null,
+        actor: { id: user.sub, email: user.email, name: user.name },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo regenerar la API key');
+    } finally {
+      setRegeneratingKey(false);
+    }
   };
 
   const handleNewApplicationClick = () => {
@@ -699,9 +751,17 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
         actor: { id: user.sub, email: user.email, name: user.name },
       });
 
-      if (tourStep === 2) {
-        goToTourStep(3);
-        navigate('/templates');
+      const continueTour = tourStep === 2
+        ? () => {
+          goToTourStep(3);
+          navigate('/templates');
+        }
+        : undefined;
+
+      if (createdApp.api_key) {
+        setRevealedApiKey({ appName: createdApp.name, apiKey: createdApp.api_key, onClose: continueTour });
+      } else {
+        continueTour?.();
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al crear la aplicación');
@@ -924,13 +984,32 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
                       <div>
                         <div className="text-xs text-slate-500 mb-1">API Key</div>
                         <div className="flex items-center space-x-2">
-                          <code className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-cyan-400 font-mono overflow-x-auto">
-                            {app.api_key}
+                          <code className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-slate-300 font-mono overflow-x-auto">
+                            {app.api_key_preview || 'Sin API key'}
                           </code>
                           <button
-                            onClick={() => copyApiKey(app.api_key, app.id)}
+                            onClick={() => setRegenerateKeyTarget(app)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs font-semibold transition-colors"
+                            title="Generar una API key nueva"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            Regenerar
+                          </button>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Por seguridad la key completa solo se muestra al crearla o regenerarla.
+                        </p>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">ID de Aplicación</div>
+                        <div className="flex items-center space-x-2">
+                          <code className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-mono overflow-x-auto">
+                            {app.id}
+                          </code>
+                          <button
+                            onClick={() => copyApplicationId(app.id)}
                             className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition-colors"
-                            title="Copiar API Key"
+                            title="Copiar ID de aplicación"
                           >
                             {copiedKeyId === app.id ? (
                               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -939,12 +1018,6 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
                             )}
                           </button>
                         </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">ID de Aplicación</div>
-                        <code className="block px-3 py-2 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-mono overflow-x-auto">
-                          {app.id}
-                        </code>
                       </div>
                     </div>
                     <div className="flex justify-end mt-4">
@@ -1242,6 +1315,84 @@ export const Settings = ({ tab = 'apps' }: { tab?: 'apps' | 'email' | 'embed' | 
           </div>
         )}
       </div>
+
+      {regenerateKeyTarget && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="flex items-center gap-3 p-5 border-b border-slate-700">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white">Regenerar API key</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{regenerateKeyTarget.name}</p>
+              </div>
+            </div>
+            <div className="p-5 space-y-3 text-sm text-slate-300">
+              <p>La key actual deja de funcionar en el momento. Las integraciones que la usan van a fallar hasta que las actualices con la nueva.</p>
+            </div>
+            <div className="flex gap-3 p-5 pt-0">
+              <button
+                onClick={() => setRegenerateKeyTarget(null)}
+                disabled={regeneratingKey}
+                className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmRegenerateApiKey}
+                disabled={regeneratingKey}
+                className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {regeneratingKey && <Loader2 className="w-4 h-4 animate-spin" />}
+                {regeneratingKey ? 'Regenerando...' : 'Regenerar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {revealedApiKey && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-lg overflow-hidden shadow-2xl">
+            <div className="flex items-center gap-3 p-5 border-b border-slate-700">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                <Key className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white">Guarda tu API key</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{revealedApiKey.appName}</p>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm text-amber-200">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>Esta es la única vez que vas a ver la key completa. Cópiala y guárdala en un lugar seguro.</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <code className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded text-sm text-cyan-400 font-mono break-all">
+                  {revealedApiKey.apiKey}
+                </code>
+                <button
+                  onClick={copyRevealedApiKey}
+                  className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition-colors"
+                  title="Copiar API Key"
+                >
+                  {revealedKeyCopied ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="p-5 pt-0">
+              <button
+                onClick={closeRevealedApiKey}
+                className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                {revealedKeyCopied ? 'Listo, la guardé' : 'Cerrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showDeleteAppModal && deleteAppTarget && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">

@@ -77,7 +77,7 @@ function toDatetimeLocalValue(value: string | null) {
 
 function ProgramCard({
   program,
-  apiKey,
+  applicationId,
   onEdit,
   onRun,
   onDelete,
@@ -85,7 +85,7 @@ function ProgramCard({
   running,
 }: {
   program: AutomationProgramRecord;
-  apiKey: string;
+  applicationId: string;
   onEdit: (program: AutomationProgramRecord) => void;
   onRun: (program: AutomationProgramRecord) => void;
   onDelete: (program: AutomationProgramRecord) => void;
@@ -239,7 +239,7 @@ function ProgramCard({
       </div>
 
       {program.delivery_mode === 'queued' && showQueue && (
-        <AutomationProgramQueuePanel apiKey={apiKey} program={program} />
+        <AutomationProgramQueuePanel applicationId={applicationId} program={program} />
       )}
     </div>
   );
@@ -258,25 +258,21 @@ export const AutomatizacionesProgramados = () => {
   const [deletingProgramId, setDeletingProgramId] = useState<string | null>(null);
 
   const selectedApplicationLabel = useMemo(() => selectedApplication?.name || 'Selecciona una aplicacion', [selectedApplication]);
-  const selectedApplicationApiKey = selectedApplication?.api_key?.trim() || '';
+  const selectedApplicationId = selectedApplication?.id || '';
 
-  const requireApplicationApiKey = () => {
+  const requireApplicationId = () => {
     if (!selectedApplication) {
       throw new Error('Selecciona una aplicacion primero');
     }
 
-    if (!selectedApplicationApiKey) {
-      throw new Error('La aplicacion seleccionada no tiene api_key');
-    }
-
-    return selectedApplicationApiKey;
+    return selectedApplicationId;
   };
 
   const refreshPrograms = async () => {
     try {
       setLoadingPrograms(true);
-      const apiKey = requireApplicationApiKey();
-      const data = await loadAutomationPrograms(apiKey, { kind: 'scheduled' });
+      const applicationId = requireApplicationId();
+      const data = await loadAutomationPrograms(applicationId, { kind: 'scheduled' });
       setPrograms(data.filter((program) => program.status !== 'cancelled'));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo cargar la programacion');
@@ -286,7 +282,7 @@ export const AutomatizacionesProgramados = () => {
   };
 
   useEffect(() => {
-    if (selectedApplicationApiKey) {
+    if (selectedApplicationId) {
       void refreshPrograms();
     } else {
       setPrograms([]);
@@ -294,7 +290,7 @@ export const AutomatizacionesProgramados = () => {
     setEditingId(null);
     setForm(emptyForm());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedApp, selectedApplicationApiKey]);
+  }, [selectedApp, selectedApplicationId]);
 
   const populateForm = (program: AutomationProgramRecord) => {
     setEditingId(program.id);
@@ -327,7 +323,7 @@ export const AutomatizacionesProgramados = () => {
 
     try {
       setSaving(true);
-      const apiKey = requireApplicationApiKey();
+      const applicationId = requireApplicationId();
 
       const recipients = parseJson<AutomationProgramRecord['recipients']>(form.recipients, []);
       if (form.delivery_mode === 'static' && (!Array.isArray(recipients) || recipients.length === 0)) {
@@ -338,7 +334,7 @@ export const AutomatizacionesProgramados = () => {
       const options = parseJson<Record<string, unknown>>(form.options, {});
       const currentProgram = editingId ? programs.find((item) => item.id === editingId) || null : null;
 
-      const program = await saveAutomationProgram(apiKey, {
+      const program = await saveAutomationProgram(applicationId, {
         id: editingId || undefined,
         application_id: selectedApplication.id,
         name: form.name.trim(),
@@ -387,8 +383,8 @@ export const AutomatizacionesProgramados = () => {
   const handleRunNow = async (program: AutomationProgramRecord) => {
     try {
       setRunningProgramId(program.id);
-      const apiKey = requireApplicationApiKey();
-      const result = await runAutomationProgram(apiKey, program.id);
+      const applicationId = requireApplicationId();
+      const result = await runAutomationProgram(applicationId, program.id);
       toast.success(`Job creado: ${result.job_id || 'sin id'}`);
       await refreshPrograms();
     } catch (error) {
@@ -401,8 +397,8 @@ export const AutomatizacionesProgramados = () => {
   const handleDelete = async (program: AutomationProgramRecord) => {
     try {
       setDeletingProgramId(program.id);
-      const apiKey = requireApplicationApiKey();
-      await deleteAutomationProgram(apiKey, program.id);
+      const applicationId = requireApplicationId();
+      await deleteAutomationProgram(applicationId, program.id);
       toast.success('Programacion cancelada');
       setPrograms((current) => current.filter((item) => item.id !== program.id));
       if (editingId === program.id) {
@@ -428,9 +424,9 @@ export const AutomatizacionesProgramados = () => {
   const handleTogglePause = async (program: AutomationProgramRecord) => {
     try {
       setRunningProgramId(program.id);
-      const apiKey = requireApplicationApiKey();
+      const applicationId = requireApplicationId();
       const nextStatus = program.status === 'paused' ? 'scheduled' : 'paused';
-      const updated = await saveAutomationProgram(apiKey, {
+      const updated = await saveAutomationProgram(applicationId, {
         id: program.id,
         application_id: selectedApplication?.id,
         name: program.name,
@@ -476,9 +472,6 @@ export const AutomatizacionesProgramados = () => {
               <div>
                 <h2 className="text-lg font-semibold text-white">{editingId ? 'Editar programacion' : 'Nueva programacion'}</h2>
                 <p className="text-sm text-slate-400">Usando: {selectedApplicationLabel}</p>
-                {selectedApplication && !selectedApplicationApiKey && (
-                  <p className="mt-1 text-xs text-amber-300">La aplicacion seleccionada no tiene api_key configurada.</p>
-                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 {applications.map((app) => (
@@ -637,7 +630,7 @@ export const AutomatizacionesProgramados = () => {
             <div className="mt-5 flex flex-wrap gap-3">
               <button
                 onClick={() => void persistProgram()}
-                disabled={saving || !selectedApplicationApiKey}
+                disabled={saving || !selectedApplicationId}
                 className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -652,7 +645,7 @@ export const AutomatizacionesProgramados = () => {
               </button>
               <button
                 onClick={() => void refreshPrograms()}
-                disabled={loadingPrograms || !selectedApplicationApiKey}
+                disabled={loadingPrograms || !selectedApplicationId}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RefreshCw className={`h-4 w-4 ${loadingPrograms ? 'animate-spin' : ''}`} />
@@ -689,7 +682,7 @@ export const AutomatizacionesProgramados = () => {
                     <ProgramCard
                       key={program.id}
                       program={program}
-                      apiKey={selectedApplicationApiKey}
+                      applicationId={selectedApplicationId}
                       onEdit={populateForm}
                       onRun={(item) => void handleRunNow(item)}
                       onDelete={(item) => void handleDelete(item)}

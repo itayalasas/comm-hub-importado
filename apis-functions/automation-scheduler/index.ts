@@ -74,7 +74,18 @@ interface AutomationProgramQueueItemRecord {
 interface ApplicationRecord {
   id: string;
   name: string;
-  api_key: string;
+  api_key: string | null;
+}
+
+// Con FUNCTIONS_INTERNAL_KEY el scheduler llama a notify con la clave interna
+// y no necesita la API key del cliente. Sin ella usa la clave en texto plano
+// (comportamiento anterior) mientras exista esa columna.
+function buildNotifyAuthHeaders(application: ApplicationRecord): Record<string, string> | null {
+  const internalKey = (Deno.env.get("FUNCTIONS_INTERNAL_KEY") || "").trim();
+  if (internalKey) {
+    return { "x-internal-key": internalKey, "x-application-id": String(application.id) };
+  }
+  return application.api_key ? { "x-api-key": application.api_key } : null;
 }
 
 interface SchedulerResultItem {
@@ -406,6 +417,7 @@ async function dispatchProgram(
   application: ApplicationRecord,
 ): Promise<{ job_id: string | null; queue_items?: number; queue_sent?: number; queue_failed?: number }> {
   const notifyUrl = buildNotifyBaseUrl();
+  const authHeaders = buildNotifyAuthHeaders(application) ?? {};
 
   if (program.delivery_mode === "queued") {
     const queueLimit = parseQueueLimit(program.options);
@@ -431,7 +443,7 @@ async function dispatchProgram(
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-api-key": application.api_key,
+              ...authHeaders,
             },
             body: JSON.stringify(buildQueuedNotifyPayload(program, queueItem)),
           });
@@ -485,7 +497,7 @@ async function dispatchProgram(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": application.api_key,
+      ...authHeaders,
     },
     body: JSON.stringify(buildNotifyPayload(program)),
   });
@@ -629,7 +641,7 @@ Deno.serve(async (req: Request) => {
 
     for (const program of duePrograms) {
       const application = applicationMap.get(program.application_id);
-      if (!application?.api_key) {
+      if (!application || !buildNotifyAuthHeaders(application)) {
         const message = "Application API key not found";
         await markProgramAsFailed(client, program, message);
         items.push({

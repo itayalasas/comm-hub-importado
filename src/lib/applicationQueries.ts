@@ -3,7 +3,10 @@ import { queryMutate, querySelect } from './queryApi';
 export interface ApplicationSummary {
   id: string;
   name: string;
-  api_key: string;
+  // Inicio de la key para reconocerla; la key completa solo se conoce al
+  // crearla o regenerarla (ver `api_key`).
+  api_key_preview: string;
+  api_key?: string;
   application_id?: string;
   domain?: string;
   created_at?: string;
@@ -29,7 +32,7 @@ interface OwnedApplicationRow {
   name: string;
   app_id: string;
   domain: string | null;
-  api_key: string | null;
+  api_key_prefix: string | null;
   created_at: string;
 }
 
@@ -102,6 +105,17 @@ function buildApiKeyPreview(apiKey: string): string {
   return `${apiKey.slice(0, 12)}...${apiKey.slice(-6)}`;
 }
 
+function formatKeyPrefix(prefix: string | null | undefined): string {
+  return prefix ? `${prefix}••••••••` : '';
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 function capitalize(value: string): string {
   if (!value) return value;
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -121,7 +135,7 @@ async function loadOwnedApplicationRows(
   const appsResult = await querySelect<OwnedApplicationRow>({
     table: 'applications',
     operation: 'select',
-    select: 'id, name, app_id, domain, api_key, created_at',
+    select: 'id, name, app_id, domain, api_key_prefix, created_at',
     ...(filters.length > 0 ? { filters } : {}),
     order: { column: 'created_at', ascending: false },
   });
@@ -143,7 +157,7 @@ export async function loadOwnedApplicationsWithKeys(
   return apps.map((app) => ({
     id: app.id,
     name: app.name,
-    api_key: app.api_key || '',
+    api_key_preview: formatKeyPrefix(app.api_key_prefix),
     application_id: app.app_id,
     domain: app.domain || undefined,
     created_at: app.created_at,
@@ -194,7 +208,6 @@ export async function createOwnedApplication(input: CreateApplicationInput): Pro
     name: string;
     app_id: string;
     domain: string | null;
-    api_key: string | null;
     created_at: string;
   }>({
     table: 'applications',
@@ -207,7 +220,7 @@ export async function createOwnedApplication(input: CreateApplicationInput): Pro
       api_key: apiKey,
       domain,
     },
-    returning: '*',
+    returning: 'id, name, app_id, domain, created_at',
   });
 
   if (appResult.error) {
@@ -234,8 +247,8 @@ export async function createOwnedApplication(input: CreateApplicationInput): Pro
   await bestEffortInsert('api_keys', {
     application_id: app.id,
     name: `${capitalize(environment)} Environment Key`,
-    key: apiKey,
-    key_hash: apiKey,
+    key: keyPreview,
+    key_hash: await sha256Hex(apiKey),
     key_preview: keyPreview,
     permissions: ['read', 'write'],
     environment,
@@ -246,8 +259,53 @@ export async function createOwnedApplication(input: CreateApplicationInput): Pro
     id: app.id,
     name: app.name,
     api_key: apiKey,
+    api_key_preview: formatKeyPrefix(apiKey.slice(0, 12)),
     application_id: app.app_id,
     domain: app.domain || undefined,
     created_at: app.created_at,
   };
+}
+
+// Genera una key nueva para la aplicación. La anterior deja de funcionar en
+// el momento. La base guarda solo su hash, así que esta es la única vez que
+// se puede ver la key completa.
+export async function regenerateApplicationApiKey(applicationId: string): Promise<string> {
+  const apiKey = generateApiKey(resolveApplicationEnvironment());
+
+  const result = await queryMutate({
+    table: 'applications',
+    operation: 'update',
+    update: { api_key: apiKey },
+    filters: [{ column: 'id', op: 'eq', value: applicationId }],
+    returning: 'id',
+  });
+
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  if (!result.data?.length) {
+    throw new Error('No se pudo regenerar la API key');
+  }
+
+  return apiKey;
+}
+
+// Solo para whatsapp-template-submit, que vive fuera de este repo y todavía
+// valida con x-api-key. Devuelve '' cuando la key en texto plano ya no está
+// guardada (migración 0003).
+export async function loadLegacyApplicationApiKey(applicationId: string): Promise<string> {
+  const result = await querySelect<{ api_key: string | null }>({
+    table: 'applications',
+    operation: 'select',
+    select: 'api_key',
+    filters: [{ column: 'id', op: 'eq', value: applicationId }],
+    limit: 1,
+  });
+
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  return result.data?.[0]?.api_key || '';
 }
