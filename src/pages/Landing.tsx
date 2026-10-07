@@ -122,7 +122,7 @@ export const Landing = () => {
                   </div>
                   <div>
                     <h3 className="text-sm sm:text-base font-semibold text-white mb-0.5">{title}</h3>
-                    <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
+                    <p className="text-slate-400 text-sm leading-relaxed">{desc}</p>
                   </div>
                 </div>
               ))}
@@ -130,7 +130,7 @@ export const Landing = () => {
           </div>
 
           <div className="relative z-10 hidden lg:block">
-            <p className="text-slate-600 text-sm">Copyright {new Date().getFullYear()} SendCraft. Todos los derechos reservados.</p>
+            <p className="text-slate-500 text-sm">Copyright {new Date().getFullYear()} SendCraft. Todos los derechos reservados.</p>
           </div>
         </div>
 
@@ -176,29 +176,8 @@ export const Landing = () => {
                   </button>
                 </div>
 
-                <div className="slide-4 bg-white/[0.03] border border-white/8 rounded-xl p-6 mb-8">
-                  <h4 className="text-sm font-semibold text-white mb-4">
-                    ¿Por qué usar autenticación empresarial?
-                  </h4>
-                  <ul className="space-y-3">
-                    {[
-                      'Máxima seguridad con encriptación avanzada.',
-                      'Acceso unificado a todos tus servicios.',
-                      'Gestión centralizada de permisos y roles.',
-                      'Soporte técnico especializado.',
-                    ].map((item) => (
-                      <li key={item} className="flex items-center gap-2.5 text-sm text-slate-300">
-                        <div className="w-4 h-4 rounded-full bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center flex-shrink-0">
-                          <Check className="w-2.5 h-2.5 text-cyan-400" />
-                        </div>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
                 <div className="slide-5 text-center mb-4">
-                  <p className="text-slate-500 text-sm">
+                  <p className="text-slate-400 text-sm">
                     ¿No tienes cuenta?{' '}
                     <button onClick={handleRegister} disabled={pendingAction === 'register'} className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors disabled:opacity-80 disabled:cursor-not-allowed">
                       {pendingAction === 'register' ? (
@@ -214,7 +193,7 @@ export const Landing = () => {
                 <div className="slide-5 text-center">
                   <button
                     onClick={() => navigate('/')}
-                    className="text-slate-600 text-sm hover:text-slate-400 transition-colors inline-flex items-center gap-1.5"
+                    className="text-slate-400 text-sm hover:text-white transition-colors inline-flex items-center gap-1.5"
                   >
                     <ArrowRight className="w-4 h-4 rotate-180" />
                     <span>Volver al inicio</span>
@@ -244,7 +223,7 @@ export const Landing = () => {
                   <Icon className="w-6 h-6 text-cyan-400" />
                 </div>
                 <h3 className="font-bold text-white mb-2">{title}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
+                <p className="text-slate-400 text-sm leading-relaxed">{desc}</p>
               </div>
             ))}
           </div>
@@ -255,11 +234,11 @@ export const Landing = () => {
 
       <footer className="border-t border-white/5 py-8 px-6">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-slate-600 text-sm">© {new Date().getFullYear()} SendCraft. Todos los derechos reservados.</p>
+          <p className="text-slate-500 text-sm">© {new Date().getFullYear()} SendCraft. Todos los derechos reservados.</p>
           <div className="flex items-center gap-6 text-sm">
-            <button onClick={() => navigate('/privacy')} className="text-slate-500 hover:text-slate-300 transition-colors">Privacidad</button>
-            <button onClick={() => navigate('/terms')} className="text-slate-500 hover:text-slate-300 transition-colors">Términos</button>
-            <a href="mailto:soporte@sendcraft.app" className="text-slate-500 hover:text-slate-300 transition-colors">Soporte</a>
+            <button onClick={() => navigate('/privacy')} className="text-slate-400 hover:text-white transition-colors">Privacidad</button>
+            <button onClick={() => navigate('/terms')} className="text-slate-400 hover:text-white transition-colors">Términos</button>
+            <a href="mailto:soporte@sendcraft.app" className="text-slate-400 hover:text-white transition-colors">Soporte</a>
           </div>
         </div>
       </footer>

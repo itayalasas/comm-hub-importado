@@ -40,6 +40,7 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => Promise<voi
   };
 }
 
+
 Deno.test("x-api-key busca por hash y reenvía la misma clave", async () => {
   const { query, calls } = fakeQuery(() => [{ id: "app-1" }]);
   const req = new Request("http://x", { headers: { "x-api-key": "sk_live_abc" } });

@@ -35,6 +35,7 @@ import {
   Layers,
   Boxes,
   Package,
+  Menu,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -52,7 +53,7 @@ const FEATURES = [
   { icon: FileText, title: 'Generación de PDFs', description: 'Convierte tus templates en documentos PDF profesionales listos para enviar o descargar automáticamente.', color: 'cyan' },
   { icon: Bell, title: 'Webhooks automáticos', description: 'Recibe notificaciones de eventos en tiempo real y mantiene tus sistemas sincronizados sin esfuerzo.', color: 'blue' },
   { icon: Globe, title: 'API RESTful completa', description: 'Integra SendCraft con tus sistemas existentes usando nuestra API bien documentada y fácil de usar.', color: 'teal' },
-  { icon: Lock, title: 'Seguridad empresarial', description: 'Autenticación robusta con gestión de permisos, roles y cifrado de extremo a extremo.', color: 'cyan' },
+  { icon: Lock, title: 'Seguridad empresarial', description: 'Autenticación robusta con gestión de permisos, roles y cifrado en tránsito con TLS.', color: 'cyan' },
   { icon: MessageSquare, title: 'Comunicaciones pendientes', description: 'Gestiona colas de comunicaciones, reprograma envíos y monitorea el estado de cada mensaje.', color: 'blue' },
   { icon: TrendingUp, title: 'Optimización continua', description: 'Sugerencias inteligentes para mejorar tasas de apertura, entregabilidad y engagement general.', color: 'teal' },
 ];
@@ -95,7 +96,7 @@ const DEV_FEATURES = [
 
 /* ─── Security features ─────────────────────────────────────────── */
 const SECURITY_FEATURES = [
-  { icon: Lock, title: 'Envío seguro con TLS', desc: 'Cifrado extremo a extremo en cada comunicación.' },
+  { icon: Lock, title: 'Envío seguro con TLS', desc: 'Cada comunicación viaja cifrada en tránsito con TLS.' },
   { icon: KeyRound, title: 'API protegida con API Keys', desc: 'Control granular de acceso por aplicación.' },
   { icon: Activity, title: 'Alta disponibilidad', desc: 'Monitoreo continuo y uptime del 99.9%.' },
   { icon: ShieldCheck, title: 'Protección contra abuso', desc: 'Escalable para millones de comunicaciones.' },
@@ -847,12 +848,21 @@ function SupportModal({ onClose }: { onClose: () => void }) {
 /* ─── Page ──────────────────────────────────────────────────────── */
 void SupportModal;
 
+const HOME_NAV_LINKS = [
+  { href: '#platform', label: 'Plataforma' },
+  { href: '#features', label: 'Funcionalidades' },
+  { href: '#use-cases', label: 'Casos de uso' },
+  { href: '#developers', label: 'Desarrolladores' },
+  { href: '#pricing', label: 'Precios' },
+];
+
 export const Home = () => {
   const navigate = useNavigate();
-  const { plans, loading: plansLoading } = usePlans();
+  const { plans, loading: plansLoading, error: plansError } = usePlans();
   const orderedPlans = sortPlansByOrder(plans);
   const [supportOpen, setSupportOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleStartTrial = () => {
     if (loginLoading) return;
@@ -945,22 +955,51 @@ export const Home = () => {
               </Link>
             </div>
             <div className="hidden md:flex items-center space-x-8 text-sm text-slate-400">
-              <a href="#platform" className="hover:text-white transition-colors hover:text-cyan-300">Plataforma</a>
-              <a href="#features" className="hover:text-white transition-colors hover:text-cyan-300">Funcionalidades</a>
-              <a href="#use-cases" className="hover:text-white transition-colors hover:text-cyan-300">Casos de uso</a>
-              <a href="#developers" className="hover:text-white transition-colors hover:text-cyan-300">Desarrolladores</a>
-              <a href="#pricing" className="hover:text-white transition-colors hover:text-cyan-300">Precios</a>
+              {HOME_NAV_LINKS.map(({ href, label }) => (
+                <a key={href} href={href} className="hover:text-white transition-colors hover:text-cyan-300">{label}</a>
+              ))}
             </div>
-            <button
-              onClick={handleStartTrial}
-              disabled={loginLoading}
-              className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-lg font-semibold text-sm hover:shadow-lg hover:shadow-cyan-500/40 transition-all hover:scale-105 active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              <span>{loginLoading ? 'Iniciando...' : 'Inicia prueba gratis'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleStartTrial}
+                disabled={loginLoading}
+                className="px-4 sm:px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-lg font-semibold text-sm whitespace-nowrap hover:shadow-lg hover:shadow-cyan-500/40 transition-all hover:scale-105 active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                <span>{loginLoading ? 'Iniciando...' : 'Probar gratis'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((open) => !open)}
+                className="md:hidden p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
+                aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+                aria-expanded={mobileMenuOpen}
+                aria-controls="home-mobile-menu"
+              >
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+            </div>
           </div>
         </div>
+        {mobileMenuOpen && (
+          <div id="home-mobile-menu" className="md:hidden border-t border-white/5 bg-[#050d1a]/95">
+            <div className="px-4 py-3 flex flex-col">
+              {HOME_NAV_LINKS.map(({ href, label }) => (
+                <a
+                  key={href}
+                  href={href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="py-3 text-base text-slate-300 hover:text-white border-b border-white/5 last:border-b-0"
+                >
+                  {label}
+                </a>
+              ))}
+              <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="py-3 text-base text-cyan-300 hover:text-cyan-200">
+                Iniciar sesión
+              </Link>
+            </div>
+          </div>
+        )}
       </nav>
 
       <main>
@@ -973,7 +1012,7 @@ export const Home = () => {
               Una sola API para todas tus comunicaciones
             </div>
 
-            <h1 className="slide-up delay-100 text-5xl md:text-6xl lg:text-[72px] font-extrabold mb-6 leading-[1.06] tracking-tight">
+            <h1 className="slide-up delay-100 text-4xl sm:text-5xl md:text-6xl lg:text-[72px] font-extrabold mb-6 leading-[1.08] tracking-tight">
               La plataforma de comunicaciones
               <br />
               <span className="relative inline-block">
@@ -988,7 +1027,7 @@ export const Home = () => {
               Envía correos transaccionales, campañas de marketing, genera PDFs profesionales y automatiza todas las comunicaciones de tu negocio desde una única API. Diseñada para desarrolladores, startups y empresas SaaS que necesitan una plataforma rápida, confiable y fácil de integrar.
             </p>
 
-            <div className="slide-up delay-300 flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="slide-up delay-300 flex flex-col items-center sm:flex-row sm:items-stretch gap-4 justify-center">
               <button
                 onClick={handleStartTrial}
                 disabled={loginLoading}
@@ -1196,7 +1235,7 @@ export const Home = () => {
             <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Entregabilidad</div>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 leading-tight">Infraestructura diseñada para no fallar</h2>
             <p className="text-slate-400 mb-8 leading-relaxed text-sm">
-              Nuestra plataforma garantiza máxima entregabilidad con autenticación SPF, DKIM y DMARC configurada automáticamente. Tus emails llegan al inbox, nunca al spam.
+              Nuestra plataforma garantiza máxima entregabilidad con autenticación SPF, DKIM y DMARC configurada automáticamente. Así más emails llegan a la bandeja de entrada.
             </p>
             <ul className="space-y-3">
               {['Autenticación SPF, DKIM y DMARC automática', 'IPs dedicadas de alta reputación', 'Monitoreo de listas negras 24/7', 'Reintentos inteligentes ante fallos', 'Logs detallados por cada mensaje'].map((item) => (
@@ -1474,8 +1513,42 @@ export const Home = () => {
           </div>
 
           {plansLoading ? (
-            <div className="flex justify-center items-center py-20">
-              <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+            <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true" aria-label="Cargando planes">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="rounded-2xl border border-white/8 bg-white/[0.03] p-6 animate-pulse">
+                  <div className="h-4 w-24 rounded bg-white/10 mb-4" />
+                  <div className="h-8 w-32 rounded bg-white/10 mb-6" />
+                  <div className="space-y-3 mb-8">
+                    {[0, 1, 2, 3].map((j) => (
+                      <div key={j} className="h-3 rounded bg-white/5" />
+                    ))}
+                  </div>
+                  <div className="h-10 rounded-xl bg-white/10" />
+                </div>
+              ))}
+            </div>
+          ) : plansError || orderedPlans.length === 0 ? (
+            <div className="max-w-xl mx-auto text-center rounded-2xl border border-white/8 bg-white/[0.03] p-8">
+              <p className="text-white font-semibold mb-2">No pudimos cargar los planes en este momento.</p>
+              <p className="text-slate-400 text-sm mb-6">
+                Puedes crear tu cuenta gratis y ver los planes desde el panel, o volver a intentarlo en unos minutos.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={handleStartTrial}
+                  disabled={loginLoading}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-semibold text-sm disabled:opacity-80"
+                >
+                  {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Probar gratis
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="inline-flex items-center justify-center px-6 py-3 border border-white/12 text-white rounded-xl font-semibold text-sm hover:bg-white/6"
+                >
+                  Reintentar
+                </button>
+              </div>
             </div>
           ) : (
             <div className={`grid gap-6 ${

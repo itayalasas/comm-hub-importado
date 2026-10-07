@@ -1,4 +1,4 @@
-// Generado desde apis-functions/_shared/app-auth.ts por tools/sync-function-shared.mjs. No editar a mano.
+ 
 // Autenticación de una aplicación en las funciones de envío.
 //
 // Copia canónica: apis-functions/_shared/app-auth.ts. Cada función lleva una
