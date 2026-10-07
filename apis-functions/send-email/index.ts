@@ -3,11 +3,12 @@ import nodemailer from 'npm:nodemailer@^9';
 import { Pool } from 'https://deno.land/x/postgres@v0.19.3/mod.ts';
 import { resendFetchWithRetry } from './_shared/resend-client.ts';
 import { enforceUsageQuota } from './_shared/usage-enforcement.ts';
+import { APP_AUTH_CORS_HEADERS, AppAuthError, authenticateApplication, type AppCredential } from './_shared/app-auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, X-Api-Key',
+  'Access-Control-Allow-Headers': `Content-Type, X-Client-Info, Apikey, X-Api-Key, ${APP_AUTH_CORS_HEADERS}`,
 };
 
 const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") || "", connectionTimeoutMillis: 5000 }, 3, true);
@@ -88,23 +89,26 @@ export default async function handler(req: Request) {
   try {
     const startTime = Date.now();
 
-    const apiKey = req.headers.get('x-api-key');
-
-    if (!apiKey) {
-      return jsonResponse({
-        success: false,
-        error: 'Missing API key',
-      }, 401);
+    let credential: AppCredential;
+    try {
+      credential = await authenticateApplication(req, async (sql, params) =>
+        (await client.queryObject<any>(sql, params)).rows
+      );
+    } catch (authError) {
+      if (authError instanceof AppAuthError) {
+        return jsonResponse({ success: false, error: authError.message }, authError.status);
+      }
+      throw authError;
     }
 
     const applicationResult = await client.queryObject<any>(
       `
       SELECT id, name, tenant_id, user_id
       FROM applications
-      WHERE api_key_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')
+      WHERE id::text = $1
       LIMIT 1
       `,
-      [apiKey],
+      [credential.applicationId],
     );
 
     const application = applicationResult.rows[0];

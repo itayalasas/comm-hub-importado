@@ -15,7 +15,6 @@ import {
 interface Application {
   id: string;
   name: string;
-  api_key: string;
 }
 
 interface WhatsAppConfig {

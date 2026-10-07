@@ -299,30 +299,26 @@ export const AutomatizacionesMonitoreo = () => {
   const [jobsOffset, setJobsOffset] = useState(0);
 
   const selectedApplicationLabel = useMemo(() => selectedApplication?.name || 'Selecciona una aplicacion', [selectedApplication]);
-  const selectedApplicationApiKey = selectedApplication?.api_key?.trim() || '';
+  const selectedApplicationId = selectedApplication?.id || '';
 
-  const requireApplicationApiKey = () => {
+  const requireApplicationId = () => {
     if (!selectedApplication) {
       throw new Error('Selecciona una aplicacion primero');
     }
 
-    if (!selectedApplicationApiKey) {
-      throw new Error('La aplicacion seleccionada no tiene api_key');
-    }
-
-    return selectedApplicationApiKey;
+    return selectedApplicationId;
   };
 
   const refreshMonitoring = async () => {
-    if (!selectedApplicationApiKey) {
+    if (!selectedApplicationId) {
       setPayload(null);
       return;
     }
 
     try {
       setLoadingMonitoring(true);
-      const apiKey = requireApplicationApiKey();
-      const data = await loadAutomationMonitoring(apiKey, 25, kindFilter === 'all' ? undefined : kindFilter, {
+      const applicationId = requireApplicationId();
+      const data = await loadAutomationMonitoring(applicationId, 25, kindFilter === 'all' ? undefined : kindFilter, {
         q: jobsSearch || undefined,
         dateFrom: jobsDateFrom ? new Date(jobsDateFrom).toISOString() : undefined,
         dateTo: jobsDateTo ? new Date(jobsDateTo + 'T23:59:59').toISOString() : undefined,
@@ -340,8 +336,8 @@ export const AutomatizacionesMonitoreo = () => {
   const handleRunProgram = async (programId: string) => {
     try {
       setRunningProgramId(programId);
-      const apiKey = requireApplicationApiKey();
-      const result = await runAutomationProgram(apiKey, programId);
+      const applicationId = requireApplicationId();
+      const result = await runAutomationProgram(applicationId, programId);
       toast.success(`Job creado: ${result.job_id || 'sin id'}`);
       await refreshMonitoring();
     } catch (error) {
@@ -354,8 +350,8 @@ export const AutomatizacionesMonitoreo = () => {
   const handleRetryJob = async (jobId: string) => {
     try {
       setRetryingJobId(jobId);
-      const apiKey = requireApplicationApiKey();
-      const result = await retryAutomationJob(apiKey, jobId);
+      const applicationId = requireApplicationId();
+      const result = await retryAutomationJob(applicationId, jobId);
       toast.success(
         result.failed
           ? `Reintento: ${result.sent ?? 0} ok / ${result.failed} fail`
@@ -370,7 +366,7 @@ export const AutomatizacionesMonitoreo = () => {
   };
 
   useEffect(() => {
-    if (selectedApplicationApiKey) {
+    if (selectedApplicationId) {
       void refreshMonitoring();
       const interval = window.setInterval(() => {
         void refreshMonitoring();
@@ -382,7 +378,7 @@ export const AutomatizacionesMonitoreo = () => {
     setPayload(null);
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedApp, selectedApplicationApiKey, kindFilter, jobsSearch, jobsDateFrom, jobsDateTo, jobsOffset]);
+  }, [selectedApp, selectedApplicationId, kindFilter, jobsSearch, jobsDateFrom, jobsDateTo, jobsOffset]);
 
   const applyJobsSearch = () => {
     setJobsOffset(0);
@@ -441,9 +437,6 @@ export const AutomatizacionesMonitoreo = () => {
           <div>
             <p className="text-sm font-medium text-white">{selectedApplicationLabel}</p>
             <p className="text-xs text-slate-500">La vista se actualiza cada 30 segundos cuando hay una aplicacion seleccionada.</p>
-            {selectedApplication && !selectedApplicationApiKey && (
-              <p className="mt-1 text-xs text-amber-300">La aplicacion seleccionada no tiene api_key configurada.</p>
-            )}
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -460,7 +453,7 @@ export const AutomatizacionesMonitoreo = () => {
             ))}
             <button
               onClick={() => void refreshMonitoring()}
-              disabled={loadingMonitoring || !selectedApplicationApiKey}
+              disabled={loadingMonitoring || !selectedApplicationId}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw className={`h-4 w-4 ${loadingMonitoring ? 'animate-spin' : ''}`} />

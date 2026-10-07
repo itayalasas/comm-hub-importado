@@ -124,12 +124,21 @@ async function notifyUsageThreshold(params: {
 
     const authBaseUrl = await getAuthBaseUrl();
 
-    const platformKeyResult = await client.queryObject<{ api_key: string }>(
-      `SELECT api_key FROM applications WHERE id = $1 LIMIT 1`,
-      [PLATFORM_APPLICATION_ID],
-    );
-    const platformApiKey = (platformKeyResult.rows as any[])[0]?.api_key;
-    if (!authBaseUrl || !platformApiKey) return;
+    // Con FUNCTIONS_INTERNAL_KEY se llama a send-email como la app de la
+    // plataforma sin leer su API key; sin ella se usa la clave en texto plano.
+    const internalKey = (Deno.env.get("FUNCTIONS_INTERNAL_KEY") || "").trim();
+    let platformAuthHeaders: Record<string, string> | null = null;
+    if (internalKey) {
+      platformAuthHeaders = { "x-internal-key": internalKey, "x-application-id": PLATFORM_APPLICATION_ID };
+    } else {
+      const platformKeyResult = await client.queryObject<{ api_key: string }>(
+        `SELECT api_key FROM applications WHERE id = $1 LIMIT 1`,
+        [PLATFORM_APPLICATION_ID],
+      );
+      const platformApiKey = (platformKeyResult.rows as any[])[0]?.api_key;
+      if (platformApiKey) platformAuthHeaders = { "x-api-key": platformApiKey };
+    }
+    if (!authBaseUrl || !platformAuthHeaders) return;
 
     const usagePercent = Math.min(100, Math.round((currentUsage / maxLimit) * 100));
 
@@ -167,7 +176,7 @@ async function notifyUsageThreshold(params: {
 
     const response = await fetch(`${sendCraftFunctionsBaseUrl}/send-email`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": platformApiKey },
+      headers: { "Content-Type": "application/json", ...platformAuthHeaders },
       body: JSON.stringify({
         recipient_email: payerEmail,
         template_name: "usage_threshold_warning",
