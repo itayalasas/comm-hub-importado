@@ -1,4 +1,5 @@
 
+import { verifySvixSignature } from "./signature.ts";
 import { Pool } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 
 const corsHeaders = {
@@ -44,58 +45,13 @@ async function verifyWebhookSignature(
   const webhookSecret = Deno.env.get("RESEND_WEBHOOK_SECRET");
 
   if (!webhookSecret) {
+    // Sin secreto no se puede verificar el origen. Se mantiene el
+    // comportamiento anterior para no cortar los eventos, pero se avisa.
+    console.warn("RESEND_WEBHOOK_SECRET no está configurado: el webhook acepta eventos sin firma");
     return true;
   }
 
-  const svixId = headers.get("svix-id");
-  const svixTimestamp = headers.get("svix-timestamp");
-  const svixSignature = headers.get("svix-signature");
-
-  if (!svixId || !svixTimestamp || !svixSignature) {
-    return false;
-  }
-
-  try {
-    const signedContent = `${svixId}.${svixTimestamp}.${payload}`;
-
-    const secret = webhookSecret.startsWith("whsec_")
-      ? webhookSecret.slice(6)
-      : webhookSecret;
-
-    const encoder = new TextEncoder();
-
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      encoder.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-
-    const signature = await crypto.subtle.sign(
-      "HMAC",
-      cryptoKey,
-      encoder.encode(signedContent),
-    );
-
-    const base64Signature = btoa(
-      String.fromCharCode(...new Uint8Array(signature)),
-    );
-
-    const signatures = svixSignature.split(" ");
-
-    for (const versionedSignature of signatures) {
-      const [version, signatureToCompare] = versionedSignature.split(",");
-
-      if (version === "v1" && signatureToCompare === base64Signature) {
-        return true;
-      }
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
+  return verifySvixSignature(payload, headers, webhookSecret);
 }
 
 Deno.serve(async (req: Request) => {
