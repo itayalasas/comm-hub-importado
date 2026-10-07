@@ -1,3 +1,4 @@
+// Generado desde apis-functions/_shared/forward-auth-function.ts por tools/sync-function-shared.mjs. No editar a mano.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

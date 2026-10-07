@@ -207,14 +207,6 @@ function normalizeUrl(value: string): string {
   return String(value || "").trim().replace(/\/+$/, "");
 }
 
-function normalizeHostnameToBaseUrl(hostname: string): string {
-  const trimmed = String(hostname || "").trim().replace(/\/+$/, "");
-  if (!trimmed) return "";
-
-  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  return normalizeUrl(withProtocol);
-}
-
 function normalizeWidgetCrmUrl(value: string): string {
   const normalized = normalizeUrl(value);
   if (!normalized) return DEFAULT_WIDGET_CRM_URL;
@@ -553,7 +545,7 @@ function resolveWidgetIdentityFromRequest(req: Request, body?: WidgetConfigReque
 
 function normalizeWidgetConfigInput(
   body: WidgetConfigRequest,
-  identity: WidgetIdentity,
+  _identity: WidgetIdentity,
 ): NormalizedWidgetConfig {
   const defaults = getDefaultWidgetConfigDefaults();
   const rawWidgetConfig = firstObject(
@@ -951,7 +943,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const url = new URL(req.url);
     const method = req.method.toUpperCase();
 
     if (method === "GET") {

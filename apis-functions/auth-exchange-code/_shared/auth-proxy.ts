@@ -1,3 +1,4 @@
+// Generado desde apis-functions/_shared/auth-proxy.ts por tools/sync-function-shared.mjs. No editar a mano.
 type CorsOptions = {
   methods?: string;
   allowCredentials?: boolean;
@@ -123,6 +124,7 @@ export function resolveAuthUpstreamUrl(route: string): string {
     "auth-verify-token": ["AUTH_UPSTREAM_VERIFY_URL"],
     "auth-refresh": ["AUTH_UPSTREAM_REFRESH_URL"],
     "auth-logout": ["AUTH_UPSTREAM_LOGOUT_URL"],
+    "auth-impersonate": ["AUTH_UPSTREAM_IMPERSONATE_URL"],
   };
 
   const explicitUrl = readEnvUrl(...(routeOverrides[cleanedRoute] || []));

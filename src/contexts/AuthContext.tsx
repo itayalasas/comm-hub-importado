@@ -1260,7 +1260,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       localStorage.setItem('access_token', accessToken || '');
       authClient.setAccessToken(accessToken);
 
-      let decodedToken = decodeJWT(accessToken);
+      const decodedToken = decodeJWT(accessToken);
       let userInfo: User;
 
       if (!decodedToken && authResponse?.data) {

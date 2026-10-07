@@ -1,3 +1,4 @@
+// Generado desde apis-functions/_shared/template-engine.ts por tools/sync-function-shared.mjs. No editar a mano.
 export interface TemplateData {
   [key: string]: any;
 }
@@ -19,7 +20,7 @@ function getNestedValue(obj: any, path: string): any {
 function processEach(html: string, data: TemplateData): string {
   const eachRegex = /\{\{#each\s+([a-zA-Z0-9_.]+)\}\}([\s\S]*?)\{\{\/each\}\}/g;
 
-  return html.replace(eachRegex, (match, arrayPath, template) => {
+  return html.replace(eachRegex, (_match, arrayPath, template) => {
     const arrayData = getNestedValue(data, arrayPath);
 
     if (!Array.isArray(arrayData)) {
@@ -31,7 +32,7 @@ function processEach(html: string, data: TemplateData): string {
 
       if (typeof item === 'object' && item !== null) {
         const ifGtRegex = /\{\{#if_gt\s+([a-zA-Z0-9_.]+)\s+(\d+(?:\.\d+)?)\}\}([\s\S]*?)(\{\{\/if_gt\}\}|\{\{else\}\}[\s\S]*?\{\{\/if_gt\}\})/g;
-        itemHtml = itemHtml.replace(ifGtRegex, (m, varPath, threshold, ifContent, elseBlock) => {
+        itemHtml = itemHtml.replace(ifGtRegex, (_m, varPath, threshold, ifContent, elseBlock) => {
           const value = item[varPath];
           const numValue = parseFloat(String(value));
           const numThreshold = parseFloat(threshold);
@@ -69,7 +70,7 @@ function processEach(html: string, data: TemplateData): string {
 function processIfGt(html: string, data: TemplateData): string {
   const ifGtRegex = /\{\{#if_gt\s+([a-zA-Z0-9_.]+)\s+(\d+(?:\.\d+)?)\}\}([\s\S]*?)(\{\{\/if_gt\}\}|\{\{else\}\}[\s\S]*?\{\{\/if_gt\}\})/g;
 
-  return html.replace(ifGtRegex, (match, varPath, threshold, ifContent, elseBlock) => {
+  return html.replace(ifGtRegex, (_match, varPath, threshold, ifContent, elseBlock) => {
     const value = getNestedValue(data, varPath);
     const numValue = parseFloat(String(value));
     const numThreshold = parseFloat(threshold);
@@ -87,7 +88,7 @@ function processIfGt(html: string, data: TemplateData): string {
 function processIf(html: string, data: TemplateData): string {
   const ifRegex = /\{\{#if\s+([a-zA-Z0-9_.]+)\}\}([\s\S]*?)(\{\{\/if\}\}|\{\{else\}\}[\s\S]*?\{\{\/if\}\})/g;
 
-  return html.replace(ifRegex, (match, condition, ifContent, elseBlock) => {
+  return html.replace(ifRegex, (_match, condition, ifContent, elseBlock) => {
     const value = getNestedValue(data, condition);
     const isTruthy = Boolean(value) && value !== '' && value !== '0' && value !== 'false';
 

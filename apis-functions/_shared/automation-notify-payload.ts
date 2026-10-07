@@ -1,4 +1,3 @@
-// Generado desde apis-functions/_shared/automation-notify-payload.ts por tools/sync-function-shared.mjs. No editar a mano.
 
 type Channel = "email" | "email_pdf" | "pdf";
 

@@ -1,4 +1,3 @@
-// Generado desde apis-functions/_shared/usage-enforcement.ts por tools/sync-function-shared.mjs. No editar a mano.
 
 async function getAuthBaseUrl(): Promise<string> {
   return (

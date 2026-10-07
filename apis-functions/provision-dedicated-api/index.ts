@@ -148,18 +148,19 @@ function resolveUpstreamUrl(body: ProvisionDedicatedApiRequest): string {
   return isAllowedFallbackUrl(bodyUrl) ? bodyUrl : '';
 }
 
-function stripProxyFields(body: ProvisionDedicatedApiRequest): Record<string, unknown> {
-  const {
-    upstreamUrl,
-    upstream_url,
-    provisioningUrl,
-    provisioning_url,
-    cloneUrl,
-    clone_url,
-    url,
-    ...forwardBody
-  } = body;
+const PROXY_FIELDS = [
+  'upstreamUrl',
+  'upstream_url',
+  'provisioningUrl',
+  'provisioning_url',
+  'cloneUrl',
+  'clone_url',
+  'url',
+] as const;
 
+function stripProxyFields(body: ProvisionDedicatedApiRequest): Record<string, unknown> {
+  const forwardBody: Record<string, unknown> = { ...body };
+  for (const field of PROXY_FIELDS) delete forwardBody[field];
   return forwardBody;
 }
 

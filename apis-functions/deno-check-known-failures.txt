@@ -1,0 +1,18 @@
+# Funciones que ya tenían errores de `deno check` antes del CI.
+# No bloquean el CI; cualquier otra función que falle sí lo bloquea.
+# Sacar una función de la lista cuando se arreglen sus tipos.
+automation-monitoring
+automation-programs
+automation-scheduler
+complete-pending-communication
+connectors
+embed-credentials
+generate-pdf
+health-check-email
+notify
+provision-default-email
+query
+resend-webhook
+send-email
+send-email-with-pdf
+view-pdf

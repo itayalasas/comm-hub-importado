@@ -1,4 +1,3 @@
-// Generado desde apis-functions/_shared/cron-utils.ts por tools/sync-function-shared.mjs. No editar a mano.
 import { CronExpressionParser } from "npm:cron-parser@5.5.0";
 
 function trimText(value: unknown): string {

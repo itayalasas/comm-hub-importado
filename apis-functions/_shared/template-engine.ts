@@ -1,4 +1,3 @@
-// Generado desde apis-functions/_shared/template-engine.ts por tools/sync-function-shared.mjs. No editar a mano.
 export interface TemplateData {
   [key: string]: any;
 }
