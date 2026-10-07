@@ -1,6 +1,9 @@
 node_modules/
 
+# Salidas de build: las genera `npm run build` (y el Dockerfile al desplegar).
+dist/
+tools/pdf-gotenberg-poc/output/
+
 .env
 .vortex/
-vortex-install.mjs
 vortex-install.mjs
