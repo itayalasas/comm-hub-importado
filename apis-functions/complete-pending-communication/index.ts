@@ -54,7 +54,7 @@ export default async function handler(req: Request) {
       `
       SELECT id, name
       FROM applications
-      WHERE api_key = $1
+      WHERE api_key_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')
       LIMIT 1
       `,
       [apiKey],

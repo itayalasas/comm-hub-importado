@@ -322,7 +322,7 @@ export function buildSelectSql(request) {
 
 export function buildAdminLookupSql(query) {
   return {
-    text: `SELECT id, name, api_key, user_id, tenant_id FROM ${normalizeTableName('applications')} WHERE api_key = $1 LIMIT 1`,
+    text: `SELECT id, name, api_key, user_id, tenant_id FROM ${normalizeTableName('applications')} WHERE api_key_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex') LIMIT 1`,
     values: [String(query || '').trim()],
   };
 }
