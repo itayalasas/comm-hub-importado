@@ -15,6 +15,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 import { loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
 import { Plus, CreditCard as Edit, Trash2, Eye, Code, FileText, Image, QrCode, ChevronLeft, ChevronRight, Search, X, Download, Upload, Loader2 } from 'lucide-react';
+import { HtmlPreviewFrame } from '../components/HtmlPreviewFrame';
 
 interface Application {
   id: string;
@@ -842,8 +843,8 @@ export const Templates = () => {
                 </div>
               )}
 
-              <div className="bg-white rounded-lg p-6 min-h-[300px]">
-                <div dangerouslySetInnerHTML={{ __html: renderPreview() }} />
+              <div className="bg-white rounded-lg overflow-hidden">
+                <HtmlPreviewFrame html={renderPreview()} minHeight={480} />
               </div>
 
               <button
