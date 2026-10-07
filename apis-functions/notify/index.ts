@@ -1,10 +1,11 @@
 
 import { Pool } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
+import { APP_AUTH_CORS_HEADERS, AppAuthError, authenticateApplication, type AppCredential } from "./_shared/app-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-api-key",
+  "Access-Control-Allow-Headers": `Content-Type, x-api-key, ${APP_AUTH_CORS_HEADERS}`,
 };
 
 // Subido de 3 a 6: cada job en curso abre varias conexiones cortas
@@ -100,7 +101,7 @@ async function dispatchWithRetry(
 
 async function dispatchEmail(
   functionsBaseUrl: string,
-  apiKey: string,
+  authHeaders: Record<string, string>,
   recipient: Recipient,
   templateName: string,
   sharedData: Record<string, unknown>,
@@ -113,7 +114,7 @@ async function dispatchEmail(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
+        ...authHeaders,
       },
       body: JSON.stringify({
         recipient_email: recipient.email,
@@ -141,7 +142,7 @@ async function dispatchEmail(
 
 async function dispatchEmailWithPdf(
   functionsBaseUrl: string,
-  apiKey: string,
+  authHeaders: Record<string, string>,
   recipient: Recipient,
   templateName: string,
   pdfTemplateName: string,
@@ -156,7 +157,7 @@ async function dispatchEmailWithPdf(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
+        ...authHeaders,
       },
       body: JSON.stringify({
         recipient_email: recipient.email,
@@ -196,7 +197,7 @@ async function dispatchEmailWithPdf(
 
 async function dispatchPdf(
   functionsBaseUrl: string,
-  apiKey: string,
+  authHeaders: Record<string, string>,
   recipient: Recipient,
   pdfTemplateName: string,
   pdfFilename: string | undefined,
@@ -210,7 +211,7 @@ async function dispatchPdf(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
+        ...authHeaders,
       },
       body: JSON.stringify({
         pdf_template_name: pdfTemplateName,
@@ -241,7 +242,19 @@ async function dispatchPdf(
   }
 }
 
-async function getApplicationByApiKey(apiKey: string) {
+async function authenticateRequest(req: Request): Promise<AppCredential> {
+  const client = await pool.connect();
+
+  try {
+    return await authenticateApplication(req, async (sql, params) =>
+      (await client.queryObject<any>(sql, params)).rows
+    );
+  } finally {
+    client.release();
+  }
+}
+
+async function getApplicationById(applicationId: string) {
   const client = await pool.connect();
 
   try {
@@ -249,10 +262,10 @@ async function getApplicationByApiKey(apiKey: string) {
       `
       SELECT id, name
       FROM applications
-      WHERE api_key_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')
+      WHERE id::text = $1
       LIMIT 1
       `,
-      [apiKey],
+      [applicationId],
     );
 
     return result.rows[0] ?? null;
@@ -446,7 +459,7 @@ function dispatchRecipientWithRetry(
   payload: NotifyRequest,
   recipient: Recipient,
   sharedData: Record<string, unknown>,
-  apiKey: string,
+  authHeaders: Record<string, string>,
   functionsBaseUrl: string,
   maxRetries: number,
   retryDelayMs: number,
@@ -456,7 +469,7 @@ function dispatchRecipientWithRetry(
       () =>
         dispatchEmail(
           functionsBaseUrl,
-          apiKey,
+          authHeaders,
           recipient,
           payload.template_name!,
           sharedData,
@@ -472,7 +485,7 @@ function dispatchRecipientWithRetry(
       () =>
         dispatchEmailWithPdf(
           functionsBaseUrl,
-          apiKey,
+          authHeaders,
           recipient,
           payload.template_name!,
           payload.attachment!.pdf_template_name,
@@ -489,7 +502,7 @@ function dispatchRecipientWithRetry(
     () =>
       dispatchPdf(
         functionsBaseUrl,
-        apiKey,
+        authHeaders,
         recipient,
         payload.attachment!.pdf_template_name,
         payload.attachment?.filename,
@@ -532,7 +545,7 @@ async function processRetryJob(
   jobId: string,
   baseResults: RecipientResult[],
   payload: NotifyRequest,
-  apiKey: string,
+  authHeaders: Record<string, string>,
   functionsBaseUrl: string,
 ) {
   const sharedData = payload.shared_data ?? {};
@@ -561,7 +574,7 @@ async function processRetryJob(
           payload,
           recipient,
           sharedData,
-          apiKey,
+          authHeaders,
           functionsBaseUrl,
           maxRetries,
           retryDelayMs,
@@ -602,7 +615,7 @@ async function processRetryJob(
 async function processJob(
   jobId: string,
   payload: NotifyRequest,
-  apiKey: string,
+  authHeaders: Record<string, string>,
   functionsBaseUrl: string,
 ) {
   const sharedData = payload.shared_data ?? {};
@@ -633,7 +646,7 @@ async function processJob(
           payload,
           recipient,
           sharedData,
-          apiKey,
+          authHeaders,
           functionsBaseUrl,
           maxRetries,
           retryDelayMs,
@@ -699,13 +712,18 @@ Deno.serve(async (req: Request) => {
     const isStatusCheck =
       req.method === "GET" && maybeJobId && maybeJobId !== "notify";
 
-    const apiKey = req.headers.get("x-api-key");
-
-    if (!apiKey) {
-      return json({ error: "Missing x-api-key header" }, 401);
+    let credential: AppCredential;
+    try {
+      credential = await authenticateRequest(req);
+    } catch (authError) {
+      if (authError instanceof AppAuthError) {
+        return json({ error: authError.message }, authError.status);
+      }
+      throw authError;
     }
+    const authHeaders = credential.forwardHeaders;
 
-    const application = await getApplicationByApiKey(apiKey);
+    const application = await getApplicationById(credential.applicationId);
 
     if (!application) {
       return json({ error: "Invalid API key" }, 401);
@@ -776,7 +794,7 @@ Deno.serve(async (req: Request) => {
       // solo a los destinatarios fallidos y sus resultados se mezclan con los
       // del job original, acumulando el conteo real de ok/fail en ese registro.
       if (retryPayload.recipients.length <= 1) {
-        await processRetryJob(originalJobId, originalResults, retryPayload, apiKey, functionsBaseUrl).catch((err) => {
+        await processRetryJob(originalJobId, originalResults, retryPayload, authHeaders, functionsBaseUrl).catch((err) => {
           console.error(`processRetryJob failed for job ${originalJobId}:`, err);
         });
 
@@ -791,7 +809,7 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      const retryBackgroundProcessing = processRetryJob(originalJobId, originalResults, retryPayload, apiKey, functionsBaseUrl).catch((err) => {
+      const retryBackgroundProcessing = processRetryJob(originalJobId, originalResults, retryPayload, authHeaders, functionsBaseUrl).catch((err) => {
         console.error(`processRetryJob failed for job ${originalJobId}:`, err);
       });
 
@@ -859,7 +877,7 @@ Deno.serve(async (req: Request) => {
     // la tarea antes de terminar, dejando el job trabado en "processing"
     // para siempre aunque el envio ya haya salido.
     if (payload.recipients.length <= 1) {
-      await processJob(job.id, payload, apiKey, functionsBaseUrl).catch((err) => {
+      await processJob(job.id, payload, authHeaders, functionsBaseUrl).catch((err) => {
         console.error(`processJob failed for job ${job.id}:`, err);
       });
 
@@ -874,7 +892,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const backgroundProcessing = processJob(job.id, payload, apiKey, functionsBaseUrl).catch((err) => {
+    const backgroundProcessing = processJob(job.id, payload, authHeaders, functionsBaseUrl).catch((err) => {
       console.error(`processJob failed for job ${job.id}:`, err);
     });
 

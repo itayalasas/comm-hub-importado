@@ -3,12 +3,13 @@ import { Pool } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { renderTemplate } from "./_shared/template-engine.ts";
 import { renderHtmlToPdfBase64 } from "./_shared/pdf-renderer.ts";
 import { enforceUsageQuota } from "./_shared/usage-enforcement.ts";
+import { APP_AUTH_CORS_HEADERS, AppAuthError, authenticateApplication, type AppCredential } from "./_shared/app-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Client-Info, Apikey, X-Api-Key",
+    `Content-Type, X-Client-Info, Apikey, X-Api-Key, ${APP_AUTH_CORS_HEADERS}`,
 };
 
 const pool = new Pool(Deno.env.get("DATABASE_URL") || "", 3, true);
@@ -179,20 +180,28 @@ Deno.serve(async (req: Request) => {
 
     client = await pool.connect();
 
-    const apiKey = req.headers.get("x-api-key");
+    const db = client;
+    let credential: AppCredential;
+    try {
+      credential = await authenticateApplication(req, async (sql, params) =>
+        (await db.queryObject(sql, params)).rows
+      );
+    } catch (authError) {
+      if (!(authError instanceof AppAuthError)) throw authError;
 
-    if (!apiKey) {
+      const providedKey = req.headers.get("x-api-key") || "";
       await insertEmailLog(client, {
         application_id: null,
         template_id: null,
         recipient_email: "unknown@error.com",
-        subject: "Error: Missing API key in /generate-pdf",
+        subject: `Error: ${authError.message} in /generate-pdf`,
         status: "failed",
-        error_message: "Missing API key in x-api-key header",
+        error_message: authError.message,
         communication_type: "pdf_generation",
         metadata: {
           endpoint: "generate-pdf",
           error_type: "authentication",
+          ...(providedKey ? { api_key_prefix: providedKey.substring(0, 8) } : {}),
           headers: {
             "user-agent": req.headers.get("user-agent"),
             "x-forwarded-for": req.headers.get("x-forwarded-for"),
@@ -203,9 +212,9 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(
         {
           success: false,
-          error: "Missing API key in x-api-key header",
+          error: authError.message,
         },
-        401,
+        authError.status,
       );
     }
 
@@ -213,10 +222,10 @@ Deno.serve(async (req: Request) => {
       `
       SELECT id, name, tenant_id, user_id
       FROM applications
-      WHERE api_key_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')
+      WHERE id::text = $1
       LIMIT 1
       `,
-      [apiKey],
+      [credential.applicationId],
     );
 
     application = appResult.rows[0] ?? null;
@@ -233,7 +242,6 @@ Deno.serve(async (req: Request) => {
         metadata: {
           endpoint: "generate-pdf",
           error_type: "authentication",
-          api_key_prefix: apiKey.substring(0, 8),
         },
       });
 
@@ -798,7 +806,7 @@ Deno.serve(async (req: Request) => {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-api-key": apiKey,
+              ...credential.forwardHeaders,
             },
             body: JSON.stringify({
               pending_communication_id: targetPendingId,

@@ -1,4 +1,5 @@
 import { buildFunctionsUrl, configManager } from './config';
+import { buildAppSessionHeaders } from './functions';
 
 export type AutomationChannel = 'email' | 'email_pdf' | 'pdf';
 export type AutomationKind = 'scheduled' | 'batch';
@@ -203,20 +204,14 @@ async function ensureConfigLoaded() {
   await configManager.loadConfig();
 }
 
-async function buildHeaders(apiKey: string, hasBody = false): Promise<HeadersInit> {
+async function buildHeaders(applicationId: string, hasBody = false): Promise<HeadersInit> {
   await ensureConfigLoaded();
-  const trimmedApiKey = apiKey.trim();
-  if (!trimmedApiKey) {
-    throw new Error('La aplicacion seleccionada no tiene api_key');
-  }
 
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = buildAppSessionHeaders(applicationId);
 
   if (hasBody) {
     headers['Content-Type'] = 'application/json';
   }
-
-  headers['x-api-key'] = trimmedApiKey;
 
   return headers;
 }
@@ -238,7 +233,7 @@ async function parseJson<T>(response: Response): Promise<T> {
   return (json.data ?? (json as T)) as T;
 }
 
-export async function loadAutomationPrograms(apiKey: string, filters?: { kind?: string; status?: string; due?: boolean; limit?: number }) {
+export async function loadAutomationPrograms(applicationId: string, filters?: { kind?: string; status?: string; due?: boolean; limit?: number }) {
   const params = new URLSearchParams();
   if (filters?.kind) params.set('kind', filters.kind);
   if (filters?.status) params.set('status', filters.status);
@@ -251,19 +246,19 @@ export async function loadAutomationPrograms(apiKey: string, filters?: { kind?: 
 
   const response = await fetch(buildFunctionsUrl(endpoint), {
     method: 'GET',
-    headers: await buildHeaders(apiKey),
+    headers: await buildHeaders(applicationId),
   });
 
   const data = await parseJson<{ programs: AutomationProgramRecord[]; total: number; now: string }>(response);
   return data.programs || [];
 }
 
-export async function saveAutomationProgram(apiKey: string, input: AutomationProgramInput) {
+export async function saveAutomationProgram(applicationId: string, input: AutomationProgramInput) {
   const isUpdate = !!input.id;
   const endpoint = isUpdate ? `automation-programs/${input.id}` : 'automation-programs';
   const response = await fetch(buildFunctionsUrl(endpoint), {
     method: isUpdate ? 'PUT' : 'POST',
-    headers: await buildHeaders(apiKey, true),
+    headers: await buildHeaders(applicationId, true),
     body: JSON.stringify({
       application_id: input.application_id,
       name: input.name,
@@ -288,10 +283,10 @@ export async function saveAutomationProgram(apiKey: string, input: AutomationPro
   return data.program;
 }
 
-export async function runAutomationProgram(apiKey: string, programId: string) {
+export async function runAutomationProgram(applicationId: string, programId: string) {
   const response = await fetch(buildFunctionsUrl(`automation-programs/${programId}/run`), {
     method: 'POST',
-    headers: await buildHeaders(apiKey),
+    headers: await buildHeaders(applicationId),
   });
 
   const data = await parseJson<{ job_id: string | null; program: AutomationProgramRecord; notify: Record<string, unknown> }>(response);
@@ -299,7 +294,7 @@ export async function runAutomationProgram(apiKey: string, programId: string) {
 }
 
 export async function loadAutomationProgramQueue(
-  apiKey: string,
+  applicationId: string,
   programId: string,
   filters?: { status?: string; limit?: number },
 ) {
@@ -313,7 +308,7 @@ export async function loadAutomationProgramQueue(
 
   const response = await fetch(buildFunctionsUrl(endpoint), {
     method: 'GET',
-    headers: await buildHeaders(apiKey),
+    headers: await buildHeaders(applicationId),
   });
 
   const data = await parseJson<{ program: AutomationProgramRecord; queue_items: AutomationProgramQueueItemRecord[]; total: number }>(response);
@@ -321,13 +316,13 @@ export async function loadAutomationProgramQueue(
 }
 
 export async function enqueueAutomationProgramQueue(
-  apiKey: string,
+  applicationId: string,
   programId: string,
   input: AutomationProgramQueueInput | AutomationProgramQueueBulkInput,
 ) {
   const response = await fetch(buildFunctionsUrl(`automation-programs/${programId}/queue`), {
     method: 'POST',
-    headers: await buildHeaders(apiKey, true),
+    headers: await buildHeaders(applicationId, true),
     body: JSON.stringify(input),
   });
 
@@ -336,23 +331,23 @@ export async function enqueueAutomationProgramQueue(
 }
 
 export async function cancelAutomationProgramQueueItem(
-  apiKey: string,
+  applicationId: string,
   programId: string,
   queueItemId: string,
 ) {
   const response = await fetch(buildFunctionsUrl(`automation-programs/${programId}/queue/${queueItemId}`), {
     method: 'DELETE',
-    headers: await buildHeaders(apiKey),
+    headers: await buildHeaders(applicationId),
   });
 
   const data = await parseJson<{ queue_item: AutomationProgramQueueItemRecord }>(response);
   return data.queue_item;
 }
 
-export async function deleteAutomationProgram(apiKey: string, programId: string) {
+export async function deleteAutomationProgram(applicationId: string, programId: string) {
   const response = await fetch(buildFunctionsUrl(`automation-programs/${programId}`), {
     method: 'DELETE',
-    headers: await buildHeaders(apiKey),
+    headers: await buildHeaders(applicationId),
   });
 
   const data = await parseJson<{ program: AutomationProgramRecord }>(response);
@@ -368,7 +363,7 @@ export interface AutomationMonitoringJobsFilters {
 }
 
 export async function loadAutomationMonitoring(
-  apiKey: string,
+  applicationId: string,
   limit = 20,
   kind?: 'scheduled' | 'batch',
   jobsFilters?: AutomationMonitoringJobsFilters,
@@ -384,17 +379,17 @@ export async function loadAutomationMonitoring(
 
   const response = await fetch(buildFunctionsUrl(`automation-monitoring?${params.toString()}`), {
     method: 'GET',
-    headers: await buildHeaders(apiKey),
+    headers: await buildHeaders(applicationId),
   });
 
   const data = await parseJson<AutomationMonitoringPayload>(response);
   return data;
 }
 
-export async function sendAutomationBatch(apiKey: string, input: NotifyBatchInput) {
+export async function sendAutomationBatch(applicationId: string, input: NotifyBatchInput) {
   const response = await fetch(buildFunctionsUrl('notify'), {
     method: 'POST',
-    headers: await buildHeaders(apiKey, true),
+    headers: await buildHeaders(applicationId, true),
     body: JSON.stringify({
       type: input.type,
       template_name: input.template_name,
@@ -409,10 +404,10 @@ export async function sendAutomationBatch(apiKey: string, input: NotifyBatchInpu
   return data;
 }
 
-export async function retryAutomationJob(apiKey: string, jobId: string) {
+export async function retryAutomationJob(applicationId: string, jobId: string) {
   const response = await fetch(buildFunctionsUrl('notify'), {
     method: 'POST',
-    headers: await buildHeaders(apiKey, true),
+    headers: await buildHeaders(applicationId, true),
     body: JSON.stringify({ retry_job_id: jobId }),
   });
 

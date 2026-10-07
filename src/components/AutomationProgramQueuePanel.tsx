@@ -54,10 +54,10 @@ const statusStyles: Record<string, string> = {
 };
 
 export const AutomationProgramQueuePanel = ({
-  apiKey,
+  applicationId,
   program,
 }: {
-  apiKey: string;
+  applicationId: string;
   program: AutomationProgramRecord;
 }) => {
   const toast = useToast();
@@ -90,7 +90,7 @@ export const AutomationProgramQueuePanel = ({
     try {
       setLoading(true);
       const result = await loadAutomationProgramQueue(
-        apiKey,
+        applicationId,
         program.id,
         statusFilter === 'all' ? undefined : { status: statusFilter },
       );
@@ -101,7 +101,7 @@ export const AutomationProgramQueuePanel = ({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, program.id, statusFilter]);
+  }, [applicationId, program.id, statusFilter]);
 
   useEffect(() => {
     void refresh();
@@ -127,7 +127,7 @@ export const AutomationProgramQueuePanel = ({
       const input: AutomationProgramQueueBulkInput = Array.isArray((parsed as { items?: unknown })?.items)
         ? (parsed as AutomationProgramQueueBulkInput)
         : { items: [parsed as AutomationProgramQueueBulkInput['items'][number]] };
-      const result = await enqueueAutomationProgramQueue(apiKey, program.id, input);
+      const result = await enqueueAutomationProgramQueue(applicationId, program.id, input);
       toast.success(`${result.queue_items.length} item(s) cargados en la cola`);
       await refresh();
     } catch (error) {
@@ -140,7 +140,7 @@ export const AutomationProgramQueuePanel = ({
   const handleCancel = async (item: AutomationProgramQueueItemRecord) => {
     try {
       setCancellingId(item.id);
-      await cancelAutomationProgramQueueItem(apiKey, program.id, item.id);
+      await cancelAutomationProgramQueueItem(applicationId, program.id, item.id);
       toast.success('Item cancelado');
       await refresh();
     } catch (error) {

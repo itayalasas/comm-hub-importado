@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { db } from '../lib/db';
 import { logAuditEvent } from '../lib/auditLog';
-import { functionsFetch } from '../lib/functions';
+import { buildAppSessionHeaders, functionsFetch } from '../lib/functions';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
 import { PageLoader } from '../components/PageLoader';
-import { loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
+import { loadLegacyApplicationApiKey, loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
 import {
   Plus, MessageSquare, CheckCircle, XCircle, Clock, Send,
   Trash2, RefreshCw, AlertCircle, Eye, X, FileText, Paperclip,
@@ -18,7 +18,6 @@ import {
 interface Application {
   id: string;
   name: string;
-  api_key: string;
 }
 
 interface WhatsAppConfig {
@@ -286,9 +285,14 @@ export const WhatsAppTemplates = () => {
       const app = applications.find(a => a.id === selectedApp);
       if (!app) throw new Error('Aplicación no encontrada');
 
+      const legacyApiKey = await loadLegacyApplicationApiKey(app.id);
       const res = await functionsFetch('whatsapp-template-submit', {
         method: 'POST',
-        headers: { 'x-api-key': app.api_key },
+        includeApiKey: !!legacyApiKey,
+        headers: {
+          ...buildAppSessionHeaders(app.id),
+          ...(legacyApiKey ? { 'x-api-key': legacyApiKey } : {}),
+        },
         body: JSON.stringify({ application_id: selectedApp, template_id: tpl.id }),
       });
 

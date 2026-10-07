@@ -1,11 +1,12 @@
 
 import { Pool } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
+import { APP_AUTH_CORS_HEADERS, AppAuthError, authenticateApplication, type AppCredential } from "./_shared/app-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Client-Info, Apikey, x-api-key, X-Api-Key, Accept",
+    `Content-Type, X-Client-Info, Apikey, x-api-key, X-Api-Key, Accept, ${APP_AUTH_CORS_HEADERS}`,
 };
 
 const databaseUrl = Deno.env.get("DATABASE_URL") || "";
@@ -117,18 +118,10 @@ function getEffectiveRunAt(program: AutomationProgramRecord): string | null {
   return program.next_run_at || program.schedule_at || null;
 }
 
-async function getApplicationByKey(client: any, apiKey: string) {
-  const result = await client.queryObject(
-    `
-    SELECT id, name, api_key
-    FROM applications
-    WHERE api_key_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')
-    LIMIT 1
-    `,
-    [apiKey],
-  );
-
-  return result.rows[0] ?? null;
+function authErrorCode(error: AppAuthError): string {
+  if (error.status === 403) return "FORBIDDEN";
+  if (error.message === "Missing API key") return "MISSING_API_KEY";
+  return "INVALID_API_KEY";
 }
 
 function toProgramSummary(program: AutomationProgramRecord, nowIso: string) {
@@ -311,31 +304,40 @@ Deno.serve(async (req: Request) => {
     }
 
     const url = new URL(req.url);
-    const apiKey = getApiKey(req, url);
-
-    if (!apiKey) {
-      return json(
-        {
-          success: false,
-          error: {
-            code: "MISSING_API_KEY",
-            message: "Missing x-api-key header",
-          },
-        },
-        401,
-      );
-    }
-
     client = await pool.connect();
+    const db = client;
+
+    let credential: AppCredential;
+    try {
+      credential = await authenticateApplication(
+        req,
+        async (sql, params) => (await db.queryObject(sql, params)).rows as Record<string, unknown>[],
+        { apiKey: getApiKey(req, url) },
+      );
+    } catch (authError) {
+      if (authError instanceof AppAuthError) {
+        return json(
+          {
+            success: false,
+            error: {
+              code: authErrorCode(authError),
+              message: authError.message,
+            },
+          },
+          authError.status,
+        );
+      }
+      throw authError;
+    }
 
     const applicationResult = await client.queryObject(
       `
-      SELECT id, name, api_key
+      SELECT id, name
       FROM applications
-      WHERE api_key_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')
+      WHERE id::text = $1
       LIMIT 1
       `,
-      [apiKey],
+      [credential.applicationId],
     );
 
     const application: any = applicationResult.rows[0] ?? null;
