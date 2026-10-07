@@ -9,7 +9,7 @@ Al iniciar la aplicación (`main.tsx`), se hace una llamada a la API de configur
 
 ```
 GET https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/get-env
-Header: X-Access-Key: 4ceffb91030a93e1e3670ca95f8b63976517745a64ace0aa8b86e7861884ca45
+Header: X-Access-Key: <CONFIG_ACCESS_KEY>
 ```
 
 ### 2. Respuesta de la API
