@@ -115,11 +115,6 @@ function getClientIp(req: Request): string {
   return "";
 }
 
-function isCountryCodeLike(value: string): boolean {
-  const normalized = String(value || "").trim().toUpperCase();
-  return normalized === "LO" || normalized === "??" || /^[A-Z]{2}$/.test(normalized);
-}
-
 function hasMeaningfulCountryCode(value: string): boolean {
   const normalized = String(value || "").trim().toUpperCase();
   return normalized === "LO" || /^[A-Z]{2}$/.test(normalized);

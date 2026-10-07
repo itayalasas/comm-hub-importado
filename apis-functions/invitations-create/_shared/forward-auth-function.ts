@@ -1,3 +1,4 @@
+// Generado desde apis-functions/_shared/forward-auth-function.ts por tools/sync-function-shared.mjs. No editar a mano.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,8 +10,12 @@ const corsHeaders = {
 
 function getAuthFunctionsBaseUrl(): string {
   return (
-    Deno.env.get("AUTH_EDGE_FUNCTIONS_BASE_URL") ||    
-    "https://sfqtmnncgiqkveaoqckt.supabase.co/functions/v1"
+    Deno.env.get("AUTH_FUNCTIONS_BASE_URL") ||
+    Deno.env.get("AUTH_EDGE_FUNCTIONS_BASE_URL") ||
+    Deno.env.get("AUTH_URL") ||
+    Deno.env.get("VITE_AUTH_URL") ||
+    Deno.env.get("FUNCTIONS_BASE_URL") ||
+    ""
   )
     .trim()
     .replace(/\/+$/, "");

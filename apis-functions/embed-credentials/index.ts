@@ -33,6 +33,7 @@ function parseTokens(raw: string | undefined): string[] {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return parsed.map(String);
   } catch {
+    // No es JSON: se interpreta como lista separada por comas.
   }
 
   return raw.split(",").map((item) => item.trim()).filter(Boolean);

@@ -7,17 +7,6 @@ import {
   type RowQuery,
 } from "./app-auth.ts";
 
-const COPIES = [
-  "automation-monitoring",
-  "automation-programs",
-  "complete-pending-communication",
-  "generate-pdf",
-  "notify",
-  "pending-communication",
-  "send-email",
-  "send-email-with-pdf",
-];
-
 function fakeQuery(handler: (sql: string, params: unknown[]) => Record<string, unknown>[]) {
   const calls: { sql: string; params: unknown[] }[] = [];
   const query: RowQuery = (sql, params) => {
@@ -50,14 +39,6 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => Promise<voi
     }
   };
 }
-
-Deno.test("las copias en cada función son idénticas a la canónica", async () => {
-  const canonical = await Deno.readTextFile(new URL("./app-auth.ts", import.meta.url));
-  for (const fn of COPIES) {
-    const copy = await Deno.readTextFile(new URL(`../${fn}/_shared/app-auth.ts`, import.meta.url));
-    assertEquals(copy, canonical, `${fn}/_shared/app-auth.ts está desactualizada`);
-  }
-});
 
 Deno.test("x-api-key busca por hash y reenvía la misma clave", async () => {
   const { query, calls } = fakeQuery(() => [{ id: "app-1" }]);

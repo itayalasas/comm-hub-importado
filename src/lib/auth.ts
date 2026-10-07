@@ -56,7 +56,7 @@ export const authClient = {
         return data.access_token;
       }
       return null;
-    } catch (err) {
+    } catch {
       return null;
     }
   },

@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (tipos, ESLint, build, audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npx vite build
+      - name: Vulnerabilidades altas en dependencias de producción
+        run: npm audit --omit=dev --audit-level=high
+
+  functions:
+    name: Funciones (copias, lint, tipos, tests)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: query_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Copias de apis-functions/_shared al día
+        run: node tools/sync-function-shared.mjs --check
+      - run: npm run lint:functions
+      - run: npm run check:functions
+      - name: Tests (incluye la integración de query contra Postgres)
+        env:
+          QUERY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/query_test
+        run: npm run test:functions
+
+  secrets:
+    name: Secretos (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Instalar gitleaks
+        env:
+          GITLEAKS_VERSION: 8.24.3
+        run: |
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar xz -C /usr/local/bin gitleaks
+      # Solo revisa los commits nuevos: el repo todavía tiene claves viejas que se
+      # rotan en la Fase 0/1, y no queremos que bloqueen todos los PRs.
+      - name: Buscar secretos en los commits nuevos
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            RANGE="HEAD~1..HEAD"
+          else
+            RANGE="$BASE_SHA..HEAD"
+          fi
+          gitleaks git --no-banner --redact --log-opts="$RANGE" .

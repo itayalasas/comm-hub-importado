@@ -1,4 +1,3 @@
-// Generado desde apis-functions/_shared/pdf-renderer.ts por tools/sync-function-shared.mjs. No editar a mano.
 export interface PdfRenderResult {
   base64: string;
   sizeBytes: number;

@@ -1,3 +1,4 @@
+// Generado desde apis-functions/_shared/resend-client.ts por tools/sync-function-shared.mjs. No editar a mano.
 export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

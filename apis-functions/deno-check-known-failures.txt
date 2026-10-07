@@ -1,0 +1,3 @@
+# Funciones que ya tenían errores de `deno check` antes del CI.
+# No bloquean el CI; cualquier otra función que falle sí lo bloquea.
+# Sacar una función de la lista cuando se arreglen sus tipos.

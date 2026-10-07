@@ -27,6 +27,42 @@ const json = (data: unknown, status = 200) =>
     },
   });
 
+function renderTemplate(
+  templateText: string,
+  data: Record<string, any>,
+): string {
+  let result = templateText;
+
+  const variableRegex =
+    /\{\{([a-zA-Z0-9_.]+)\}\}/g;
+
+  result = result.replace(
+    variableRegex,
+    (_match, path) => {
+      const keys = path.split(".");
+      let value: any = data;
+
+      for (const key of keys) {
+        if (
+          value === null ||
+          value === undefined
+        ) {
+          return "";
+        }
+
+        value = value[key];
+      }
+
+      return value !== undefined &&
+          value !== null
+        ? String(value)
+        : "";
+    },
+  );
+
+  return result;
+}
+
 export default async function handler(req: Request) {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -147,42 +183,6 @@ export default async function handler(req: Request) {
 
     const waitForInvoice =
       requestData.wait_for_invoice;
-
-    function renderTemplate(
-      templateText: string,
-      data: Record<string, any>,
-    ): string {
-      let result = templateText;
-
-      const variableRegex =
-        /\{\{([a-zA-Z0-9_.]+)\}\}/g;
-
-      result = result.replace(
-        variableRegex,
-        (match, path) => {
-          const keys = path.split(".");
-          let value: any = data;
-
-          for (const key of keys) {
-            if (
-              value === null ||
-              value === undefined
-            ) {
-              return "";
-            }
-
-            value = value[key];
-          }
-
-          return value !== undefined &&
-              value !== null
-            ? String(value)
-            : "";
-        },
-      );
-
-      return result;
-    }
 
     // WAIT FOR INVOICE FLOW
     if (orderId && waitForInvoice) {

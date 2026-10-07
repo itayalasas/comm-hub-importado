@@ -1,3 +1,4 @@
+// Generado desde apis-functions/_shared/auth-proxy.ts por tools/sync-function-shared.mjs. No editar a mano.
 type CorsOptions = {
   methods?: string;
   allowCredentials?: boolean;

@@ -1,5 +1,5 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "sendcraft",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,6 +7,12 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p .",
+    "lint": "eslint .",
+    "lint:functions": "deno lint --rules-exclude=no-explicit-any,no-import-prefix,require-await apis-functions",
+    "check:functions": "node tools/check-functions.mjs",
+    "test:functions": "deno test --node-modules-dir=none --allow-env --allow-read --allow-net apis-functions",
+    "sync:functions": "node tools/sync-function-shared.mjs",
     "sdk:generate": "node tools/generate-sdk-artifacts.mjs",
     "sdk:status": "node tools/sdk-status.mjs",
     "vortex": "node --import ./.vortex/cli/scripts/register-ts-loader.mjs ./.vortex/cli/scripts/vortex-cli.ts"
@@ -18,13 +24,18 @@
     "react-router-dom": "^6.22.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.17",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^15.15.0",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.2.2",
+    "typescript-eslint": "^8.71.1",
     "vite": "^5.1.0"
   }
 }
