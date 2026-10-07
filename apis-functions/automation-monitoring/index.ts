@@ -122,7 +122,7 @@ async function getApplicationByKey(client: any, apiKey: string) {
     `
     SELECT id, name, api_key
     FROM applications
-    WHERE api_key = $1
+    WHERE api_key_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')
     LIMIT 1
     `,
     [apiKey],
@@ -332,7 +332,7 @@ Deno.serve(async (req: Request) => {
       `
       SELECT id, name, api_key
       FROM applications
-      WHERE api_key = $1
+      WHERE api_key_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')
       LIMIT 1
       `,
       [apiKey],
