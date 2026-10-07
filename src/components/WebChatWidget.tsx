@@ -2076,11 +2076,11 @@ export function WebChatFloatingButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="group fixed bottom-5 right-5 z-[125] flex h-16 w-16 items-center justify-center rounded-full bg-[#14b8a6] text-white shadow-2xl shadow-cyan-500/30 ring-1 ring-white/15 transition-all hover:-translate-y-1 hover:bg-[#0ea5a8]"
+      className="group fixed bottom-3 right-3 sm:bottom-5 sm:right-5 z-[125] flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-[#14b8a6] text-white shadow-2xl shadow-cyan-500/30 ring-1 ring-white/15 transition-all hover:-translate-y-1 hover:bg-[#0ea5a8]"
       aria-label="Abrir widget de chat"
     >
       <span className="absolute inset-0 rounded-full bg-white/10 opacity-0 blur-md transition-opacity group-hover:opacity-100" />
-      <MessageSquare className="relative z-10 h-6 w-6" />
+      <MessageSquare className="relative z-10 h-5 w-5 sm:h-6 sm:w-6" />
     </button>
   );
 }
