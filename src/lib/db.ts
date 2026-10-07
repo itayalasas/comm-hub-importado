@@ -1,3 +1,4 @@
+import { authClient } from './auth';
 import { configManager } from './config';
 
 type FilterOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'like' | 'ilike' | 'in' | 'is';
@@ -33,6 +34,26 @@ interface DbResponse<T = any> {
   count: number;
 }
 
+function getAccessToken(): string {
+  if (typeof window === 'undefined') return authClient.getAccessToken() || '';
+  return authClient.getAccessToken() || localStorage.getItem('access_token') || '';
+}
+
+// La API de consultas limita los datos al usuario de este token.
+function buildHeaders(apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+  };
+
+  const token = getAccessToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return headers;
+}
+
 async function executeQuery<T = unknown>(payload: QueryPayload): Promise<DbResponse<T>> {
   let apiUrl: string;
   let apiKey: string;
@@ -54,10 +75,7 @@ async function executeQuery<T = unknown>(payload: QueryPayload): Promise<DbRespo
   try {
     response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-      },
+      headers: buildHeaders(apiKey),
       body: requestBody,
     });
   } catch (networkError: any) {
