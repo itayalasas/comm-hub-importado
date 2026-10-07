@@ -1,6 +1,19 @@
 
 import geoip from "npm:geoip-lite@1.4.10";
 import { Pool } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
+import {
+  assertOperationAllowed,
+  buildScopeCondition,
+  enforceRowScope,
+  getAuthMode,
+  getServiceApiKeys,
+  mergeWhere,
+  readBearerToken,
+  ScopeError,
+  TABLE_SCOPES,
+  type UserContext,
+  verifyUserToken,
+} from "./tenant-scope.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -285,6 +298,7 @@ function getAllowedApiKeys(): string[] {
     ...parseTokens(Deno.env.get("FPM_API_KEYS")),
     ...parseTokens(Deno.env.get("FPM_API_KEYS_CSV")),
     ...parseTokens(Deno.env.get("FPM_AUTH_TOKENS")),
+    ...parseTokens(Deno.env.get("QUERY_SERVICE_API_KEYS")),
   ].filter((key): key is string => !!key);
 }
 
@@ -395,6 +409,32 @@ function buildWhere(filters: any[] = [], values: any[]): string {
   return `WHERE ${clauses.join(" AND ")}`;
 }
 
+// Devuelve el usuario al que se limita la consulta, o null cuando la
+// consulta no se limita (modo legacy, clave de servicio o tracking anónimo).
+async function resolveRequestScope(
+  req: Request,
+  table: string,
+  operation: string,
+): Promise<UserContext | null> {
+  if (getAuthMode() !== "enforce") return null;
+
+  const token = readBearerToken(req);
+  if (token) {
+    const ctx = await verifyUserToken(token);
+    if (!ctx) {
+      throw new ScopeError("Invalid or expired session", 401, "UNAUTHORIZED");
+    }
+    return ctx;
+  }
+
+  const apiKey = req.headers.get("x-api-key") || "";
+  if (apiKey && getServiceApiKeys().includes(apiKey)) return null;
+
+  if (TABLE_SCOPES[table] === "public_insert" && operation === "insert") return null;
+
+  throw new ScopeError("Missing user session", 401, "UNAUTHORIZED");
+}
+
 export default async function handler(req: Request) {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -459,6 +499,21 @@ export default async function handler(req: Request) {
       throw new Error(`Operation not allowed: ${operation}`);
     }
 
+    const scope = await resolveRequestScope(req, table, operation);
+    if (scope) {
+      assertOperationAllowed(table, operation, scope);
+    }
+
+    const lookupOwnedApplications = async (ids: string[], ctx: UserContext) => {
+      const lookupParams: unknown[] = [ids];
+      const condition = buildScopeCondition("applications", ctx, lookupParams);
+      const owned = await client.queryObject<{ id: string }>(
+        `SELECT "id"::text AS id FROM "applications" WHERE "id"::text = ANY($1) AND ${condition}`,
+        lookupParams,
+      );
+      return new Set(owned.rows.map((row) => row.id));
+    };
+
     const tableSql = quoteIdentifier(table);
     const mutationData = enrichWebAccessAttemptData(table, operation, data, req);
     const params: any[] = [];
@@ -466,7 +521,11 @@ export default async function handler(req: Request) {
 
     if (operation === "select") {
       const selectSql = parseSelect(select);
-      const whereSql = buildWhere(filters, params);
+      let whereSql = buildWhere(filters, params);
+
+      if (scope) {
+        whereSql = mergeWhere(whereSql, buildScopeCondition(table, scope, params));
+      }
 
       let orderSql = "";
 
@@ -511,6 +570,10 @@ export default async function handler(req: Request) {
         throw new Error("Insert requires data");
       }
 
+      if (scope) {
+        await enforceRowScope(table, rows, scope, lookupOwnedApplications, { fillMissing: true });
+      }
+
       const columns = Object.keys(rows[0]);
 
       for (const column of columns) {
@@ -552,6 +615,10 @@ export default async function handler(req: Request) {
         throw new Error("Update requires at least one column");
       }
 
+      if (scope) {
+        await enforceRowScope(table, [updateData], scope, lookupOwnedApplications, { fillMissing: false });
+      }
+
       const setSql = columns
         .map((column) => {
           if (!isSafeIdentifier(column)) {
@@ -563,10 +630,14 @@ export default async function handler(req: Request) {
         })
         .join(", ");
 
-      const whereSql = buildWhere(filters, params);
+      let whereSql = buildWhere(filters, params);
 
       if (!whereSql) {
         throw new Error("Update requires filters");
+      }
+
+      if (scope) {
+        whereSql = mergeWhere(whereSql, buildScopeCondition(table, scope, params));
       }
 
       sql = `
@@ -578,10 +649,14 @@ export default async function handler(req: Request) {
     }
 
     if (operation === "delete") {
-      const whereSql = buildWhere(filters, params);
+      let whereSql = buildWhere(filters, params);
 
       if (!whereSql) {
         throw new Error("Delete requires filters");
+      }
+
+      if (scope) {
+        whereSql = mergeWhere(whereSql, buildScopeCondition(table, scope, params));
       }
 
       sql = `
@@ -596,6 +671,10 @@ export default async function handler(req: Request) {
 
       if (!rows.length || !rows[0]) {
         throw new Error("Upsert requires data");
+      }
+
+      if (scope) {
+        await enforceRowScope(table, rows, scope, lookupOwnedApplications, { fillMissing: true });
       }
 
       const columns = Object.keys(rows[0]);
@@ -641,6 +720,7 @@ export default async function handler(req: Request) {
         VALUES ${rowsSql}
         ON CONFLICT (${conflictSql})
         DO UPDATE SET ${updateSql}
+        ${scope ? `WHERE ${buildScopeCondition(table, scope, params, table)}` : ""}
         RETURNING ${parseSelect(returning)}
       `;
     }
@@ -669,7 +749,7 @@ export default async function handler(req: Request) {
         hint: error.hint || null,
       },
       count: 0,
-    }, 400);
+    }, error instanceof ScopeError ? error.status : 400);
   } finally {
     client.release();
   }
