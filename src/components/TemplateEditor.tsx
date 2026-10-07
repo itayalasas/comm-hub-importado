@@ -3,6 +3,7 @@ import { X, Eye, Code, FileText, Image, QrCode, Plus, Trash2, Maximize2, Loader2
 import { db } from '../lib/db';
 import { useToast } from './Toast';
 import { HTMLEditor } from './HTMLEditor';
+import { HtmlPreviewFrame } from './HtmlPreviewFrame';
 
 interface TemplateEditorProps {
   formData: any;
@@ -360,8 +361,8 @@ export const TemplateEditor = ({ formData, setFormData, onSave, onCancel, isEdit
                   </div>
                 </div>
                 {showPreview ? (
-                  <div className="w-full min-h-[400px] p-4 bg-white border border-slate-700 rounded-lg overflow-auto">
-                    <div dangerouslySetInnerHTML={{ __html: getPreviewHtml() }} />
+                  <div className="w-full bg-white border border-slate-700 rounded-lg overflow-hidden">
+                    <HtmlPreviewFrame html={getPreviewHtml()} minHeight={400} />
                   </div>
                 ) : (
                   <textarea

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Maximize2, Code, Eye, Split, Wand2 } from 'lucide-react';
+import { HtmlPreviewFrame } from './HtmlPreviewFrame';
 
 interface HTMLEditorProps {
   value: string;
@@ -211,11 +212,8 @@ export const HTMLEditor = ({ value, onChange, onClose, variables }: HTMLEditorPr
                   <span>Vista Previa</span>
                 </h3>
               </div>
-              <div className="flex-1 overflow-auto p-4">
-                <div
-                  dangerouslySetInnerHTML={{ __html: getPreviewHtml() }}
-                  style={{ minHeight: '100%' }}
-                />
+              <div className="flex-1 overflow-hidden">
+                <HtmlPreviewFrame html={getPreviewHtml()} className="h-full" minHeight="100%" />
               </div>
             </div>
           )}
