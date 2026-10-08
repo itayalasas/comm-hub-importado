@@ -1,5 +1,5 @@
-import { ReactNode, useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { createContext, ReactNode, Suspense, useContext, useEffect, useState } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, Book, Menu, X, Zap,
   AlertTriangle, Loader2, Check, Minus, ChevronDown, ChevronRight,
@@ -18,6 +18,7 @@ import { getRuntimeConfig, configManager } from '../lib/config';
 import { startManagedSubscriptionCheckout, storePendingSubscriptionCheckout } from '../lib/subscriptionCheckout';
 import { findPlanFeatureByCode } from '../lib/planFeatures';
 import { markOnboardingTourSeen } from '../lib/onboarding';
+import { PageLoader } from './PageLoader';
 
 interface LayoutProps {
   children: ReactNode;
@@ -514,7 +515,7 @@ const NavItemRow = ({
 
 /* ── Main Layout ────────────────────────────────────────────────── */
 
-export const Layout = ({ children, currentPage }: LayoutProps) => {
+const LayoutFrame = ({ children, currentPage }: LayoutProps) => {
   const { hasMenuAccess, hasSubmenuAccess, subscription, subscriptionHasAccess, user, isSystemAdmin } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { stepIndex: tourStep, goToStep: goToTourStep, endTour } = useOnboardingTour();
@@ -770,5 +771,38 @@ export const Layout = ({ children, currentPage }: LayoutProps) => {
         </main>
       </div>
     </div>
+  );
+};
+
+/* ── Marco persistente del panel ─────────────────────────────────── */
+
+// Dentro de AppShell el menú y el header ya están montados: cada página sigue
+// envolviéndose en <Layout>, pero aquí solo avisa qué página está activa.
+const ShellContext = createContext<((page: string) => void) | null>(null);
+
+export const Layout = ({ children, currentPage }: LayoutProps) => {
+  const setShellPage = useContext(ShellContext);
+
+  useEffect(() => {
+    setShellPage?.(currentPage);
+  }, [setShellPage, currentPage]);
+
+  if (setShellPage) return <>{children}</>;
+  return <LayoutFrame currentPage={currentPage}>{children}</LayoutFrame>;
+};
+
+// Ruta padre de las pantallas del panel. El menú queda montado al cambiar de
+// página y el loader aparece solo en el área de contenido.
+export const AppShell = () => {
+  const [currentPage, setCurrentPage] = useState('');
+
+  return (
+    <LayoutFrame currentPage={currentPage}>
+      <ShellContext.Provider value={setCurrentPage}>
+        <Suspense fallback={<PageLoader />}>
+          <Outlet />
+        </Suspense>
+      </ShellContext.Provider>
+    </LayoutFrame>
   );
 };
