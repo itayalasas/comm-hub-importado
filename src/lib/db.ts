@@ -26,6 +26,8 @@ interface QueryPayload {
   onConflict?: string;
   count?: 'exact';
   head?: boolean;
+  groupBy?: string[];
+  countNonNull?: string[];
 }
 
 interface DbResponse<T = any> {
@@ -103,6 +105,14 @@ class QueryBuilder<T = any> {
     this.payload.select = columns;
     if (opts?.count) this.payload.count = opts.count;
     if (opts?.head) this.payload.head = opts.head;
+    return this;
+  }
+
+  // Devuelve una fila por combinación de columnas con `count` y `<columna>_count`
+  // (filas donde esa columna no es null), en lugar de las filas sueltas.
+  groupBy(columns: string[], opts?: { countNonNull?: string[] }): this {
+    this.payload.groupBy = columns;
+    if (opts?.countNonNull) this.payload.countNonNull = opts.countNonNull;
     return this;
   }
 

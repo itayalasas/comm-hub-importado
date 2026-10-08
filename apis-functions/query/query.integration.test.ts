@@ -25,7 +25,7 @@ async function setupDatabase(pool: Pool) {
     await client.queryArray(`
       DROP TABLE IF EXISTS applications, email_logs, audit_logs, user_preferences, web_access_attempts;
       CREATE TABLE applications (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text, user_id text, tenant_id text, api_key text);
-      CREATE TABLE email_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), application_id uuid, status text);
+      CREATE TABLE email_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), application_id uuid, status text, opened_at timestamptz);
       CREATE TABLE audit_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, action text, ip_address text, user_agent text);
       CREATE TABLE user_preferences (user_id text PRIMARY KEY, theme text);
       CREATE TABLE web_access_attempts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text, event_type text,
@@ -33,9 +33,11 @@ async function setupDatabase(pool: Pool) {
       INSERT INTO applications (id, name, user_id, tenant_id, api_key) VALUES
         ('${APP_A}', 'A', 'u-alice', '${TENANT_A}', 'key-a'),
         ('${APP_B}', 'B', 'u-bob', '${TENANT_B}', 'key-b');
-      INSERT INTO email_logs (id, application_id, status) VALUES
-        (gen_random_uuid(), '${APP_A}', 'sent'),
-        ('${LOG_B}', '${APP_B}', 'sent');
+      INSERT INTO email_logs (id, application_id, status, opened_at) VALUES
+        (gen_random_uuid(), '${APP_A}', 'sent', now()),
+        (gen_random_uuid(), '${APP_A}', 'sent', NULL),
+        (gen_random_uuid(), '${APP_A}', 'failed', NULL),
+        ('${LOG_B}', '${APP_B}', 'sent', NULL);
       INSERT INTO audit_logs (tenant_id, action) VALUES ('${TENANT_A}', 'a'), ('${TENANT_B}', 'b');
       INSERT INTO user_preferences (user_id, theme) VALUES ('u-bob', 'dark');
     `);
@@ -88,18 +90,50 @@ Deno.test({
 
     await t.step("service key keeps full access", async () => {
       const res = await call({ table: "email_logs", operation: "select" }, { key: "service-key" });
-      assertEquals(logsOf(res.json.data), [APP_A, APP_B]);
+      assertEquals(logsOf(res.json.data), [APP_A, APP_A, APP_A, APP_B]);
     });
 
     await t.step("user only sees own rows", async () => {
       const logs = await call({ table: "email_logs", operation: "select" }, { token: "tok-alice" });
-      assertEquals(logsOf(logs.json.data), [APP_A]);
+      assertEquals(logsOf(logs.json.data), [APP_A, APP_A, APP_A]);
 
       const apps = await call({ table: "applications", operation: "select" }, { token: "tok-alice" });
       assertEquals(apps.json.data.map((a: { id: string }) => a.id), [APP_A]);
 
       const audit = await call({ table: "audit_logs", operation: "select" }, { token: "tok-alice" });
       assertEquals(audit.json.data.map((a: { action: string }) => a.action), ["a"]);
+    });
+
+    await t.step("count exact ignores limit and head skips the rows", async () => {
+      const page = await call({ table: "email_logs", operation: "select", limit: 1, count: "exact" }, { token: "tok-alice" });
+      assertEquals(page.json.data.length, 1);
+      assertEquals(page.json.count, 3);
+
+      const head = await call({
+        table: "email_logs",
+        operation: "select",
+        count: "exact",
+        head: true,
+        filters: [{ column: "status", op: "eq", value: "sent" }],
+      }, { token: "tok-alice" });
+      assertEquals(head.json.data, []);
+      assertEquals(head.json.count, 2);
+    });
+
+    await t.step("groupBy counts only own rows", async () => {
+      const res = await call({
+        table: "email_logs",
+        operation: "select",
+        groupBy: ["status"],
+        countNonNull: ["opened_at"],
+      }, { token: "tok-alice" });
+      const byStatus = Object.fromEntries(
+        res.json.data.map((r: { status: string; count: number; opened_at_count: number }) => [r.status, [r.count, r.opened_at_count]]),
+      );
+      assertEquals(byStatus, { sent: [2, 1], failed: [1, 0] });
+
+      const bad = await call({ table: "email_logs", operation: "select", groupBy: ["status; drop table x"] }, { token: "tok-alice" });
+      assertEquals(bad.status, 400);
     });
 
     await t.step("filters by another tenant return nothing", async () => {

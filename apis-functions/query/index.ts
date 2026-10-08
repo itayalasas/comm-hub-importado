@@ -487,6 +487,10 @@ export default async function handler(req: Request) {
       offset,
       returning = "*",
       onConflict,
+      count: countMode,
+      head = false,
+      groupBy,
+      countNonNull = [],
     } = body;
 
     if (!table || !allowedTables.includes(table)) {
@@ -516,6 +520,8 @@ export default async function handler(req: Request) {
     const mutationData = enrichWebAccessAttemptData(table, operation, data, req);
     const params: any[] = [];
     let sql = "";
+    let countQuery: { sql: string; params: unknown[] } | null = null;
+    let skipRows = false;
 
     if (operation === "select") {
       const selectSql = parseSelect(select);
@@ -525,40 +531,63 @@ export default async function handler(req: Request) {
         whereSql = mergeWhere(whereSql, buildScopeCondition(table, scope, params));
       }
 
-      let orderSql = "";
+      if (countMode === "exact") {
+        countQuery = {
+          sql: `SELECT COUNT(*)::int AS "count" FROM ${tableSql} ${whereSql}`,
+          params: [...params],
+        };
+      }
+      skipRows = head === true;
 
-      if (order?.column) {
-        if (!isSafeIdentifier(order.column)) {
-          throw new Error(`Invalid order column: ${order.column}`);
+      // Conteos agrupados: el panel pide totales por estado sin descargar las filas.
+      if (groupBy !== undefined) {
+        if (!Array.isArray(groupBy) || !groupBy.length || !Array.isArray(countNonNull)) {
+          throw new Error("groupBy requires a list of columns");
+        }
+        const groupSql = groupBy.map(quoteIdentifier).join(", ");
+        const counters = [
+          `COUNT(*)::int AS "count"`,
+          ...countNonNull.map((column: string) =>
+            `COUNT(${quoteIdentifier(column)})::int AS ${quoteIdentifier(`${column}_count`)}`
+          ),
+        ];
+        sql = `SELECT ${groupSql}, ${counters.join(", ")} FROM ${tableSql} ${whereSql} GROUP BY ${groupSql}`;
+      } else {
+        let orderSql = "";
+
+        if (order?.column) {
+          if (!isSafeIdentifier(order.column)) {
+            throw new Error(`Invalid order column: ${order.column}`);
+          }
+
+          orderSql = `ORDER BY ${quoteIdentifier(order.column)} ${
+            order.ascending === false ? "DESC" : "ASC"
+          }`;
         }
 
-        orderSql = `ORDER BY ${quoteIdentifier(order.column)} ${
-          order.ascending === false ? "DESC" : "ASC"
-        }`;
+        let limitSql = "";
+
+        if (typeof limit === "number") {
+          params.push(limit);
+          limitSql = `LIMIT $${params.length}`;
+        }
+
+        let offsetSql = "";
+
+        if (typeof offset === "number") {
+          params.push(offset);
+          offsetSql = `OFFSET $${params.length}`;
+        }
+
+        sql = `
+          SELECT ${selectSql}
+          FROM ${tableSql}
+          ${whereSql}
+          ${orderSql}
+          ${limitSql}
+          ${offsetSql}
+        `;
       }
-
-      let limitSql = "";
-
-      if (typeof limit === "number") {
-        params.push(limit);
-        limitSql = `LIMIT $${params.length}`;
-      }
-
-      let offsetSql = "";
-
-      if (typeof offset === "number") {
-        params.push(offset);
-        offsetSql = `OFFSET $${params.length}`;
-      }
-
-      sql = `
-        SELECT ${selectSql}
-        FROM ${tableSql}
-        ${whereSql}
-        ${orderSql}
-        ${limitSql}
-        ${offsetSql}
-      `;
     }
 
     if (operation === "insert") {
@@ -723,7 +752,10 @@ export default async function handler(req: Request) {
       `;
     }
 
-    const result = await client.queryObject(sql, params);
+    const result = skipRows ? { rows: [] } : await client.queryObject(sql, params);
+    const total = countQuery
+      ? (await client.queryObject<{ count: number }>(countQuery.sql, countQuery.params)).rows[0].count
+      : result.rows.length;
 
     if (operation === "delete") {
       return jsonResponse({
@@ -736,7 +768,7 @@ export default async function handler(req: Request) {
     return jsonResponse({
       data: result.rows,
       error: null,
-      count: result.rows.length,
+      count: total,
     });
   } catch (error: any) {
     return jsonResponse({

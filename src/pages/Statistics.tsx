@@ -9,6 +9,7 @@ import { useToast } from '../components/Toast';
 import { CheckCircle, XCircle, Clock, Eye, MousePointerClick, FileText, FileCheck, Trash2, ChevronRight, ChevronDown, Send, Check, Search } from 'lucide-react';
 import { loadOwnedApplicationsWithKeys } from '../lib/applicationQueries';
 import { querySelect } from '../lib/queryApi';
+import { nonNullCount, sumCounts, type GroupedRow } from '../lib/groupedCounts';
 
 interface Stats {
   totalSent: number;
@@ -149,47 +150,48 @@ export const Statistics = () => {
 
   const loadStats = async (appId: string) => {
     try {
-      const { data: logs, error } = await db
+      const { data: groups, error } = await db
         .from('email_logs')
-        .select('status, delivery_status, opened_at, clicked_at, communication_type, pdf_generated')
+        .select('status, delivery_status, communication_type, pdf_generated, opened_at, clicked_at')
+        .groupBy(['status', 'delivery_status', 'communication_type', 'pdf_generated'], {
+          countNonNull: ['opened_at', 'clicked_at'],
+        })
         .eq('application_id', appId);
 
       if (error) throw error;
 
-      const { data: pendingData } = await db
+      const { count: commsPending } = await db
         .from('pending_communications')
-        .select('status')
+        .select('id', { count: 'exact', head: true })
         .eq('application_id', appId)
         .in('status', ['waiting_data', 'processing', 'pdf_generated']);
 
-      const allLogs: any[] = (logs as any[]) || [];
-      const allPending: any[] = (pendingData as any[]) || [];
+      const rows: GroupedRow[] = (groups as GroupedRow[]) || [];
       const normalize = (value: unknown) => String(value || '').toLowerCase();
-      const sent = allLogs.filter((l: any) => {
+      const sent = sumCounts(rows, (l) => {
         const status = normalize(l.status);
         const deliveryStatus = normalize(l.delivery_status);
         return status === 'sent' || deliveryStatus === 'sent' || deliveryStatus === 'delivered' || deliveryStatus === 'read';
-      }).length;
-      const failed = allLogs.filter((l: any) => {
+      });
+      const failed = sumCounts(rows, (l) => {
         const status = normalize(l.status);
         const deliveryStatus = normalize(l.delivery_status);
         return status === 'failed' || deliveryStatus === 'bounced' || deliveryStatus === 'complained';
-      }).length;
-      const logsPending = allLogs.filter((l: any) => {
+      });
+      const logsPending = sumCounts(rows, (l) => {
         const status = normalize(l.status);
         const deliveryStatus = normalize(l.delivery_status);
         return status === 'pending' || deliveryStatus === 'delivery_delayed';
-      }).length;
-      const commsPending = allPending.length;
-      const opened = allLogs.filter((l: any) => l.opened_at !== null).length;
-      const clicked = allLogs.filter((l: any) => l.clicked_at !== null).length;
-      const pdfs = allLogs.filter((l: any) => l.communication_type === 'pdf' || l.pdf_generated === true).length;
-      const emailsWithPdf = allLogs.filter((l: any) => l.communication_type === 'email_with_pdf' || (l.communication_type === 'email' && l.pdf_generated === true)).length;
+      });
+      const opened = rows.reduce((total, l) => total + nonNullCount(l, 'opened_at'), 0);
+      const clicked = rows.reduce((total, l) => total + nonNullCount(l, 'clicked_at'), 0);
+      const pdfs = sumCounts(rows, (l) => l.communication_type === 'pdf' || l.pdf_generated === true);
+      const emailsWithPdf = sumCounts(rows, (l) => l.communication_type === 'email_with_pdf' || (l.communication_type === 'email' && l.pdf_generated === true));
 
       setStats({
         totalSent: sent,
         totalFailed: failed,
-        totalPending: logsPending + commsPending,
+        totalPending: logsPending + (commsPending ?? 0),
         totalOpened: opened,
         totalClicked: clicked,
         totalPdfs: pdfs,
