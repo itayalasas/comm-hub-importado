@@ -698,9 +698,9 @@ export const AutomatizacionesProgramados = () => {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 text-cyan-300" />
                 <div>
-                  <h3 className="text-sm font-semibold text-cyan-100">API publica</h3>
+                  <h3 className="text-sm font-semibold text-cyan-100">También por API</h3>
                   <p className="mt-1 text-sm text-cyan-50/80">
-                    Estas programaciones se guardan en <code className="rounded bg-slate-950/40 px-1.5 py-0.5">automation_programs</code> y se ejecutan con la API publica del proyecto.
+                    Puedes crear y ejecutar estas programaciones desde tu sistema con la API pública.
                   </p>
                 </div>
               </div>

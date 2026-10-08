@@ -658,9 +658,9 @@ export const AutomatizacionesBatch = () => {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-300" />
                 <div>
-                  <h3 className="text-sm font-semibold text-emerald-100">Reutilizacion</h3>
+                  <h3 className="text-sm font-semibold text-emerald-100">Reutilización</h3>
                   <p className="mt-1 text-sm text-emerald-50/80">
-                    El envio inmediato usa <code className="rounded bg-slate-950/40 px-1.5 py-0.5">notify</code> y las plantillas guardadas quedan persistidas en <code className="rounded bg-slate-950/40 px-1.5 py-0.5">automation_programs</code>.
+                    Guarda un lote para volver a enviarlo cuando quieras, o envíalo ahora mismo.
                   </p>
                 </div>
               </div>

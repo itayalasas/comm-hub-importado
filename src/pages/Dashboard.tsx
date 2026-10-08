@@ -658,7 +658,8 @@ export const Dashboard = () => {
 
   // Derived combined / per-channel metrics
   const totalMessages = emailStats.total + waStats.total;
-  const totalSent = emailStats.sent + waStats.sent + waStats.delivered + waStats.read;
+  // waStats.sent ya incluye los entregados y leídos.
+  const totalSent = emailStats.sent + waStats.sent;
   const totalFailed = emailStats.failed + waStats.failed;
 
   const activeDailyData = channel === 'whatsapp' ? waDailyData : channel === 'email' ? emailDailyData
