@@ -6,6 +6,8 @@ import { ToastContainer } from './components/ToastContainer';
 import { Home } from './pages/Home';
 import { getDefaultAuthenticatedPath } from './lib/authNavigation';
 
+// El marco del panel (menú, header) se carga una vez y queda montado entre páginas.
+const AppShell = lazy(() => import('./components/Layout').then((module) => ({ default: module.AppShell })));
 const Landing = lazy(() => import('./pages/Landing'));
 const Callback = lazy(() => import('./pages/Callback').then((module) => ({ default: module.Callback })));
 const AuthProcessing = lazy(() =>
@@ -185,6 +187,22 @@ const DashboardRedirect = () => {
   return <Navigate to={getDefaultAuthenticatedPath(hasMenuAccess, isSystemAdmin)} replace />;
 };
 
+// Las pantallas del panel comparten el menú: cambiar de página no lo vuelve a montar.
+const PanelShell = () => {
+  const { isAuth, isLoading } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) {
+    return <AppLoader />;
+  }
+
+  if (!isAuth) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return <AppShell />;
+};
+
 const AppRoutes = () => {
   return (
     <Routes>
@@ -217,142 +235,144 @@ const AppRoutes = () => {
       <Route path="/wallet/result" element={<WalletTopupResult />} />
       <Route path="/embed/marketplace" element={<MarketplaceEmbed />} />
       <Route path="/docs" element={<Documentation publicView />} />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute requiredMenu="dashboard">
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin-dashboard"
-        element={
-          <ProtectedRoute requireSystemAdmin>
-            <AdminDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/templates"
-        element={
-          <ProtectedRoute requiredMenu="templates">
-            <Templates />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/statistics"
-        element={
-          <ProtectedRoute requiredMenu="statistics">
-            <Statistics />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/automatizaciones/programados"
-        element={
-          <ProtectedRoute requiredMenu="automatizaciones">
-            <AutomatizacionesProgramados />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/automatizaciones/en-lote"
-        element={
-          <ProtectedRoute requiredMenu="automatizaciones">
-            <AutomatizacionesBatch />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/automatizaciones/monitoreo"
-        element={
-          <ProtectedRoute requiredMenu="automatizaciones">
-            <AutomatizacionesMonitoreo />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/documentation"
-        element={
-          <ProtectedRoute requiredMenu="documentation">
-            <Documentation />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <ProtectedRoute requiredMenu="settings">
-            <Settings tab="apps" />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings/apps"
-        element={
-          <ProtectedRoute requiredMenu="settings">
-            <Settings tab="apps" />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings/email"
-        element={
-          <ProtectedRoute requiredMenu="settings">
-            <Settings tab="email" />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings/embed"
-        element={
-          <ProtectedRoute requiredMenu="settings">
-            <Settings tab="embed" />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings/auditoria"
-        element={
-          <ProtectedRoute requiredMenu="settings">
-            <Settings tab="auditoria" />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/api-explorer"
-        element={
-          <ProtectedRoute requiredMenu="documentation">
-            <ApiExplorer />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/marketplace"
-        element={
-          <ProtectedRoute requiredMenu="marketplace">
-            <Marketplace />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/whatsapp"
-        element={
-          <ProtectedRoute requiredMenu="statistics">
-            <WhatsApp />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/templates/whatsapp"
-        element={
-          <ProtectedRoute requiredMenu="templates">
-            <WhatsAppTemplates />
-          </ProtectedRoute>
-        }
-      />
+      <Route element={<PanelShell />}>
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute requiredMenu="dashboard">
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin-dashboard"
+          element={
+            <ProtectedRoute requireSystemAdmin>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/templates"
+          element={
+            <ProtectedRoute requiredMenu="templates">
+              <Templates />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/statistics"
+          element={
+            <ProtectedRoute requiredMenu="statistics">
+              <Statistics />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/automatizaciones/programados"
+          element={
+            <ProtectedRoute requiredMenu="automatizaciones">
+              <AutomatizacionesProgramados />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/automatizaciones/en-lote"
+          element={
+            <ProtectedRoute requiredMenu="automatizaciones">
+              <AutomatizacionesBatch />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/automatizaciones/monitoreo"
+          element={
+            <ProtectedRoute requiredMenu="automatizaciones">
+              <AutomatizacionesMonitoreo />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/documentation"
+          element={
+            <ProtectedRoute requiredMenu="documentation">
+              <Documentation />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute requiredMenu="settings">
+              <Settings tab="apps" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/apps"
+          element={
+            <ProtectedRoute requiredMenu="settings">
+              <Settings tab="apps" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/email"
+          element={
+            <ProtectedRoute requiredMenu="settings">
+              <Settings tab="email" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/embed"
+          element={
+            <ProtectedRoute requiredMenu="settings">
+              <Settings tab="embed" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/auditoria"
+          element={
+            <ProtectedRoute requiredMenu="settings">
+              <Settings tab="auditoria" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/api-explorer"
+          element={
+            <ProtectedRoute requiredMenu="documentation">
+              <ApiExplorer />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/marketplace"
+          element={
+            <ProtectedRoute requiredMenu="marketplace">
+              <Marketplace />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/whatsapp"
+          element={
+            <ProtectedRoute requiredMenu="statistics">
+              <WhatsApp />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/templates/whatsapp"
+          element={
+            <ProtectedRoute requiredMenu="templates">
+              <WhatsAppTemplates />
+            </ProtectedRoute>
+          }
+        />
+      </Route>
       <Route
         path="*"
         element={
