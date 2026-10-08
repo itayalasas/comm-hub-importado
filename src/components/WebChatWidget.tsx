@@ -149,7 +149,7 @@ export const WEBCHAT_WIDGET_CONFIG: WebChatConfig = {
     VITE_WIDGET_APIKEY: 'pub_c37d9f0c0b339da3ff57445f0a6bae41d63236e3aecb771bc0ecf0a9aeacfda2',
     platform: 'SendCraft',
     assistantName: 'Crafty',
-    supportEmail: 'soporte@sendcraft.net',
+    supportEmail: 'administrador@sendcraft.net',
     crmUrl: normalizeWidgetCrmUrl(import.meta.env.VITE_CRM_URL || DEFAULT_WIDGET_CRM_URL),
   },
 };
