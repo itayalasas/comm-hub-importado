@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "lint:functions": "deno lint --rules-exclude=no-explicit-any,no-import-prefix,require-await apis-functions",
     "check:functions": "node tools/check-functions.mjs",
-    "test:functions": "deno test --node-modules-dir=none --allow-env --allow-read --allow-net apis-functions",
+    "test:functions": "deno test --no-check --node-modules-dir=none --allow-env --allow-read --allow-net apis-functions",
     "sync:functions": "node tools/sync-function-shared.mjs",
     "sdk:generate": "node tools/generate-sdk-artifacts.mjs",
     "sdk:status": "node tools/sdk-status.mjs",

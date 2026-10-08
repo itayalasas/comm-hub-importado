@@ -56,6 +56,8 @@ jobs:
         run: node tools/sync-function-shared.mjs --check
       - run: npm run lint:functions
       - run: npm run check:functions
+      # Los tipos ya los revisa check:functions (con su lista de errores previos);
+      # aquí solo se ejecutan los tests.
       - name: Tests (incluye la integración de query contra Postgres)
         env:
           QUERY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/query_test
