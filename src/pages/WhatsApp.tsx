@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { db } from '../lib/db';
+import { sumCounts, type GroupedRow } from '../lib/groupedCounts';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { usePermissions } from '../hooks/usePermissions';
@@ -142,28 +143,34 @@ export const WhatsApp = () => {
 
   const loadLogs = async () => {
     if (!selectedApp) return;
-    const { data } = await db
-      .from('whatsapp_logs')
-      .select('*')
-      .eq('application_id', selectedApp)
-      .order('created_at', { ascending: false })
-      .limit(500);
+    const [{ data }, { data: groups }] = await Promise.all([
+      db
+        .from('whatsapp_logs')
+        .select('*')
+        .eq('application_id', selectedApp)
+        .order('created_at', { ascending: false })
+        .limit(500),
+      db
+        .from('whatsapp_logs')
+        .select('status')
+        .groupBy(['status'])
+        .eq('application_id', selectedApp),
+    ]);
 
-    const rows = (data as WhatsAppLog[]) || [];
-    setLogs(rows);
-    computeStats(rows);
+    setLogs((data as WhatsAppLog[]) || []);
+    computeStats((groups as GroupedRow[]) || []);
   };
 
-  const computeStats = (rows: WhatsAppLog[]) => {
-    const s: WhatsAppStats = { totalSent: 0, totalDelivered: 0, totalRead: 0, totalFailed: 0, totalQueued: 0 };
-    for (const r of rows) {
-      if (r.status === 'sent')      s.totalSent++;
-      if (r.status === 'delivered') s.totalDelivered++;
-      if (r.status === 'read')      s.totalRead++;
-      if (r.status === 'failed')    s.totalFailed++;
-      if (r.status === 'queued')    s.totalQueued++;
-    }
-    setStats(s);
+  // Totales de todos los envíos de la aplicación, no solo de los 500 que se listan.
+  const computeStats = (groups: GroupedRow[]) => {
+    const byStatus = (status: string) => sumCounts(groups, (g) => g.status === status);
+    setStats({
+      totalSent: byStatus('sent'),
+      totalDelivered: byStatus('delivered'),
+      totalRead: byStatus('read'),
+      totalFailed: byStatus('failed'),
+      totalQueued: byStatus('queued'),
+    });
   };
 
   const handleRefresh = async () => {
