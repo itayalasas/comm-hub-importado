@@ -160,7 +160,7 @@ export const WalletTopupResult = () => {
                   <ArrowRight className="w-4 h-4" />
                 </button>
                 <a
-                  href="mailto:soporte@sendcraft.app"
+                  href="mailto:administrador@sendcraft.net"
                   className="text-slate-500 hover:text-slate-300 text-sm transition-colors"
                 >
                   Contactar soporte

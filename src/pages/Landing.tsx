@@ -238,7 +238,7 @@ export const Landing = () => {
           <div className="flex items-center gap-6 text-sm">
             <button onClick={() => navigate('/privacy')} className="text-slate-400 hover:text-white transition-colors">Privacidad</button>
             <button onClick={() => navigate('/terms')} className="text-slate-400 hover:text-white transition-colors">Términos</button>
-            <a href="mailto:soporte@sendcraft.app" className="text-slate-400 hover:text-white transition-colors">Soporte</a>
+            <a href="mailto:administrador@sendcraft.net" className="text-slate-400 hover:text-white transition-colors">Soporte</a>
           </div>
         </div>
       </footer>

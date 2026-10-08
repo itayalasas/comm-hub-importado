@@ -399,7 +399,7 @@ async function loadTenantWidgetContext(
     title: "Asistente SendCraft",
     welcomeMessage: "Hola! Soy el asistente de SendCraft. Como puedo ayudarte?",
     quickReplies: [...DEFAULT_QUICK_REPLIES],
-    supportEmail: "soporte@sendcraft.net",
+    supportEmail: "administrador@sendcraft.net",
     crmUrl: DEFAULT_WIDGET_CRM_URL,
     aiEnabled: true,
     handoffEnabled: true,

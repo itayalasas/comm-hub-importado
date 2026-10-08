@@ -346,7 +346,7 @@ function getDefaultWidgetConfigDefaults(): WidgetConfigDefaults {
     supportEmail: String(
       Deno.env.get("WEBCHAT_WIDGET_SUPPORT_EMAIL") ||
         Deno.env.get("VITE_WEBCHAT_WIDGET_SUPPORT_EMAIL") ||
-        "soporte@sendcraft.net",
+        "administrador@sendcraft.net",
     ).trim(),
     enabled: true,
     aiEnabled: true,
@@ -368,7 +368,7 @@ function getDefaultWidgetConfigDefaults(): WidgetConfigDefaults {
       supportEmail: String(
         Deno.env.get("WEBCHAT_WIDGET_SUPPORT_EMAIL") ||
           Deno.env.get("VITE_WEBCHAT_WIDGET_SUPPORT_EMAIL") ||
-          "soporte@sendcraft.net",
+          "administrador@sendcraft.net",
       ).trim(),
       crmUrl: normalizeUrl(
         Deno.env.get("WEBCHAT_WIDGET_CRM_URL") ||
