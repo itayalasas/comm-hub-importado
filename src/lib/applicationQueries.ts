@@ -293,7 +293,7 @@ export async function regenerateApplicationApiKey(applicationId: string): Promis
 
 // Solo para whatsapp-template-submit, que vive fuera de este repo y todavía
 // valida con x-api-key. Devuelve '' cuando la key en texto plano ya no está
-// guardada (migración 0003).
+// guardada (infra/neon/pendientes/drop_plaintext_application_api_keys.sql).
 export async function loadLegacyApplicationApiKey(applicationId: string): Promise<string> {
   const result = await querySelect<{ api_key: string | null }>({
     table: 'applications',

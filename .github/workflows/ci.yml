@@ -63,6 +63,38 @@ jobs:
           QUERY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/query_test
         run: npm run test:functions
 
+  migrations:
+    name: Migraciones (base vacía)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Misma versión mayor que Neon.
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: migrations_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/migrations_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Aplicar todas las migraciones
+        run: npm run db:migrate
+      - name: Deshacer y rehacer la última
+        run: |
+          npx dbmate --no-dump-schema --migrations-dir infra/neon/migrations rollback
+          npm run db:migrate
+      - name: No queda nada pendiente
+        run: npm run db:status -- --exit-code
+
   secrets:
     name: Secretos (gitleaks)
     runs-on: ubuntu-latest

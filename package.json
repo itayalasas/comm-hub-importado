@@ -15,7 +15,10 @@
     "sync:functions": "node tools/sync-function-shared.mjs",
     "sdk:generate": "node tools/generate-sdk-artifacts.mjs",
     "sdk:status": "node tools/sdk-status.mjs",
-    "vortex": "node --import ./.vortex/cli/scripts/register-ts-loader.mjs ./.vortex/cli/scripts/vortex-cli.ts"
+    "vortex": "node --import ./.vortex/cli/scripts/register-ts-loader.mjs ./.vortex/cli/scripts/vortex-cli.ts",
+    "db:migrate": "dbmate --no-dump-schema --migrations-dir infra/neon/migrations up",
+    "db:status": "dbmate --no-dump-schema --migrations-dir infra/neon/migrations status",
+    "db:new": "dbmate --no-dump-schema --migrations-dir infra/neon/migrations new"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
@@ -29,6 +32,7 @@
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.17",
+    "dbmate": "2.36.0",
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^15.15.0",
