@@ -58,7 +58,10 @@ const allowedOperators: Record<string, string> = {
   is: "IS",
 };
 
-const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") || "", connectionTimeoutMillis: 5000 }, 3, true);
+// deno-postgres no conoce `connectionString`: antes la URL se ignoraba y la conexión
+// salía de las variables PG*. Ahora se usa DATABASE_URL y, si falta, las PG* como antes.
+const DATABASE_URL = Deno.env.get("DATABASE_URL");
+const pool = new Pool(DATABASE_URL || {}, 3, true);
 
 const COUNTRY_DISPLAY_NAMES = (() => {
   try {
