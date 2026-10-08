@@ -860,6 +860,12 @@ export const Home = () => {
   const navigate = useNavigate();
   const { plans, loading: plansLoading, error: plansError } = usePlans();
   const orderedPlans = sortPlansByOrder(plans);
+  const maxTrialDays = Math.max(0, ...plans.map((p) => p.trial_days || 0));
+  const heroBadges = [
+    ...(maxTrialDays > 0 ? [`${maxTrialDays} días de prueba gratis`] : []),
+    'Configuración en minutos',
+    'Documentación en español',
+  ];
   const [supportOpen, setSupportOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -1048,7 +1054,7 @@ export const Home = () => {
 
             {/* Trust badges */}
             <div className="slide-up delay-400 flex flex-wrap gap-6 justify-center mt-8">
-              {['Sin tarjeta de crédito', '14 días gratis', 'Soporte incluido'].map((badge) => (
+              {heroBadges.map((badge) => (
                 <div key={badge} className="flex items-center gap-2 text-sm text-slate-500">
                   <CheckCircle className="w-4 h-4 text-cyan-500/70" />
                   <span>{badge}</span>
@@ -1570,51 +1576,6 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* ── CTA ───────────────────────────────────────────────────── */}
-      <section className="relative z-10 py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="relative rounded-3xl overflow-hidden border border-white/8">
-            {/* Animated background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-[#071a2e] via-[#0a1f35] to-[#071a2e]" />
-            <div className="absolute inset-0">
-              <div className="glow-pulse absolute top-[-30%] left-[-10%] w-[500px] h-[500px] bg-cyan-500 rounded-full blur-[100px]" />
-              <div className="glow-pulse absolute bottom-[-30%] right-[-10%] w-[400px] h-[400px] bg-blue-500 rounded-full blur-[100px]" style={{ animationDelay: '2s' }} />
-              <div className="absolute inset-0 opacity-[0.04]"
-                style={{ backgroundImage: 'linear-gradient(rgba(6,182,212,1) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-            </div>
-            <div className="relative z-10 text-center p-12 md:p-20">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-6 rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 text-xs font-semibold tracking-widest uppercase">
-                <CheckCircle className="w-3.5 h-3.5" />
-                Sin tarjeta de crédito requerida
-              </div>
-              <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6 leading-tight">
-                ¿Listo para transformar
-                <br />tus comunicaciones?
-              </h2>
-              <p className="text-lg text-slate-300 mb-10 max-w-lg mx-auto">
-                Crea tu cuenta gratis y envía tu primer correo en minutos.
-              </p>
-              <button
-                onClick={handleStartTrial}
-                disabled={loginLoading}
-                className="group inline-flex items-center gap-2 px-10 py-4 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-bold text-lg hover:shadow-2xl hover:shadow-cyan-500/50 transition-all hover:scale-105 active:scale-95"
-              >
-                {loginLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-                <span>{loginLoading ? 'Iniciando...' : 'Comenzar prueba gratuita'}</span>
-                {!loginLoading && <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
-              </button>
-              <div className="flex flex-wrap gap-8 justify-center mt-10">
-                {['14 dias gratis', 'Sin compromiso', 'Soporte incluido', 'Setup en minutos'].map((item) => (
-                  <div key={item} className="flex items-center gap-2 text-sm text-slate-400">
-                    <CheckCircle className="w-4 h-4 text-cyan-500/70" />
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
       </main>
 
       {/* ── FOOTER ────────────────────────────────────────────────── */}
