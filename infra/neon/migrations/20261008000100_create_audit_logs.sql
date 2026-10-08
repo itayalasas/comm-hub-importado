@@ -1,3 +1,4 @@
+-- migrate:up
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -36,3 +37,5 @@ COMMENT ON TABLE audit_logs IS 'Unified audit trail for the audit_logs plan feat
 COMMENT ON COLUMN audit_logs.action IS 'login | logout | create | update | delete | impersonation_start | impersonation_end';
 COMMENT ON COLUMN audit_logs.entity_type IS 'session | account_access | application | template | whatsapp_template | email_credentials | embed_credential | whatsapp_config | automation_program';
 COMMENT ON COLUMN audit_logs.tenant_id IS 'For impersonation_start/impersonation_end rows, this is the TARGET tenant (the customer being accessed), not the admin, so the customer can see the access in their own audit trail.';
+
+-- migrate:down

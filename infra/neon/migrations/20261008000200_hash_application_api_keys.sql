@@ -1,3 +1,4 @@
+-- migrate:up
 -- Etapa 1 del hash de API keys de clientes.
 --
 -- Agrega el hash SHA-256 (hex) y un prefijo visible de cada key. Un trigger
@@ -38,3 +39,5 @@ UPDATE applications
    AND (api_key_hash IS NULL OR api_key_hash <> encode(sha256(convert_to(api_key, 'UTF8')), 'hex'));
 
 CREATE INDEX IF NOT EXISTS idx_applications_api_key_hash ON applications (api_key_hash);
+
+-- migrate:down

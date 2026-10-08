@@ -1,7 +1,7 @@
 -- Etapa 2 del hash de API keys: dejar de guardar las keys en texto plano.
 --
 -- NO correr hasta que se cumpla todo esto:
---   1. La migración 0002 ya corrió y las funciones validan por api_key_hash.
+--   1. La migración 20261008000200_hash_application_api_keys ya corrió y las funciones validan por api_key_hash.
 --   2. Están desplegadas las funciones de la etapa 2 (aceptan la sesión del
 --      panel y la clave interna) y el panel nuevo.
 --   3. FUNCTIONS_INTERNAL_KEY está configurada, con el mismo valor, en
@@ -30,7 +30,7 @@ $$ LANGUAGE plpgsql;
 
 ALTER TABLE applications ALTER COLUMN api_key DROP NOT NULL;
 
--- Por si alguna fila quedó sin hash (no debería después de 0002).
+-- Por si alguna fila quedó sin hash (no debería después de la migración del hash).
 UPDATE applications
    SET api_key_hash = encode(sha256(convert_to(api_key, 'UTF8')), 'hex'),
        api_key_prefix = left(api_key, 12)
