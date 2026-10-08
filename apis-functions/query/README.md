@@ -88,7 +88,5 @@ curl -s localhost:8787 -H 'x-api-key: local-key' -H "Authorization: Bearer $TOKE
 
 ## Migración
 
-Antes de activar `enforce`, correr
-`infra/neon/migrations/20261007_0001_query_tenant_scope_columns.sql`. Agrega
-`application_id` donde falte y los índices que usa el filtro. Se puede correr
-más de una vez sin efectos.
+Las columnas e índices que usa el filtro por tenant ya están en el esquema base
+(`infra/neon/migrations/20261008000000_baseline.sql`). Ver `infra/neon/README.md`.
