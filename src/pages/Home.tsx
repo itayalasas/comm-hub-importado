@@ -51,11 +51,11 @@ const FEATURES = [
   { icon: Zap, title: 'Templates dinámicos', description: 'Crea y personaliza templates con variables dinámicas y preview en tiempo real para distintos tipos de comunicación.', color: 'blue' },
   { icon: BarChart2, title: 'Analítica avanzada', description: 'Dashboards interactivos con métricas detalladas, reportes de rendimiento y tendencias de tus comunicaciones.', color: 'teal' },
   { icon: FileText, title: 'Generación de PDFs', description: 'Convierte tus templates en documentos PDF profesionales listos para enviar o descargar automáticamente.', color: 'cyan' },
-  { icon: Bell, title: 'Webhooks automáticos', description: 'Recibe notificaciones de eventos en tiempo real y mantiene tus sistemas sincronizados sin esfuerzo.', color: 'blue' },
+  { icon: Bell, title: 'Avisos por WhatsApp', description: 'Complementa tus correos con mensajes de WhatsApp usando plantillas aprobadas y su historial de envíos.', color: 'blue' },
   { icon: Globe, title: 'API RESTful completa', description: 'Integra SendCraft con tus sistemas existentes usando nuestra API bien documentada y fácil de usar.', color: 'teal' },
   { icon: Lock, title: 'Seguridad empresarial', description: 'Autenticación robusta con gestión de permisos, roles y cifrado en tránsito con TLS.', color: 'cyan' },
   { icon: MessageSquare, title: 'Comunicaciones pendientes', description: 'Gestiona colas de comunicaciones, reprograma envíos y monitorea el estado de cada mensaje.', color: 'blue' },
-  { icon: TrendingUp, title: 'Optimización continua', description: 'Sugerencias inteligentes para mejorar tasas de apertura, entregabilidad y engagement general.', color: 'teal' },
+  { icon: TrendingUp, title: 'Métricas de entrega', description: 'Compara entregas, aperturas, clics y rebotes por aplicación para detectar problemas a tiempo.', color: 'teal' },
 ];
 
 
@@ -88,8 +88,8 @@ const INDUSTRIES = [
 const DEV_FEATURES = [
   { icon: Globe, label: 'API REST moderna' },
   { icon: Server, label: 'SMTP compatible' },
-  { icon: Webhook, label: 'Webhooks' },
-  { icon: Boxes, label: 'SDK oficiales' },
+  { icon: Webhook, label: 'PDF por API' },
+  { icon: Boxes, label: 'Documentación en español' },
   { icon: KeyRound, label: 'Autenticación por API Keys' },
   { icon: Terminal, label: 'Ejemplos listos para copiar' },
 ];
@@ -98,8 +98,8 @@ const DEV_FEATURES = [
 const SECURITY_FEATURES = [
   { icon: Lock, title: 'Envío seguro con TLS', desc: 'Cada comunicación viaja cifrada en tránsito con TLS.' },
   { icon: KeyRound, title: 'API protegida con API Keys', desc: 'Control granular de acceso por aplicación.' },
-  { icon: Activity, title: 'Alta disponibilidad', desc: 'Monitoreo continuo y uptime del 99.9%.' },
-  { icon: ShieldCheck, title: 'Protección contra abuso', desc: 'Escalable para millones de comunicaciones.' },
+  { icon: Activity, title: 'Monitoreo continuo', desc: 'Chequeos de salud del envío de correos, la base de datos y la generación de PDF.' },
+  { icon: ShieldCheck, title: 'Datos aislados por aplicación', desc: 'Cada aplicación usa su propia API key y solo accede a sus propios datos.' },
 ];
 
 /* ─── Benefits (what you no longer manage) ──────────────────────── */
@@ -1009,22 +1009,22 @@ export const Home = () => {
           <div className="text-center mb-14">
             <div className="slide-up inline-flex items-center gap-2 px-4 py-1.5 mb-6 rounded-full border border-cyan-400/25 bg-cyan-400/8 text-cyan-300 text-xs font-semibold tracking-widest uppercase">
               <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              Una sola API para todas tus comunicaciones
+              Para desarrolladores y equipos SaaS
             </div>
 
             <h1 className="slide-up delay-100 text-4xl sm:text-5xl md:text-6xl lg:text-[72px] font-extrabold mb-6 leading-[1.08] tracking-tight">
-              La plataforma de comunicaciones
+              Emails, PDFs y WhatsApp
               <br />
               <span className="relative inline-block">
                 <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-teal-400 bg-clip-text text-transparent">
-                  para aplicaciones modernas
+                  desde una sola API
                 </span>
                 <span className="absolute bottom-1 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
               </span>
             </h1>
 
             <p className="slide-up delay-200 text-lg md:text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-              Envía correos transaccionales, campañas de marketing, genera PDFs profesionales y automatiza todas las comunicaciones de tu negocio desde una única API. Diseñada para desarrolladores, startups y empresas SaaS que necesitan una plataforma rápida, confiable y fácil de integrar.
+              Envía correos transaccionales, genera facturas en PDF y avisa por WhatsApp con una sola integración.
             </p>
 
             <div className="slide-up delay-300 flex flex-col items-center sm:flex-row sm:items-stretch gap-4 justify-center">
@@ -1233,12 +1233,12 @@ export const Home = () => {
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
           <div>
             <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Entregabilidad</div>
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 leading-tight">Infraestructura diseñada para no fallar</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 leading-tight">Entregabilidad que puedes verificar</h2>
             <p className="text-slate-400 mb-8 leading-relaxed text-sm">
-              Nuestra plataforma garantiza máxima entregabilidad con autenticación SPF, DKIM y DMARC configurada automáticamente. Así más emails llegan a la bandeja de entrada.
+              Autentica tu dominio con SPF, DKIM y DMARC para que más correos lleguen a la bandeja de entrada, y sigue cada envío de punta a punta.
             </p>
             <ul className="space-y-3">
-              {['Autenticación SPF, DKIM y DMARC automática', 'IPs dedicadas de alta reputación', 'Monitoreo de listas negras 24/7', 'Reintentos inteligentes ante fallos', 'Logs detallados por cada mensaje'].map((item) => (
+              {['Autenticación de dominio con SPF, DKIM y DMARC', 'Rebotes y quejas registrados en cada envío', 'Seguimiento de aperturas y clics', 'Reintentos ante fallos', 'Logs detallados por cada mensaje'].map((item) => (
                 <li key={item} className="flex items-center gap-3 text-sm text-slate-300">
                   <div className="w-5 h-5 rounded-full bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center flex-shrink-0">
                     <Check className="w-3 h-3 text-cyan-400" />
@@ -1322,7 +1322,7 @@ export const Home = () => {
             <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Para desarrolladores</div>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 leading-tight text-balance">Integra SendCraft en menos de 5 minutos</h2>
             <p className="text-slate-400 mb-8 leading-relaxed text-sm">
-              Una API REST moderna, compatibilidad SMTP y SDKs oficiales con ejemplos listos para copiar en tus lenguajes favoritos. Sin fricción, sin configuración compleja.
+              Una API REST con autenticación por API key y ejemplos listos para copiar. Si ya tienes tu propio servidor SMTP, también puedes enviar a través de él.
             </p>
             <div className="grid sm:grid-cols-2 gap-3">
               {DEV_FEATURES.map(({ icon: Icon, label }) => (
@@ -1342,19 +1342,20 @@ export const Home = () => {
                 <div className="w-3 h-3 rounded-full bg-red-500/60" />
                 <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
                 <div className="w-3 h-3 rounded-full bg-green-500/60" />
-                <span className="ml-4 text-[10px] text-slate-500">send-email.js</span>
+                <span className="ml-4 text-[10px] text-slate-500">Terminal</span>
               </div>
               <div className="p-5 font-mono text-xs leading-relaxed overflow-x-auto">
-                <div><span className="text-blue-400">const</span> <span className="text-white">sendcraft</span> = <span className="text-blue-400">require</span>(<span className="text-green-400">'@sendcraft/node'</span>);</div>
-                <div className="mt-3 text-slate-500">{'// Enviar un correo transaccional'}</div>
-                <div><span className="text-white">await</span> <span className="text-white">sendcraft</span>.<span className="text-cyan-400">emails</span>.<span className="text-cyan-400">send</span>({'{'}</div>
-                <div className="pl-4"><span className="text-teal-300">to</span>: <span className="text-green-400">'cliente@empresa.com'</span>,</div>
-                <div className="pl-4"><span className="text-teal-300">template</span>: <span className="text-green-400">'factura'</span>,</div>
-                <div className="pl-4"><span className="text-teal-300">data</span>: {'{'} <span className="text-teal-300">total</span>: <span className="text-cyan-300">348</span> {'}'},</div>
-                <div className="pl-4"><span className="text-teal-300">attachPdf</span>: <span className="text-cyan-300">true</span>,</div>
-                <div>{'});'}</div>
+                <div className="text-slate-500">{'# Enviar un correo con tu plantilla'}</div>
+                <div><span className="text-cyan-400">curl</span> <span className="text-white">-X POST</span> <span className="text-green-400">https://api.sendcraft.net/send-email</span> \</div>
+                <div className="pl-4"><span className="text-white">-H</span> <span className="text-green-400">"x-api-key: tu_api_key"</span> \</div>
+                <div className="pl-4"><span className="text-white">-H</span> <span className="text-green-400">"Content-Type: application/json"</span> \</div>
+                <div className="pl-4"><span className="text-white">-d</span> <span className="text-green-400">'{'{'}</span></div>
+                <div className="pl-8"><span className="text-teal-300">"template_name"</span>: <span className="text-green-400">"factura"</span>,</div>
+                <div className="pl-8"><span className="text-teal-300">"recipient_email"</span>: <span className="text-green-400">"cliente@empresa.com"</span>,</div>
+                <div className="pl-8"><span className="text-teal-300">"data"</span>: {'{'} <span className="text-teal-300">"total"</span>: <span className="text-green-400">"$348"</span> {'}'}</div>
+                <div className="pl-4"><span className="text-green-400">{'}'}'</span></div>
                 <div className="mt-3 flex items-center gap-2 text-[11px] text-emerald-400">
-                  <Check className="w-3.5 h-3.5" /> 200 OK · Email en cola
+                  <Check className="w-3.5 h-3.5" /> 200 OK · Correo enviado
                 </div>
               </div>
             </div>
@@ -1368,7 +1369,7 @@ export const Home = () => {
           <div className="text-center mb-16">
             <div className="text-xs font-semibold tracking-widest text-cyan-400 uppercase mb-4">Seguridad</div>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 text-balance">Infraestructura preparada para producción</h2>
-            <p className="text-slate-400 max-w-2xl mx-auto">Envío seguro, monitoreo continuo y escalabilidad para millones de comunicaciones.</p>
+            <p className="text-slate-400 max-w-2xl mx-auto">Envío cifrado, acceso por API key y monitoreo continuo de cada servicio.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {SECURITY_FEATURES.map(({ icon: Icon, title, desc }) => (
@@ -1591,7 +1592,7 @@ export const Home = () => {
                 <br />tus comunicaciones?
               </h2>
               <p className="text-lg text-slate-300 mb-10 max-w-lg mx-auto">
-                Únete a más de 500 empresas que confían en SendCraft para sus comunicaciones críticas.
+                Crea tu cuenta gratis y envía tu primer correo en minutos.
               </p>
               <button
                 onClick={handleStartTrial}
