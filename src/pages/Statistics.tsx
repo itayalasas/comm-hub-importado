@@ -62,6 +62,47 @@ interface PendingCommunication {
   updated_at: string;
 }
 
+interface LogFilters {
+  email: string;
+  dateStart: string;
+  dateEnd: string;
+  status: string;
+}
+
+type StatusFilter = { op: 'eq' | 'gt'; column: string; value: string };
+
+// Cada opción del filtro de estado se traduce a columnas que el servidor puede filtrar.
+// `gt` contra 1970 equivale a "la fecha no es null".
+const EVER = '1970-01-01T00:00:00Z';
+const STATUS_FILTERS: Record<string, StatusFilter[]> = {
+  pending: [{ op: 'eq', column: 'status', value: 'pending' }],
+  sent: [{ op: 'eq', column: 'status', value: 'sent' }],
+  delivered: [{ op: 'eq', column: 'delivery_status', value: 'delivered' }],
+  opened: [{ op: 'gt', column: 'opened_at', value: EVER }],
+  clicked: [{ op: 'gt', column: 'clicked_at', value: EVER }],
+  failed: [{ op: 'eq', column: 'status', value: 'failed' }],
+  bounced: [{ op: 'eq', column: 'delivery_status', value: 'bounced' }],
+  spam: [{ op: 'eq', column: 'delivery_status', value: 'complained' }],
+  delayed: [{ op: 'eq', column: 'delivery_status', value: 'delivery_delayed' }],
+  generated: [{ op: 'eq', column: 'communication_type', value: 'pdf_generation' }],
+};
+
+// Inicio o fin del día elegido en el calendario, en la hora local del navegador.
+function localDayBound(day: string, edge: 'start' | 'end'): string {
+  const [year, month, date] = day.split('-').map(Number);
+  const bound = edge === 'start'
+    ? new Date(year, month - 1, date, 0, 0, 0, 0)
+    : new Date(year, month - 1, date, 23, 59, 59, 999);
+  return bound.toISOString();
+}
+
+// Hasta 7 números de página alrededor de la actual.
+function visiblePages(current: number, total: number): number[] {
+  const first = Math.max(1, Math.min(current - 3, total - 6));
+  const last = Math.min(total, first + 6);
+  return Array.from({ length: last - first + 1 }, (_, i) => first + i);
+}
+
 export const Statistics = () => {
   const { user, isSystemAdmin } = useAuth();
   const toast = useToast();
@@ -71,6 +112,8 @@ export const Statistics = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [logs, setLogs] = useState<EmailLog[]>([]);
+  const [logsTotal, setLogsTotal] = useState(0);
+  const [logsReloadKey, setLogsReloadKey] = useState(0);
   const [pendingComms, setPendingComms] = useState<PendingCommunication[]>([]);
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
   const [deleteConfirmPending, setDeleteConfirmPending] = useState<string | null>(null);
@@ -89,6 +132,7 @@ export const Statistics = () => {
   const [searchDateStart, setSearchDateStart] = useState('');
   const [searchDateEnd, setSearchDateEnd] = useState('');
   const [searchStatus, setSearchStatus] = useState('');
+  const [debouncedEmail, setDebouncedEmail] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -97,14 +141,29 @@ export const Statistics = () => {
   }, [user, isSystemAdmin]);
 
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedEmail(searchEmail.trim()), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [searchEmail]);
+
+  useEffect(() => {
     setCurrentPage(1);
-  }, [searchEmail, searchDateStart, searchDateEnd, searchStatus]);
+  }, [debouncedEmail, searchDateStart, searchDateEnd, searchStatus, selectedApp]);
+
+  // El listado se pide página por página, con los filtros aplicados en el servidor.
+  useEffect(() => {
+    if (!selectedApp) return;
+    const filters = { email: debouncedEmail, dateStart: searchDateStart, dateEnd: searchDateEnd, status: searchStatus };
+    const refresh = () => loadLogs(selectedApp, currentPage, filters);
+
+    refresh();
+    const intervalId = window.setInterval(refresh, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [selectedApp, currentPage, debouncedEmail, searchDateStart, searchDateEnd, searchStatus, logsReloadKey]);
 
   useEffect(() => {
     if (selectedApp) {
       const refresh = () => {
         loadStats(selectedApp);
-        loadLogs(selectedApp);
         loadPendingCommunications(selectedApp);
       };
 
@@ -202,23 +261,41 @@ export const Statistics = () => {
     }
   };
 
-  const loadLogs = async (appId: string) => {
+  const loadLogs = async (appId: string, page: number, filters: LogFilters) => {
     try {
       // Keep top-level communication records, including standalone PDF generations.
-      const { data, error } = await db
+      let request = db
         .from('email_logs')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('application_id', appId)
-        .is('parent_log_id', null)
+        .is('parent_log_id', null);
+
+      if (filters.email) {
+        request = request.ilike('recipient_email', `%${filters.email.replace(/[\\%_]/g, '\\$&')}%`);
+      }
+      if (filters.dateStart) {
+        request = request.gte('created_at', localDayBound(filters.dateStart, 'start'));
+      }
+      if (filters.dateEnd) {
+        request = request.lte('created_at', localDayBound(filters.dateEnd, 'end'));
+      }
+      for (const filter of STATUS_FILTERS[filters.status] || []) {
+        request = request[filter.op](filter.column, filter.value);
+      }
+
+      const { data, error, count } = await request
         .order('created_at', { ascending: false })
-        .limit(50);
+        .range((page - 1) * itemsPerPage, page * itemsPerPage - 1);
 
       if (error) throw error;
       setLogs((data as EmailLog[]) || []);
+      setLogsTotal(count ?? 0);
     } catch {
       // ignore
     }
   };
+
+  const reloadLogs = () => setLogsReloadKey((key) => key + 1);
 
   const loadChildLogs = async (parentId: string) => {
     try {
@@ -318,19 +395,6 @@ export const Statistics = () => {
     };
   };
 
-  const getStatusFilterValue = (log: EmailLog) => {
-    if (log.delivery_status === 'bounced' || log.bounced_at) return 'bounced';
-    if (log.delivery_status === 'complained' || log.complained_at) return 'spam';
-    if (log.status === 'failed') return 'failed';
-    if (log.communication_type === 'pdf_generation') return 'generated';
-    if (log.clicked_at) return 'clicked';
-    if (log.opened_at) return 'opened';
-    if (log.delivery_status === 'delivered' || log.delivered_at) return 'delivered';
-    if (log.sent_at && log.status === 'sent') return 'sent';
-    if (log.delivery_status === 'delivery_delayed') return 'delayed';
-    return 'pending';
-  };
-
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString('es-ES', {
       year: 'numeric',
@@ -394,7 +458,7 @@ export const Statistics = () => {
       toast.success('Registro de comunicación eliminado exitosamente');
       setDeleteConfirmLog(null);
       if (selectedApp) {
-        loadLogs(selectedApp);
+        reloadLogs();
         loadStats(selectedApp);
       }
     } catch {
@@ -404,30 +468,7 @@ export const Statistics = () => {
     }
   };
 
-  const filteredLogs = logs.filter((log) => {
-    const emailMatch = searchEmail === '' ||
-      log.recipient_email.toLowerCase().includes(searchEmail.toLowerCase());
-    const statusMatch = searchStatus === '' || getStatusFilterValue(log) === searchStatus;
-
-    let dateMatch = true;
-    if (searchDateStart || searchDateEnd) {
-      const logDate = new Date(log.sent_at || log.created_at);
-
-      if (searchDateStart) {
-        const startDate = new Date(searchDateStart);
-        startDate.setHours(0, 0, 0, 0);
-        dateMatch = dateMatch && logDate >= startDate;
-      }
-
-      if (searchDateEnd) {
-        const endDate = new Date(searchDateEnd);
-        endDate.setHours(23, 59, 59, 999);
-        dateMatch = dateMatch && logDate <= endDate;
-      }
-    }
-
-    return emailMatch && dateMatch && statusMatch;
-  });
+  const totalPages = Math.ceil(logsTotal / itemsPerPage);
 
   const isPdfGenerationLog = (log?: EmailLog | null) => log?.communication_type === 'pdf_generation';
 
@@ -592,7 +633,7 @@ export const Statistics = () => {
       setResendConfirmLog(null);
 
       if (selectedApp) {
-        loadLogs(selectedApp);
+        reloadLogs();
         loadStats(selectedApp);
       }
     } catch (error) {
@@ -994,7 +1035,7 @@ export const Statistics = () => {
                 {(searchEmail || searchDateStart || searchDateEnd || searchStatus) && (
                   <div className="flex items-center justify-between text-sm text-slate-400">
                     <span>
-                      Mostrando {filteredLogs.length} de {logs.length} registros
+                      {logsTotal} {logsTotal === 1 ? 'registro coincide' : 'registros coinciden'} con los filtros
                     </span>
                     <button
                       onClick={() => {
@@ -1011,7 +1052,7 @@ export const Statistics = () => {
                 )}
               </div>
               <div className="overflow-x-auto">
-                {filteredLogs.length === 0 ? (
+                {logs.length === 0 ? (
                   <div className="p-8 text-center text-slate-400">
                     No hay comunicaciones registradas
                   </div>
@@ -1037,7 +1078,7 @@ export const Statistics = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700/50">
-                      {filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((log) => {
+                      {logs.map((log) => {
                         const engagement = getEngagementStatus(log);
                         const isExpanded = expandedLogs.has(log.id);
                         const children = childLogs[log.id] || [];
@@ -1166,11 +1207,11 @@ export const Statistics = () => {
                   </table>
                 )}
 
-                {filteredLogs.length > itemsPerPage && (
+                {totalPages > 1 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t border-slate-700">
                     <div className="text-sm text-slate-400">
-                      Mostrando {Math.min((currentPage - 1) * itemsPerPage + 1, filteredLogs.length)} a{' '}
-                      {Math.min(currentPage * itemsPerPage, filteredLogs.length)} de {filteredLogs.length} registros
+                      Mostrando {(currentPage - 1) * itemsPerPage + 1} a{' '}
+                      {Math.min(currentPage * itemsPerPage, logsTotal)} de {logsTotal} registros
                     </div>
                     <div className="flex space-x-2">
                       <button
@@ -1181,10 +1222,11 @@ export const Statistics = () => {
                         Anterior
                       </button>
                       <div className="flex items-center space-x-1">
-                        {Array.from({ length: Math.ceil(filteredLogs.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
+                        {visiblePages(currentPage, totalPages).map((page) => (
                           <button
                             key={`page-${page}`}
                             onClick={() => setCurrentPage(page)}
+                            aria-current={currentPage === page ? 'page' : undefined}
                             className={`px-3 py-2 rounded-lg transition-colors ${
                               currentPage === page
                                 ? 'bg-cyan-500 text-white'
@@ -1196,8 +1238,8 @@ export const Statistics = () => {
                         ))}
                       </div>
                       <button
-                        onClick={() => setCurrentPage(Math.min(Math.ceil(filteredLogs.length / itemsPerPage), currentPage + 1))}
-                        disabled={currentPage === Math.ceil(filteredLogs.length / itemsPerPage)}
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages}
                         className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Siguiente
