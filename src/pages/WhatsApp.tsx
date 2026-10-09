@@ -165,7 +165,8 @@ export const WhatsApp = () => {
   const computeStats = (groups: GroupedRow[]) => {
     const byStatus = (status: string) => sumCounts(groups, (g) => g.status === status);
     setStats({
-      totalSent: byStatus('sent'),
+      // Igual que el Dashboard: un mensaje entregado o leído también fue enviado.
+      totalSent: sumCounts(groups, (g) => ['sent', 'delivered', 'read'].includes(String(g.status))),
       totalDelivered: byStatus('delivered'),
       totalRead: byStatus('read'),
       totalFailed: byStatus('failed'),
